@@ -33,11 +33,13 @@ def ref():
     for path in pbar:
 
         genome_id = get_genome_id(path)
+        assert genome_id is not None, f'ref: Could not extract a genome ID from the input path {path}.'
+
         output_path = os.path.join(args.out_dir, f'{genome_id}.ref.csv')
+        pbar.set_description(f'ref: Searching reference genome for {genome_id}.')
+        
         if os.path.exists(output_path) and (not args.overwrite):
             continue
-
-        pbar.set_description(f'ref: Searching reference genome for {genome_id}.')
 
         ref_path = os.path.join(args.ref_dir, f'{genome_id}_genomic.gbff')
         genome = ReferenceGenome(ref_path, genome_id=genome_id)

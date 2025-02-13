@@ -4,6 +4,8 @@ import numpy as np
 from Bio.Seq import Seq
 from tqdm import tqdm 
 
+# TODO: Somehow modify the search to detect instances where both gene boundaries are misidentified. 
+
 
 class ReferenceGenome():
 

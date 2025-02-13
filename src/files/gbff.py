@@ -6,7 +6,8 @@ import pandas as pd
 import numpy as np 
 
 # TODO: I should automatically detect the features instead of specifying beforehand.
-# TODO: Make sure that dropping things with null locus tags is not causing issues.
+# TODO: Make sure that dropping things with null locus tags is not causing issues. I did it because repeat regions are not assigned 
+#   locus tags, and trying to merge during search is annoying. 
 
 class GBFFFile():
     fields = ['feature', 'contig_id', 'strand', 'start', 'stop', 'partial', 'product', 'frameshifted', 'incomplete', 'internal_stop', 'protein_id', 'seq', 'pseudo', 'locus_tag']
@@ -127,4 +128,5 @@ class GBFFFile():
     def to_df(self):
         df = self.df.copy()[GBFFFile.fields] 
         df = df.astype(GBFFFile.dtypes)
+        df = df[~df.locus_tag.isnull()]
         return df

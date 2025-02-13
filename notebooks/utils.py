@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np 
 import re
 from src import GTDB_DTYPES
+import os 
+import glob 
+from src import get_genome_id
 
 
 def load_genome_metadata(path:str='../data/bac120_metadata_r207.tsv', reps_only:bool=True, refseq_only:bool=False):
@@ -26,3 +29,21 @@ def load_genome_metadata(path:str='../data/bac120_metadata_r207.tsv', reps_only:
     df = df.astype({col:dtype for col, dtype in GTDB_DTYPES.items() if (col in df.columns)})
 
     return df.set_index('genome_id')
+
+
+def load_ref_output(out_dir:str='../data/ref.out', genome_metadata_df:pd.DataFrame=None, feature:str='CDS'):
+
+    df = []
+    for path in glob.glob(os.path.join(out_dir, '*')):
+        genome_id = get_genome_id(path)
+        df += [pd.read_csv(path, index_col=0, dtype={'partial':str}).assign(genome_id=genome_id)]
+    df = pd.concat(df)
+
+    if (feature is not None): # Filter for a specific feature, if specified.
+        df = df[df.ref_feature == feature]
+    
+    if genome_metadata_df is not None:
+        df = df.merge(genome_metadata_df, left_on='genome_id', right_index=True)
+    
+    return df 
+    
