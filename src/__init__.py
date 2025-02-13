@@ -1,4 +1,10 @@
-def seed(seed:int=42) -> None:
+import numpy as np 
+import torch 
+import random 
+
+
+def seed(seed:int=42):
+
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
@@ -6,6 +12,14 @@ def seed(seed:int=42) -> None:
     # When running on the CuDNN backend, two further options must be set
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def get_genome_id(input_path:str) -> str:
+
+    pattern = r'GCF_([0-9]+)\.([0-9]{1,})'
+    genome_id = re.search(pattern, input_path)
+    return genome_id.group(0) if (genome_id is not None) else None
+
 
 GTDB_DTYPES = dict()
 GTDB_DTYPES['description'] = str

@@ -45,7 +45,7 @@ class ReferenceGenome():
         n = len(df)
 
         df_no_hits = df[hits_df.n_valid_hits == 0].copy()
-        print(f'ReferenceGenome._merge: {len(df_no_hits)} entries in the query DataFrame had no valid hits in the reference.')
+        # print(f'ReferenceGenome._merge: {len(df_no_hits)} entries in the query DataFrame had no valid hits in the reference.')
         
         hits_df = hits_df[hits_df.n_valid_hits > 0].rename(columns={'locus_tag':'ref_locus_tag', 'feature':'ref_feature'})
         ref_df = self.df.copy().rename(columns={col:'ref_' + col for col in self.df.columns})
@@ -55,6 +55,9 @@ class ReferenceGenome():
         df = hits_df.merge(df, left_index=True, right_index=True, how='left')        
         df.index.name = 'id' # Restore the index name, which is lost in the merging. 
         df = pd.concat([df, df_no_hits], ignore_index=False)
+
+        df['n_hits'] = df.n_hits.fillna(0) # Not sure why, but these fill as NaNs after concatenating.
+        df['n_valid_hits'] = df.n_hits.fillna(0)
         
         assert (len(df) == n), f'ReferenceGenome._merge: There was a problem merging the query DataFrame with the search results.'
         return df
@@ -89,9 +92,9 @@ class ReferenceGenome():
         return {'n_hits':n_hits, 'n_valid_hits':n_valid_hits, 'feature':feature, 'locus_tag':locus_tag}  
 
 
-    def search(self, df:pd.DataFrame, add_start_stop_codons:bool=True):
+    def search(self, df:pd.DataFrame, add_start_stop_codons:bool=True, verbose:bool=True):
         hits_df = list()
-        for query in tqdm(list(df.itertuples()), desc='ReferenceGenome.search'):
+        for query in tqdm(list(df.itertuples()), desc='ReferenceGenome.search', disable=(not verbose)):
             hit = self._get_hit(query) # Get the hit with the biggest overlap, with a preference for "valid" hits. 
             hit['id'] = query.Index
             hits_df.append(hit)

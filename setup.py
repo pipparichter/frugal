@@ -14,7 +14,7 @@ setuptools.setup(
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
     packages=['src', 'src.files', 'src.tools'], 
-    entry_points={'console_scripts':['build=src.cli:build']},
+    entry_points={'console_scripts':['build=src.cli:build', 'ref=src.cli:ref']},
     install_requires=get_requirements())
 
 
