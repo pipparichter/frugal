@@ -9,7 +9,7 @@ def get_embedder(feature_type:str):
     if re.match(esm_embedder_pattern, feature_type) is not None:
         model_size = re.match(esm_embedder_pattern, feature_type).group(1)
         pooler = re.match(esm_embedder_pattern, feature_type).group(2)
-        return ESMEmbedder(method=method, model_size=model_size)
+        return ESMEmbedder(pooler=pooler, model_size=model_size)
 
     raise Exception(f'get_embedder: The feature type {feature_type} is not recognized.')
 

@@ -71,7 +71,7 @@ class ESMEmbedder(PLMEmbedder):
         poolers = {'gap':ESMEmbedder._pooler_gap, 'cls':ESMEmbedder._pooler_cls} 
         checkpoint = ESMEmbedder.checkpoints.get(model_size)
 
-        super(ESMEmbedder, self).__init__(model=models[method], tokenizer=AutoTokenizer, checkpoint=checkpoint)
+        super(ESMEmbedder, self).__init__(model=models[pooler], tokenizer=AutoTokenizer, checkpoint=checkpoint)
         self.pooler = poolers.get(pooler, None)
 
     def _preprocess(self, seqs:list):
@@ -84,7 +84,7 @@ class ESMEmbedder(PLMEmbedder):
         # https://discuss.pytorch.org/t/is-the-cuda-operation-performed-in-place/84961/6 
         if self.pooler is not None:
             outputs = outputs.last_hidden_state.cpu() # if (self.model_name == 'pt5') else outputs.pooler_output
-            outputs = [self.pooler(emb, seq, last_n=self.last_n) for emb, seq in zip(outputs, seqs)]
+            outputs = [self.pooler(emb, seq) for emb, seq in zip(outputs, seqs)]
         else: 
             raise Exception('TODO')
         return outputs        

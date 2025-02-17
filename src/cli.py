@@ -56,7 +56,7 @@ def ref():
 def embed():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', '-i', nargs='+', type=str)
+    parser.add_argument('--input-path', '-i', type=str)
     parser.add_argument('--output-path', '-o', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--overwrite', action='store_true')
@@ -67,9 +67,9 @@ def embed():
     # Sort the sequences in order of length, so that the longest sequences are first. This is so that the 
     # embedder works more efficiently, and if it fails, it fails early in the embedding process.
     df = pd.read_csv(args.input_path, index_col=0)
-    df = df.sort_values(df.seq.apply(len), ascending=False)
+    df = df.iloc[np.argsort(df.seq.apply(len))[::-1]]
 
-    store = pd.HDFStore(output_path, mode='a' if (not args.overwrite) else 'w') # Should confirm that the file already exists. 
+    store = pd.HDFStore(output_path, mode='a' if (not args.overwrite) else 'w', table=True) # Should confirm that the file already exists. 
     existing_keys = [key.replace('/', '') for key in store.keys()]
 
     if 'metadata' in existing_keys:
@@ -78,10 +78,10 @@ def embed():
     else:
         store.put('metadata', df, format='table', data_columns=None)
 
-    if (feature_type not in existing_keys) or (overwrite):
-        print(f'embed: Generating embeddings for {feature_type}.')
-        embedder = get_embedder(feature_type)
+    if (args.feature_type not in existing_keys) or (overwrite):
+        print(f'embed: Generating embeddings for {args.feature_type}.')
+        embedder = get_embedder(args.feature_type)
         embeddings = embedder(df.seq.values.tolist())
-        store.put(feature_type, pd.DataFrame(embeddings, index=df.index), format='table', data_columns=None) 
+        store.put(args.feature_type, pd.DataFrame(embeddings, index=df.index), format='table', data_columns=None) 
 
     store.close()
