@@ -3,6 +3,7 @@ import re
 from typing import List, Dict, Tuple 
 from tqdm import tqdm 
 from lxml import etree 
+import pandas as pd 
 
 # TODO: Read more about namespaces
 
@@ -46,8 +47,10 @@ class XMLFile():
 
     def get_taxonomy(self, entry) -> Dict[str, str]:
         '''Extract the taxonomy information from the organism tag group.'''
-        levels = ['domain', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus']
-        taxonomy = {level:taxon.text for taxon, level in zip(self.findall(entry, 'taxon'), levels)}
+        lineage = [taxon.text for taxon in self.findall(entry, 'taxon')]
+        taxonomy = dict()
+        taxonomy['domain'] = lineage[0]
+        taxonomy['lineage'] = ';'.join(lineage)
         taxonomy['species'] = self.find(entry, 'name').text
         taxonomy['ncbi_taxonomy_id'] = self.find(entry, 'dbReference', attrs={'type':'NCBI Taxonomy'}).attrib['id'] # , attrs={'type':'NCBI Taxonomy'})[0].id
         return taxonomy
@@ -63,6 +66,18 @@ class XMLFile():
             refseq['refseq_protein_id'] = None
             refseq['refseq_nucleotide_id'] = None
         return refseq
+
+    def get_post_translational_modification(self, entry) -> Dict[str, str]:
+        ptm = dict()
+        ptm_entry = self.findall(entry, 'comment', attrs={'type':'PTM'})
+        if (len(ptm_entry) > 0):
+            text = [self.find(e, 'text').text for e in ptm_entry]
+            text = ';'.join(text)
+            ptm['post_translational_modification'] = text
+        else:
+            ptm['post_translational_modification'] = None
+        return ptm 
+            
 
     def get_non_terminal_residue(self, entry) -> Dict[str, str]:
         '''If the entry passed into the function has a non-terminal residue(s), find the position(s) where it occurs; 
@@ -82,9 +97,9 @@ class XMLFile():
         return {'non_terminal_residue':positions}
                     
     def __init__(self, path:str, load_seqs:bool=True, chunk_size:int=100):
-        super().__init__(path)
+        self.path = path
 
-        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc=f'XMLFile.__init__: Parsing XML file {self.file_name}...')
+        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc=f'XMLFile.__init__: Parsing XML file.')
         entry, df = None, []
         for event, elem in pbar: # The file tree gets accumulated in the elem variable as the iterator progresses. 
             namespace, tag = XMLFile.get_tag(elem) # Extract the tag and namespace from the element. 
@@ -98,6 +113,7 @@ class XMLFile():
                 row.update(self.get_refseq(entry))
                 row.update(self.get_non_terminal_residue(entry))
                 row.update(self.get_annotation(entry))
+                row.update(self.get_post_translational_modification(entry))
 
                 if load_seqs:
                     # Why am I using findall here instead of just find?
@@ -114,12 +130,12 @@ class XMLFile():
 
                 elem.clear() # Clear the element to avoid loading everything into memory. 
                 pbar.update(len(accessions))
-                pbar.set_description(f'XMLFile.__init__: Parsing NCBI XML file, row {len(df)}...')
+                pbar.set_description(f'XMLFile.__init__: Parsing XML file, row {len(df)}.')
 
         self.df = pd.DataFrame(df).set_index('id')
 
 
     def to_df(self):
         df = self.df.copy()
-        df['file_name'] = self.file_name
+        df['file_name'] = os.path.basename(self.path)
         return df

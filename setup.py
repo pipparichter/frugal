@@ -13,8 +13,8 @@ setuptools.setup(
     url='https://github.com/pipparichter/tripy',
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
-    packages=['src', 'src.files', 'src.tools'], 
-    entry_points={'console_scripts':['build=src.cli:build', 'ref=src.cli:ref']},
+    packages=['src', 'src.files', 'src.tools', 'src.embedders'], 
+    entry_points={'console_scripts':['build=src.cli:build', 'ref=src.cli:ref', 'embed=src.cli:embed']},
     install_requires=get_requirements())
 
 

@@ -4,10 +4,10 @@ import numpy as np
 from Bio.Seq import Seq
 from tqdm import tqdm 
 
-# TODO: Somehow modify the search to detect instances where both gene boundaries are misidentified. 
-
 
 class ReferenceGenome():
+
+    hit_info = {'locus_tag':None, 'feature':None, 'in_frame_hit':False, 'start_aligned_hit':False, 'stop_aligned_hit':False, 'hit_overlap':0}
 
     def __init__(self, path:str, genome_id:str=None):
 
@@ -58,40 +58,63 @@ class ReferenceGenome():
         df.index.name = 'id' # Restore the index name, which is lost in the merging. 
         df = pd.concat([df, df_no_hits], ignore_index=False)
 
-        df['n_hits'] = df.n_hits.fillna(0) # Not sure why, but these fill as NaNs after concatenating.
-        df['n_valid_hits'] = df.n_hits.fillna(0)
-        
+        # Not sure why, but these fill as NaNs after concatenating.
+        df['n_hits'] = df.n_hits.fillna(0).astype(int)
+        df['n_valid_hits'] = df.n_hits.fillna(0).astype(int)
+        df['n_same_strand_hits'] = df.n_hits.fillna(0).astype(int)
+        df['hit_overlap'] = df.n_hits.fillna(0).astype(int)
+
         assert (len(df) == n), f'ReferenceGenome._merge: There was a problem merging the query DataFrame with the search results.'
         return df
 
+    @staticmethod
+    def _add_hit_info(ref_df:pd.DataFrame, query):
+        ref_df['same_strand_hit'] = (ref_df.strand == query.strand)
+        ref_df['stop_aligned_hit'] = (ref_df.stop == query.stop)
+        ref_df['start_aligned_hit'] = (ref_df.start == query.start)
+        ref_df['in_frame_hit'] = ((ref_df.stop - query.stop) & 3 == 0) | ((ref_df.start - query.start) & 3 == 0) 
+        ref_df['valid_hit'] = ref_df.same_strand_hit & (ref_df.start_aligned_hit | ref_df.stop_aligned_hit | ref_df.in_frame_hit)
+
+        # Add a check to make sure the logic makes sense... 
+        assert (ref_df.start_aligned_hit | ref_df.stop_aligned_hit).sum() <= ref_df.in_frame_hit.sum(), 'ReferenceGenome._get_hit_info: The number of in-frame hits should be at least the number of aligned hits.'
+        # assert ref_df.start_aligned_hit.sum() <= ref.df_in_frame_hit.sum(), 'ReferenceGenome._get_hit_info: The number of in-frame hits should be at least the number of aligned hits.'
+        # assert ref_df.stop_aligned_hit.sum() <= ref.df_in_frame_hit.sum(), 'ReferenceGenome._get_hit_info: The number of in-frame hits should be at least the number of aligned hits.'
+        return ref_df
+
     def _get_hit(self, query):
+        
+        hit = {'n_hits':0, 'n_valid_hits':0, 'n_same_strand_hits':0} # Instantiate a hit. 
 
         ref_df = self.df.copy() 
         ref_df = ref_df[ref_df.contig_id == query.contig_id]
-
-        # Filter out everything which definitely has no overlap.
-        ref_df = ref_df[~(ref_df.start > query.stop) & ~(ref_df.stop < query.start)]
+        ref_df = ref_df[~(ref_df.start > query.stop) & ~(ref_df.stop < query.start)] # Filter out everything which definitely has no overlap.
 
         # Case where there are no detected genes on a contig in the GBFF file, but Prodigal found one.
         if len(ref_df) == 0: 
-            return {'n_hits':0, 'n_valid_hits':0, 'feature':None, 'locus_tag':None}
+            hit.update(ReferenceGenome.hit_info) # Add the default hit info to make datatypes consistent. 
+            return hit
 
-        ref_df['valid_hit'] = ((ref_df.stop == query.stop) | (ref_df.start == query.start)) & (ref_df.strand == query.strand)
-        n_hits, n_valid_hits = len(ref_df), ref_df.valid_hit.sum().item() 
+        ref_df = ReferenceGenome._add_hit_info(ref_df.copy(), query)
 
-        if n_valid_hits > 0:
-            ref_df = ref_df[ref_df.valid_hit] # Filter by the valid hits. 
+        hit['n_hits'] = len(ref_df)
+        hit['n_valid_hits'] = ref_df.valid_hit.sum().item()
+        hit['n_same_strand_hits'] = ref_df.same_strand_hit.sum().item()
+        
+        ref_df = ref_df[ref_df.valid_hit] # Filter by the valid hits. 
+        
+        if len(ref_df) > 0:
             # There are some cases with more than one valid hit, in which case we want to grab the hit with the biggest overlap. 
             # It might be interesting to look into these cases a bit more, but they are very rare. 
-            ref_df['overlap'] = ref_df.apply(lambda row : len(np.intersect1d(np.arange(row.start, row.stop), np.arange(query.start, query.stop))), axis=1)
-            ref_df = ref_df.sort_values(by='overlap', ascending=False).iloc[[0]]
+            ref_df['hit_overlap'] = ref_df.apply(lambda row : len(np.intersect1d(np.arange(row.start, row.stop), np.arange(query.start, query.stop))), axis=1)
+            ref_df = ref_df.sort_values(by='hit_overlap', ascending=False) # Sort so that the best hit is at the top. 
+            
+            for field in ReferenceGenome.hit_info.keys(): # Get all relevant info for the top hit. 
+                hit[field] = ref_df[field].iloc[0]
+            return hit
 
-        if n_valid_hits == 0:
-            return {'n_hits':n_hits, 'n_valid_hits':0, 'feature':None, 'locus_tag':None} 
-
-        feature = ref_df['feature'].iloc[0]
-        locus_tag = ref_df['locus_tag'].iloc[0]
-        return {'n_hits':n_hits, 'n_valid_hits':n_valid_hits, 'feature':feature, 'locus_tag':locus_tag}  
+        elif hit['n_valid_hits'] == 0:
+            hit.update(ReferenceGenome.hit_info) # Add the default hit info. 
+            return hit
 
 
     def search(self, df:pd.DataFrame, add_start_stop_codons:bool=True, verbose:bool=True):

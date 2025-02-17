@@ -19,7 +19,7 @@ class Pyrodigal():
 
         if output_path is None:
             output_path = get_output_path(input_path, self.output_dir)
-            
+
         cmd = f'pyrodigal -i {input_path} -a {output_path} --max-overlap {max_overlap} --min-gene {min_length} -g {translation_table}'
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -29,12 +29,12 @@ class Prodigal():
     def __init__(self, output_dir:str='../data/prodigal'):
         self.output_dir = output_dir 
 
-    def run(self, input_path:str, output_path:str=None):
+    def run(self, input_path:str, output_path:str=None, translation_table:int=11):
         
         if output_path is None:
             output_path = get_output_path(input_path, self.output_dir)
 
-        cmd = f'prodigal -i {input_path} -a {output_path}'
+        cmd = f'prodigal -i {input_path} -a {output_path} -g {translation_table}'
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     

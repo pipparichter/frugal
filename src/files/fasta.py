@@ -23,16 +23,23 @@ def parser_default(description:str):
 class FASTAFile():
     prodigal_dtypes = {'start':int, 'stop':int, 'strand':int, 'gc_content':float}
 
-    def __init__(self, path:str):
+    def __init__(self, path:str=None, df:pd.DataFrame=None):
         '''Initialize a FASTAFile object.'''
 
-        f = open(path, 'r')
-        self.seqs, self.ids, self.descriptions = [], [], []
-        for record in SeqIO.parse(path, 'fasta'):
-            self.ids.append(record.id)
-            self.descriptions.append(record.description.replace(record.id, '').strip())
-            self.seqs.append(str(record.seq))
-
+        if (path is not None):
+            f = open(path, 'r')
+            self.seqs, self.ids, self.descriptions = [], [], []
+            for record in SeqIO.parse(path, 'fasta'):
+                self.ids.append(record.id)
+                self.descriptions.append(record.description.replace(record.id, '').strip())
+                self.seqs.append(str(record.seq))
+            f.close()
+        
+        if (df is not None):
+            self.seqs = df.seq.values
+            self.ids = df.index
+            self.descriptions = [''] * len(self.ids)
+        
         self.seqs = [seq.replace(r'*', '') for seq in self.seqs] # Remove the terminal * character if present.
 
     def __len__(self):

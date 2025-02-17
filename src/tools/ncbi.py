@@ -37,15 +37,15 @@ class NCBIDatasets():
 
             cmd = f"datasets download genome accession {genome_id} --filename ncbi.zip --include {','.join(include)} --no-progressbar"
             pbar.set_description(f'NCBIDatasets.run: Downloading data for {genome_id}.')
-            # try:
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-            # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
-            subprocess.run(f'unzip -o ncbi.zip -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+                # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
+                subprocess.run(f'unzip -o ncbi.zip -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            for src_path, dst_path in zip(src_paths, dst_paths):
-                subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            # except:
-            #     print(f'download_ncbi_data: Failed to download data for {genome_id}.')
+                for src_path, dst_path in zip(src_paths, dst_paths):
+                    subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except:
+                print(f'NCBIDatasets.run: Failed to download data for {genome_id}.')
 
     def cleanup(self):
         for file in NCBIDatasets.cleanup_files:
