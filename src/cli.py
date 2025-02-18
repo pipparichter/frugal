@@ -121,5 +121,5 @@ def train():
     
     model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, weight_loss=args.weight_loss)
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
-    model.save(path)
+    model.save(output_path)
     print(f'train: Saved trained model to {output_path}')
