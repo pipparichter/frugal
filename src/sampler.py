@@ -5,7 +5,8 @@ from torch.utils.data import WeightedRandomSampler
 from numpy.random import choice
 from scipy.special import softmax
 
-# TODO: Is the sample size the correct size to return for the length method?
+# TODO: Is the sample size the correct size to return for the length method? Yes! 
+# TODO: Look into the difference between spe
 
 class Sampler():
 
