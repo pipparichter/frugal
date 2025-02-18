@@ -66,7 +66,7 @@ class Classifier(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(dims[1], dims[2], dtype=self.dtype))
 
-        self.loss_func = WeightedCrossEntropyLoss(half_precision=half_precision, n_classes=output_dim)
+        self.loss_func = WeightedCrossEntropyLoss(n_classes=dims[2])
         self.scaler = StandardScaler()
         self.to(DEVICE)
 
