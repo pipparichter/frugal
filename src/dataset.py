@@ -49,7 +49,7 @@ class Dataset(torch.utils.data.Dataset):
             labels = labels_df.values
         
         if load_seqs:
-            seqs_df = pd.read_hdf(path, key='metadata')['label']
+            seqs_df = pd.read_hdf(path, key='metadata')['seq']
             assert len(embeddings_df) == len(seqs_df), 'Dataset.from_hdf: The indices of the sequences and embeddings do not match.'
             assert np.all(embeddings_df.index == seqs_df.index), 'Dataset.from_hdf: The indices of the sequences and embeddings do not match.'
             seqs = seqs_df.values
@@ -60,10 +60,12 @@ class Dataset(torch.utils.data.Dataset):
         return self.embeddings.shape
 
     def __getitem__(self, idx:int) -> dict:
-        item = {'embedding':self.embeddings[idx], 'index':self.index[idx], 'idx':idx}
+        item = {'embedding':self.embeddings[idx], 'index':self.index[idx]}
         if self.labels is not None: # Include the label if the Dataset is labeled.
             item['label'] = self.labels[idx]
             item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
+        if self.seqs is not None:
+            item['seq'] = self.seqs[idx]
         return item
 
     def subset(self, idxs):
