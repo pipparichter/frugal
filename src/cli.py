@@ -117,7 +117,7 @@ def train():
 
     sampler = None
     if (args.balance_classes or args.balance_lengths):
-        sampler = Sampler(dataset, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths)
+        sampler = Sampler(dataset.train, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths)
     
     model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, weight_loss=args.weight_loss)
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
