@@ -5,6 +5,7 @@ from torch.utils.data import WeightedRandomSampler
 from numpy.random import choice
 from scipy.special import softmax
 
+# TODO: Is the sample size the correct size to return for the length method?
 
 class Sampler():
 
@@ -24,8 +25,8 @@ class Sampler():
         
         self.idxs = np.arange(len(dataset))
         self.batch_size = batch_size
-        self.n_batches = sample_size // batch_size + 1
         self.sample_size = (len(dataset) * self.n_classes) if (sample_size is None) else sample_size
+        self.n_batches = self.sample_size // batch_size + 1
 
         # self.sampler = torch.utils.data.WeightedRandomSampler(self.weights, self.sample_size, replacement=True)
         
@@ -55,12 +56,3 @@ class Sampler():
     def __len__(self):
         return self.sample_size
 
-    
-
-# def get_dataloader(dataset:Dataset, batch_size:int=16, balance_batches:bool=False) -> DataLoader:
-#     '''Produce a DataLoader object for each batching of the input Dataset.'''
-#     if balance_batches:
-#         return DataLoader(dataset, sampler=dataset.sampler(), batch_size=batch_size)
-#         # return torch.utils.data.DataLoader(dataset, batch_sampler= BalancedBatchSampler(dataset, batch_size=batch_size))
-#     else:
-#         return DataLoader(dataset, batch_size=batch_size, shuffle=True)
