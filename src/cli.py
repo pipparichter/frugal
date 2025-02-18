@@ -93,7 +93,7 @@ def embed():
     store.close()
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train -i ../data/filter_dataset_train.csv"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ../data/filter_dataset_train.csv --model-name test"
 def train():
 
     parser = argparse.ArgumentParser()
