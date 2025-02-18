@@ -25,7 +25,7 @@ class Sampler():
         
         self.idxs = np.arange(len(dataset))
         self.batch_size = batch_size
-        self.sample_size = (len(dataset) * self.n_classes) if (sample_size is None) else sample_size
+        self.sample_size = len(dataset) if (sample_size is None) else sample_size
         self.n_batches = self.sample_size // batch_size + 1
 
         # self.sampler = torch.utils.data.WeightedRandomSampler(self.weights, self.sample_size, replacement=True)
