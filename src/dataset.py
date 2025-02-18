@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
-from torch.utils.data import Subset
+
 from torch.nn.functional import one_hot
 from sklearn.model_selection import train_test_split
 from collections import namedtuple
@@ -15,7 +15,7 @@ Datasets = namedtuple('Datasets', ['train', 'test'])
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, embeddings:np.ndarray, labels:np.ndarray=None, seqs:np.ndarray=None, index:np.ndarray=None):
+    def __init__(self, embeddings:np.ndarray, labels:np.ndarray=None, seqs:np.ndarray=None, index:np.ndarray=None, scaled:bool=False):
 
         self.labels = labels
         self.n_features = embeddings.shape[-1]
@@ -30,7 +30,7 @@ class Dataset(torch.utils.data.Dataset):
         self.seqs = seqs
         self.n_features = self.embeddings.shape[-1]
 
-        self.scaled = False
+        self.scaled = scaled
         self.length = len(embeddings)
         
     def __len__(self) -> int:
@@ -66,10 +66,20 @@ class Dataset(torch.utils.data.Dataset):
             item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
         return item
 
+    def subset(self, idxs):
+
+        embeddings = self.embeddings.cpu().numpy()[idxs, :]
+        labels = self.labels.cpu().numpy()[idxs] if (self.labels is not None) else self.labels
+        seqs = self.seqs[idxs]
+        index = self.index[idxs]
+        scaled = self.scaled 
+
+        return Dataset(embeddings, labels=labels, seqs=seqs, index=index, scaled=scaled)
+
 
 
 def split(dataset:Dataset, test_size:float=0.2):
 
     idxs = np.arange(len(dataset))
     idxs_train, idxs_test = train_test_split(idxs, test_size=test_size)
-    return Subset(dataset, idxs_train), Subset(dataset, idxs_test)
+    return dataset.subset(idxs_train), dataset.subset(idxs_test)
