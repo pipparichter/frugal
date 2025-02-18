@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd 
 import torch
 from torch.utils.data import WeightedRandomSampler
-import numpy.random
+from numpy.random import choice
+from scipy.special import softmax
 
 
 class Sampler():
@@ -22,10 +23,11 @@ class Sampler():
             self._balance_lengths(**kwargs)
         
         self.idxs = np.arange(len(dataset))
+        self.batch_size = batch_size
+        self.n_batches = sample_size // batch_size + 1
         self.sample_size = (len(dataset) * self.n_classes) if (sample_size is None) else sample_size
-        self.n_batches = self.sample_size // batch_size
 
-        self.sampler = torch.utils.data.WeightedRandomSampler(self.weights, self.sample_size, replacement=True)
+        # self.sampler = torch.utils.data.WeightedRandomSampler(self.weights, self.sample_size, replacement=True)
         
     def _balance_classes(self):
         weights_per_class = np.array([(1 / (n_i)) for n_i in self.n_per_class])
@@ -47,11 +49,11 @@ class Sampler():
 
 
     def __iter__(self):
-        for batch in self.sampler:
-            yield batch
+        for _ in range(self.n_batches):
+            yield choice(self.idxs, self.batch_size, replace=False, p=softmax(self.weights))
 
     def __len__(self):
-        return len(self.sampler)
+        return self.sample_size
 
     
 
