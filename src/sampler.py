@@ -27,7 +27,7 @@ class Sampler(torch.utils.data.sampler.Sampler):
 
     def _balance_lengths(self, dataset, n_bins:int=50, ref_class:int=1):
         lengths = np.array([len(seq) for seq in dataset.seqs])
-        ref_lengths = lengths[labels == ref_class] 
+        ref_lengths = lengths[self.labels == ref_class] 
 
         n_per_bin, bin_edges = np.hist(ref_lengths, bins=n_bins)
         bin_min, bin_max = min(bin_edges), max(bin_edges) 
