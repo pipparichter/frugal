@@ -59,7 +59,7 @@ class Dataset(torch.utils.data.Dataset):
     def shape(self):
         return self.embeddings.shape
 
-    def __getitem__(self, idx:int) -> Dict:
+    def __getitem__(self, idx:int) -> dict:
         item = {'embedding':self.embeddings[idx], 'index':self.index[idx], 'idx':idx}
         if self.labels is not None: # Include the label if the Dataset is labeled.
             item['label'] = self.labels[idx]
