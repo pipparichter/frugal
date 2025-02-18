@@ -7,6 +7,7 @@ import pandas as pd
 import torch.nn.functional
 from torch.utils.data import DataLoader
 import sklearn
+import pickle
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes?
