@@ -136,8 +136,8 @@ class Classifier(torch.nn.Module):
         else:
             dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
-        pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0 out of {epochs}.') 
-        for epoch in range(epochs):
+        pbar = tqdm(range(epochs), desc=f'Classifier.fit: Training classifier, epoch 0 out of {epochs}.') 
+        for epoch in pbar:
             self.loss = list()
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
@@ -148,12 +148,11 @@ class Classifier(torch.nn.Module):
                 
                 optimizer.step()
                 optimizer.zero_grad()
-                pbar.update(1) # Update progress bar after each batch. 
             
             self.metrics['train_loss'] += [np.mean(self.loss)]
             self.metrics['test_acc'] += [self.accuracy(datasets.test)]
 
-            pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch} out of {epochs}. test_acc={self.metrics['test_acc'][-1]}')
+            pbar.set_description(f'Classifier.fit: test_acc={self.metrics['test_acc'][-1]}')
 
             if self.metrics['test_acc'][-1] > max(self.metrics['test_acc'][:-1]):
                 best_epoch, best_model_weights = epoch, copy.deepcopy(self.state_dict())

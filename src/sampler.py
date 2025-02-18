@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 from torch.utils.data import WeightedRandomSampler
 from numpy.random import choice
+from random import choices 
 from scipy.special import softmax
 
 # TODO: Is the sample size the correct size to return for the length method? Yes! 
@@ -23,6 +24,8 @@ class Sampler():
             self._balance_classes()
         if balance_lengths:
             self._balance_lengths(**kwargs)
+        
+        # self.weights = softmax(self.weights) # Make the weights sum to one for the probability option in np.random.choice. 
         
         self.idxs = np.arange(len(dataset))
         self.batch_size = batch_size
@@ -52,7 +55,7 @@ class Sampler():
 
     def __iter__(self):
         for _ in range(self.n_batches):
-            yield choice(self.idxs, self.batch_size, replace=False, p=softmax(self.weights))
+            yield choices(self.idxs, k=self.batch_size, weights=self.weights)
 
     def __len__(self):
         return self.sample_size
