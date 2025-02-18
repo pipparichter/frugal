@@ -1,7 +1,12 @@
+from src import seed 
+seed(42) # Make sure everything is random-seeded for reproducibility. 
+
 import numpy as np 
 import pandas as pd 
 from src.build import Build 
-from setuptools import Command
+from src.dataset import Dataset, split, Datasets
+from src.sampler import Sampler
+from src.classifier import Classifier
 import argparse
 from src.genome import ReferenceGenome
 from src.files import FASTAFile
@@ -21,8 +26,8 @@ def build():
 def ref():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', '-i', nargs='+', type=str)
-    parser.add_argument('--output-dir', '-o', default='../data/ref.out/', type=str)
+    parser.add_argument('--input-path', nargs='+', type=str)
+    parser.add_argument('--output-dir', default='../data/ref.out/', type=str)
     parser.add_argument('--ref-dir', default='../data/refseq/', type=str)
     parser.add_argument('--prodigal-output', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
@@ -57,8 +62,8 @@ def ref():
 def embed():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', '-i', type=str)
-    parser.add_argument('--output-path', '-o', default=None, type=str)
+    parser.add_argument('--input-path', type=str)
+    parser.add_argument('--output-path', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
@@ -86,3 +91,34 @@ def embed():
         store.put(args.feature_type, pd.DataFrame(embeddings, index=df.index), format='table', data_columns=None) 
 
     store.close()
+
+
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train -i ../data/filter_dataset_train.csv"
+def train():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input-path', type=str)
+    parser.add_argument('--model-name', type=str)
+    parser.add_argument('--output-dir', default='./models', type=str)
+    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    parser.add_argument('--balance-classes', action='store_true')
+    parser.add_argument('--balance-lengths', action='store_true')
+    parser.add_argument('--weight-loss', action='store_true')
+    parser.add_argument('--epochs', default=50, type=int)
+
+    args = parser.parse_args()
+
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_seqs=True, load_labels=True)
+    model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes))
+    dataset_train, dataset_test = split(dataset)
+    model.scale(dataset_train, fit=True)
+    model.scale(dataset_test, fit=False)
+
+    sampler = None
+    if (args.balance_classes or args.balance_lengths):
+        sampler = Sampler(dataset, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths)
+    
+    model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, weight_loss=args.weight_loss)
+    output_path = os.path.join(args.output_dir, model_name + '.pkl')
+    model.save(path)
+    print(f'train: Saved trained model to {output_path}')
