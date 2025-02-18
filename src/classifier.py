@@ -10,6 +10,7 @@ import sklearn
 from sklearn.preprocessing import StandardScaler
 import copy
 import pickle
+from sklearn.metrics import balanced_accuracy_score
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes?
