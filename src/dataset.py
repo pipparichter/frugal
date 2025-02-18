@@ -26,12 +26,12 @@ class Dataset(torch.utils.data.Dataset):
             self.labels_one_hot_encoded = one_hot(self.labels, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
 
         self.index = index
-        self.embeddings = torch.from_numpy(df.values).to(DEVICE)
+        self.embeddings = torch.from_numpy(embeddings).to(DEVICE)
         self.seqs = seqs
         self.n_features = self.embeddings.shape[-1]
 
         self.scaled = False
-        self.length = len(df)
+        self.length = len(embeddings)
         
     def __len__(self) -> int:
         return len(self.embeddings)
