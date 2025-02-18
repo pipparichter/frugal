@@ -1,7 +1,7 @@
 import numpy as np 
 import pandas as pd 
 import torch
-from torch.utils import WeightedRandomSampler
+from torch.utils.data import WeightedRandomSampler
 
 
 class Sampler(torch.utils.data.sampler.Sampler):
