@@ -21,9 +21,9 @@ class Dataset(torch.utils.data.Dataset):
         self.n_features = embeddings.shape[-1]
 
         if (self.labels is not None):
-            self.n_classes = len(np.unique(labels))
+            self.n_classes = len(np.unique(labels)) # Infer the number of classes based on the labels. 
             self.labels = torch.from_numpy(self.labels).type(torch.LongTensor)
-            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=n_classes).to(torch.float32).to(DEVICE)
+            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
 
         self.index = index
         self.embeddings = torch.from_numpy(df.values).to(DEVICE)
