@@ -131,7 +131,7 @@ class Classifier(torch.nn.Module):
         self.metrics['train_loss'] += [np.nan]
         self.metrics['test_acc'] += [self.accuracy(datasets.test)]
 
-        dataloader = DataLoader(datasets.train, batch_size=batch_size, sampler=sampler, shuffle=True if (sampler is None) else False)
+        dataloader = DataLoader(datasets.train, batch_size=batch_size, batch_sampler=sampler, shuffle=True if (sampler is None) else False)
 
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0 out of {epochs}.') 
         for epoch in range(epochs):

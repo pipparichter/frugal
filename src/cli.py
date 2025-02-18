@@ -115,11 +115,12 @@ def train():
     model.scale(dataset_train, fit=True)
     model.scale(dataset_test, fit=False)
 
-    sampler = None
+    sampler, batch_size = None, args.batch_size
     if (args.balance_classes or args.balance_lengths):
         sampler = Sampler(dataset_train, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths)
+        batch_size = None 
     
-    model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, weight_loss=args.weight_loss)
+    model.fit(Datasets(dataset_train, dataset_test), batch_size=batch_size, sampler=sampler, epochs=args.epochs, weight_loss=args.weight_loss)
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
     model.save(path)
     print(f'train: Saved trained model to {output_path}')
