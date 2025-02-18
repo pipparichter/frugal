@@ -85,7 +85,6 @@ class Classifier(torch.nn.Module):
         assert dataset.scaled, 'Classifier.predict: The input Dataset has not been scaled.'
 
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
-        dataset = dataset.scale(self.scaler)
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model.
             outputs = torch.nn.functional.softmax(outputs, 1) # Apply sigmoid activation, which is applied as a part of the loss function during training. 
