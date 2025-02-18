@@ -8,11 +8,11 @@ class Sampler(torch.utils.data.sampler.Sampler):
 
     def __init__(self, dataset, batch_size:int=16, balance_classes:bool=True, balance_lengths:bool=False, sample_size:int=None, **kwargs):
 
+        self.labels = dataset.labels.numpy()
         self.weights = np.ones(len(dataset))
-        self.n_per_class = [(labels == i).sum() for i in range(dataset.n_classes)] # The number of elements in each class. 
+        self.n_per_class = [(self.labels == i).sum() for i in range(dataset.n_classes)] # The number of elements in each class. 
         self.n_total = len(dataset)
         self.n_classes = dataset.n_classes
-        self.labels = dataset.labels.numpy()
 
         if balance_classes:
             self._balance_classes(dataset)
