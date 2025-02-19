@@ -66,7 +66,7 @@ def embed():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--output-path', default=None, type=str)
-    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    parser.add_argument('--feature-type', nargs='+', default=['esm_650m_gap', 'esm_3b_gap', 'pt5_3b_gap'], type=str)
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
 
@@ -86,11 +86,12 @@ def embed():
     else:
         store.put('metadata', df, format='table', data_columns=None)
 
-    if (args.feature_type not in existing_keys) or (overwrite):
-        print(f'embed: Generating embeddings for {args.feature_type}.')
-        embedder = get_embedder(args.feature_type)
-        embeddings = embedder(df.seq.values.tolist())
-        store.put(args.feature_type, pd.DataFrame(embeddings, index=df.index), format='table', data_columns=None) 
+    for feature_type in args.feature_type:
+        if (feature_type not in existing_keys) or (overwrite):
+            print(f'embed: Generating embeddings for {feature_type}.')
+            embedder = get_embedder(feature_type)
+            embeddings = embedder(df.seq.values.tolist())
+            store.put(feature_type, pd.DataFrame(embeddings, index=df.index), format='table', data_columns=None) 
 
     store.close()
 
