@@ -29,7 +29,7 @@ class Sampler():
         self.class_weights = np.ones(len(self.idxs)) if (not balance_classes) else self.get_class_weights()
 
         self.batch_size = batch_size
-        self.sample_size = len(dataset) if (sample_size is None) else sample_size
+        self.sample_size = len(dataset) * self.n_classes if (sample_size is None) else sample_size
         self.n_batches = self.sample_size // batch_size + 1
 
         self.batches = self.get_batches()
@@ -103,7 +103,7 @@ class Sampler():
         batch_lengths = [self.lengths[batch] for batch in self.batches[:n_batches]]
         
         if (self.ref_class is not None):
-            sns.kdeplot(lengths[labels == self.ref_class], ax=ax, color='black', label='ref.')
+            sns.kdeplot(self.lengths[self.labels == self.ref_class], ax=ax, color='black', label='ref.')
 
         for i, lengths, labels in zip(np.arange(n_batches), batch_lengths, batch_labels):
             for j in range(self.n_classes):
