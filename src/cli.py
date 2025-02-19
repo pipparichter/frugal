@@ -60,7 +60,7 @@ def ref():
     print(f'ref: Search complete. Output written to {args.output_dir}')
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed -i ../data/filter_dataset_train.csv"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 500GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed -i ../data/filter_dataset_train.csv"
 def embed():
 
     parser = argparse.ArgumentParser()
