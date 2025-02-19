@@ -82,7 +82,7 @@ def embed():
 
     if 'metadata' in existing_keys:
         df_ = store.get('metadata')
-        assert np.all(df.index == store.get('metadata')), 'embed: The input metadata and existing metadata do not match.'
+        assert np.all(df.index == df_.index), 'embed: The input metadata and existing metadata do not match.'
     else:
         store.put('metadata', df, format='table', data_columns=None)
 
