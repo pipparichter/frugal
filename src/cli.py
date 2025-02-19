@@ -138,7 +138,7 @@ def predict():
     parser.add_argument('--load-labels', action='store_true')
     args = parser.parse_args()
 
-    output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '.predict.csv'))
+    output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '.predict.csv'))   
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_labels=args.load_labels)
     model = Classifier.load(os.path.join(args.models_dir, args.model_name + '.pkl'))

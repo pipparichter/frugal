@@ -169,7 +169,7 @@ class Classifier(torch.nn.Module):
         self.batch_size = batch_size
         self.lr = lr
         self.weight_loss = weight_loss
-        self.feature_type = dataset.feature_type 
+        self.feature_type = datasets.train.feature_type 
         self.sampler = sampler 
 
 
