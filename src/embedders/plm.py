@@ -87,4 +87,30 @@ class ESMEmbedder(PLMEmbedder):
             outputs = [self.pooler(emb, seq) for emb, seq in zip(outputs, seqs)]
         else: 
             raise Exception('TODO')
-        return outputs        
+        return outputs       
+
+
+
+class ProtT5Embedder(PLMEmbedder):
+
+    checkpoint = 'Rostlab/prot_t5_xl_half_uniref50-enc'
+
+    def __init__(self):
+
+        super(ProtT5Embedder, self).__init__(model=T5EncoderModel, tokenizer=T5Tokenizer, checkpoint=ProtT5Embedder.checkpoint)
+
+    def _preprocess(self, seqs:list) -> list:
+        ''''''
+        seqs = [seq.replace('*', '') for seq in seqs]
+        seqs = [seq.replace('U', 'X').replace('Z', 'X').replace('O', 'X').replace('B', '') for seq in seqs] # Replace rare amino acids with X token.
+        seqs = [' '.join(list(seq)) for seq in seqs] # Characters in the sequence need to be space-separated, apparently. 
+        return seqs  
+
+    def _postprocess(self, outputs:torch.FloatTensor, seqs:list=None) -> List[torch.FloatTensor]:
+        ''''''
+        seqs = [''.join(seq.split()) for seq in seqs] # Remove the added whitespace so length is correct. 
+
+        outputs = outputs.last_hidden_state.cpu()
+        outputs = [emb[:len(seq)] for emb, seq in zip(outputs, seqs)]
+        outputs = [emb.mean(dim=0) for emb in outputs] # Take the average over the sequence length. 
+        return outputs  
