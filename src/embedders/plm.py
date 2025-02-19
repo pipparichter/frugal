@@ -106,7 +106,7 @@ class ProtT5Embedder(PLMEmbedder):
         seqs = [' '.join(list(seq)) for seq in seqs] # Characters in the sequence need to be space-separated, apparently. 
         return seqs  
 
-    def _postprocess(self, outputs:torch.FloatTensor, seqs:list=None) -> List[torch.FloatTensor]:
+    def _postprocess(self, outputs:torch.FloatTensor, seqs:list=None) -> list:
         ''''''
         seqs = [''.join(seq.split()) for seq in seqs] # Remove the added whitespace so length is correct. 
 
