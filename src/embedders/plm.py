@@ -1,4 +1,5 @@
 from transformers import EsmTokenizer, EsmModel, AutoTokenizer, EsmForMaskedLM
+from transformers import T5EncoderModel, T5Tokenizer 
 from tqdm import tqdm
 import numpy as np
 import torch 
