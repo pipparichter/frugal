@@ -2,6 +2,9 @@ import numpy as np
 import torch 
 import random
 import re
+import matplotlib.pyplot as plt 
+
+plt.rcParams['font.family'] = 'Arial'
 
 
 def seed(seed:int=42):

@@ -6,7 +6,6 @@ from torch.nn.functional import one_hot
 from sklearn.model_selection import train_test_split
 from collections import namedtuple
 import copy
-# from sklearn.model_selection import train_test_split
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -15,10 +14,11 @@ Datasets = namedtuple('Datasets', ['train', 'test'])
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, embeddings:np.ndarray, labels:np.ndarray=None, seqs:np.ndarray=None, index:np.ndarray=None, scaled:bool=False):
+    def __init__(self, embeddings:np.ndarray, labels:np.ndarray=None, seqs:np.ndarray=None, index:np.ndarray=None, scaled:bool=False, feature_type:str=None):
 
         self.labels = labels
         self.n_features = embeddings.shape[-1]
+        self.feature_type = feature_type 
 
         if (self.labels is not None):
             self.n_classes = len(np.unique(labels)) # Infer the number of classes based on the labels. 
@@ -54,7 +54,7 @@ class Dataset(torch.utils.data.Dataset):
             assert np.all(embeddings_df.index == seqs_df.index), 'Dataset.from_hdf: The indices of the sequences and embeddings do not match.'
             seqs = seqs_df.values
 
-        return cls(embeddings_df.values, labels=labels, seqs=seqs, index=embeddings_df.index.values)
+        return cls(embeddings_df.values, labels=labels, seqs=seqs, index=embeddings_df.index.values, feature_type=feature_type, scaled=False)
     
     def shape(self):
         return self.embeddings.shape

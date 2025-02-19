@@ -11,11 +11,14 @@ from sklearn.preprocessing import StandardScaler
 import copy
 import pickle
 from sklearn.metrics import balanced_accuracy_score
+import io
+import matplotlib.pyplot as plt
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes?
 # TODO: Refresh my memory on cross-entropy loss. 
-# TODO: Find out what the epsilon parameter of the optimizer does. 
+# TODO: Find out what the epsilon parameter of the optimizer does. Apparently it's just a small constant added for numerical stability, so there's no division by zero errors. 
+#   I think to fully understand why it's necessary, I'll need to read the Adam paper https://arxiv.org/abs/1412.6980 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -49,13 +52,8 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
         '''
         outputs = outputs.view(targets.shape) # Make sure the outputs and targets have the same shape. Use view to avoid copying. 
         loss = torch.nn.functional.cross_entropy(outputs, targets, reduction='none') # Reduction specifies the pooling to apply to the output. If 'none', no reduction will be applied. 
-        try:
-            weights = torch.unsqueeze(self.weights, 0).repeat(len(outputs), 1)
-            weights = (targets * weights).sum(axis=1)
-        except:
-            print('weights', weights.shape)
-            print('targets', targets.shape)
-            print('outputs', outputs.shape)
+        weights = torch.unsqueeze(self.weights, 0).repeat(len(outputs), 1)
+        weights = (targets * weights).sum(axis=1)
 
         return (loss * weights).mean()
 
@@ -83,6 +81,9 @@ class Classifier(torch.nn.Module):
 
     def forward(self, inputs:torch.FloatTensor):
         return self.model(inputs) 
+
+    def fitted(self):
+        return hasattr(self, 'epochs')
 
     def predict(self, dataset, include_outputs:bool=False) -> pd.DataFrame:
  
@@ -125,7 +126,7 @@ class Classifier(torch.nn.Module):
         if weight_loss: 
             self.loss_func.fit(datasets.train) # Set the weights of the loss function.
 
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr, eps=1e-8)
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
 
         self.metrics['train_loss'] += [np.nan]
@@ -153,10 +154,12 @@ class Classifier(torch.nn.Module):
             self.metrics['test_acc'] += [self.accuracy(datasets.test)]
 
             pbar.set_description(f'Classifier.fit: test_acc={self.metrics['test_acc'][-1]}')
+            pbar.refresh()
 
             if self.metrics['test_acc'][-1] > max(self.metrics['test_acc'][:-1]):
                 best_epoch, best_model_weights = epoch, copy.deepcopy(self.state_dict())
 
+        pbar.close()
         print(f'Classifier.fit: Loading best model weights from epoch {best_epoch}.')
         self.load_state_dict(best_model_weights) # Load the best model weights. 
 
@@ -166,6 +169,8 @@ class Classifier(torch.nn.Module):
         self.batch_size = batch_size
         self.lr = lr
         self.weight_loss = weight_loss
+        self.feature_type = dataset.feature_type 
+        self.sampler = sampler 
 
 
     @classmethod
@@ -178,3 +183,27 @@ class Classifier(torch.nn.Module):
     def save(self, path:str):
         with open(path, 'wb') as f:
             pickle.dump(self, f)
+
+
+    def plot(self, path:str=None):
+        '''Visualize the training curve for the fitted model.'''
+        assert self.fitted(), 'Classifier.plot: The model has not yet been fitted.'
+
+        fig, ax = plt.subplots()
+        handles = list()
+        # Plot the training loss for each epoch. 
+        handles += ax.plot(np.arange(self.epochs) + 1, self.metrics['train_loss'][1:], color='gray', label='train loss')
+        ax.set_ylabel('cross-entropy loss')
+        # Plot the accuracy on the validation set. 
+        ax = ax.twinx()
+        handles += ax.plot(np.arange(self.epochs + 1), self.metrics['test_acc'], color='black', label='test acc.')
+        ax.set_ylabel('balanced accuracy')
+        ax.set_xlabel('epoch')
+        handles += [ax.vlines([self.best_epoch], ymin=0, ymax=ax.get_ylim()[-1], ls='--', color='tab:blue', lw=0.7, alpha=0.7, label='best epoch')]
+        ax.legend(handles=handles)
+
+        if path is not None:
+            fig.savefig(path)
+        
+        plt.show()
+

@@ -17,6 +17,8 @@ from tqdm import tqdm
 import os
 from src import get_genome_id
 
+# TODO: Remove the need to specify feature type in the predict function once models are re-trained. 
+
         
 
 def build():
@@ -123,3 +125,44 @@ def train():
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
     model.save(output_path)
     print(f'train: Saved trained model to {output_path}')
+
+
+def predict():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input-path', type=str)
+    parser.add_argument('--model-name', type=str)
+    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    parser.add_argument('--output-dir', default='./data/predict.out', type=str)
+    parser.add_argument('--models-dir', default='./models', type=str)
+    parser.add_argument('--load-labels', action='store_true')
+    args = parser.parse_args()
+
+    output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '.predict.csv'))
+
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_labels=args.load_labels)
+    model = Classifier.load(os.path.join(args.models_dir, args.model_name + '.pkl'))
+    model.scale(dataset, fit=False)
+    labels, outputs = model.predict(dataset, include_outputs=True)
+
+    df = dict()
+    df[f'{args.model_name}_label'] = labels
+    df['id'] = dataset.index 
+    for i in range(outputs.shape[-1]): # Iterate over the model predictions for each class, which correspond to a "probability."
+        df[f'{args.model_name}_output_{i}'] = outputs[:, i]
+    if args.load_labels: # If the Dataset is labeled, include the labels in the output. 
+        df['label'] = dataset.labels.numpy()
+
+    df = pd.DataFrame(df).set_index('id')
+
+    if os.path.exists(output_path):
+        df_ = pd.read_csv(output_path, index_col=0)
+        df_ = df_.drop(columns=df.columns, errors='ignore')
+        assert np.all(df_.index == df.index), f'predict: Failed to add new predictions to existing predictions file at {output_path}, indices do not match.'
+        df = df.merge(df_, left_index=True, right_index=True, how='left')
+    
+    df.to_csv(output_path)
+    if args.load_labels: # If the dataset is labeled, compute and report the balanced accuracy. 
+        print(f'predict: Balanced accuracy on the input dataset is {model.accuracy(dataset)}')
+    print(f'predict: Saved model {args.model_name} predictions on {args.input_path} to {output_path}')
+
