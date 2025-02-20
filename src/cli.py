@@ -108,7 +108,7 @@ def train():
     parser.add_argument('--balance-classes', action='store_true')
     parser.add_argument('--balance-lengths', action='store_true')
     parser.add_argument('--weight-loss', action='store_true')
-    parser.add_argument('--epochs', default=20, type=int)
+    parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--remove-suspect', action='store_true')
 
