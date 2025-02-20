@@ -3,6 +3,7 @@ import torch
 import random
 import re
 import matplotlib.pyplot as plt 
+import pandas as pd 
 
 plt.rcParams['font.family'] = 'Arial'
 
@@ -23,6 +24,37 @@ def get_genome_id(input_path:str) -> str:
     pattern = r'GCF_([0-9]+)\.([0-9]{1,})'
     genome_id = re.search(pattern, input_path)
     return genome_id.group(0) if (genome_id is not None) else None
+
+
+def get_hypothetical(df:pd.DataFrame):
+    product_col = 'product' if ('product' in df.columns) else 'ref_product'
+    return df.copy()[df[product_col] == 'hypothetical protein']
+
+def get_ab_initio(df:pd.DataFrame):
+    evidence_type_col = 'evidence_type' if ('evidence_type' in df.columns) else 'ref_evidence_type'
+    return df.copy()[df[evidence_type_col] == 'ab initio prediction']
+
+def get_suspect(df:pd.DataFrame):
+    return get_hypothetical(get_ab_initio(df))
+
+def remove_hypothetical(df:pd.DataFrame):
+    index = get_hypothetical(df).index
+    print(f'remove_hypothetical: Removing {len(index)} sequences marked as "hypothetical protein."')
+    df = df.copy().drop(index=index)
+    return df
+
+def remove_ab_initio(df:pd.DataFrame):
+    index = get_ab_initio(df).index
+    print(f'remove_ab_initio: Removing {len(index)} sequences with only ab initio evidence."')
+    df = df.copy().drop(index=index)
+    return df
+
+def remove_suspect(df:pd.DataFrame):
+    index = get_suspect(df).index
+    print(f'remove_suspect: Removing {len(index)} sequences which are marked as "hypothetical protein and have only ab initio evidence."')
+    df = df.copy().drop(index=index)
+    return df
+
 
 
 GTDB_DTYPES = dict()

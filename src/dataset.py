@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+import src 
 
 from torch.nn.functional import one_hot
 from sklearn.model_selection import train_test_split
@@ -38,21 +39,19 @@ class Dataset(torch.utils.data.Dataset):
 
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, load_seqs:bool=True, load_labels:bool=True):
+    def from_hdf(cls, path:str, feature_type:str=None, load_seqs:bool=True, load_labels:bool=True, remove_suspect:bool=True):
         embeddings_df = pd.read_hdf(path, key=feature_type)
-        labels, seqs = None, None
-
-        if load_labels:
-            labels_df = pd.read_hdf(path, key='metadata')['label']
-            assert len(embeddings_df) == len(labels_df), 'Dataset.from_hdf: The indices of the labels and embeddings do not match.'
-            assert np.all(embeddings_df.index == labels_df.index), 'Dataset.from_hdf: The indices of the labels and embeddings do not match.'
-            labels = labels_df.values
+        metadata_df = pd.read_hdf(path, key='metadata')
         
-        if load_seqs:
-            seqs_df = pd.read_hdf(path, key='metadata')['seq']
-            assert len(embeddings_df) == len(seqs_df), 'Dataset.from_hdf: The indices of the sequences and embeddings do not match.'
-            assert np.all(embeddings_df.index == seqs_df.index), 'Dataset.from_hdf: The indices of the sequences and embeddings do not match.'
-            seqs = seqs_df.values
+        assert len(embeddings_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embeddings and the metadata do not match.'
+        assert np.all(embeddings_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embeddings and the metadata do not match.'
+
+        if remove_suspect:
+            metadata_df = src.remove_suspect(metadata_df)
+            embeddings_df = embeddings_df.loc[metadata_df.index, :].copy()
+
+        labels = metadata_df.label.values if load_labels else None
+        seqs = metadata_df.seq.values if load_seqs else None
 
         return cls(embeddings_df.values, labels=labels, seqs=seqs, index=embeddings_df.index.values, feature_type=feature_type, scaled=False)
     

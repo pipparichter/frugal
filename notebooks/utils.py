@@ -3,24 +3,64 @@ import numpy as np
 import re
 from src import GTDB_DTYPES
 import os 
-import glob 
-from src import get_genome_id
+import glob
+from src import *  
 from src.files import GBFFFile
 from tqdm import tqdm 
+import warnings
 
+def apply_line_settings(ax:plt.Axes):
+    settings = dict()
+    settings['false positive'] = {'color':'tab:red'}
+    settings['true positive'] = {'color':'tab:green'}
+    settings['false negative'] = {'color':'tab:red', 'ls':'--'}
+    settings['true negative'] = {'color':'tab:green', 'ls':'--'}
+
+    for line in ax.lines:
+        if line.get_label() in settings:
+            line.set(**settings[line.get_label()])
+
+
+def apply_patch_settings(ax:plt.Axes):
+    settings = dict()
+    settings['false positive'] = {'color':'tab:red', 'edgecolor':'black'}
+    settings['true positive'] = {'color':'tab:green', 'edgecolor':'black'}
+    settings['false negative'] = {'color':'tab:red', 'hatch':'///', 'edgecolor':'black'}
+    settings['true negative'] = {'color':'tab:green', 'hatch':'///', 'edgecolor':'black'}
+
+    curr_label = '_nolegend_'
+    for patch in ax.patches:
+        if (patch.get_label() == '_nolegend_') and (curr_label != '_nolegend_'):
+            patch.set(**settings[curr_label])
+        elif patch.get_label() in settings:
+            curr_label = patch.get_label()
+            patch.set(**settings[curr_label])
+
+
+def check_cds(df:pd.DataFrame):
+    feature_col = 'feature' if ('feature' in df.columns) else 'ref_feature' 
+    features = ', '.join([str(feature) for feature in df[feature_col].unique()])
+    # assert np.all(df[feature_col] == 'CDS'), f'check_cds: Not all entries in the input DataFrame correspond to CDS features. Found: {features}'
+    if not np.all(df[feature_col] == 'CDS'):
+        warnings.warn(f'check_cds: Not all entries in the input DataFrame correspond to CDS features. Found: {features}')
+
+def get_frac_hypothetical(df:pd.DataFrame):
+    check_cds(df)
+    return len(get_hypothetical(df)) / len(df)
+
+def get_frac_ab_initio(df:pd.DataFrame):
+    check_cds(df)
+    return len(get_ab_initio(df)) / len(df)
+
+def get_frac_suspect(df:pd.DataFrame):
+    check_cds(df)
+    return len(get_suspect(df)) / len(df)
 
 def remove_partial(df:pd.DataFrame):
     mask = (df.ref_partial != '00') & (df.partial != '00')
     print(f'remove_partial: Removing {mask.sum()} instances marked as partial by both Prodigal and RefSeq from the DataFrame.')
     return df[~mask]
 
-def remove_hypothetical_proteins(df:pd.DataFrame):
-    product_col = 'product' if ('product' in df.columns) else 'ref_product'
-    mask = ~(df.ref_product == 'hypothetical protein') 
-    print(f'remove_hypothetical_proteins: Removing {(~mask).sum()} sequences marked as "hypothetical" from the DataFrame.') 
-    df = df[mask].copy()
-    return df
-    
 def remove_pseudogenes(df:pd.DataFrame):
     pseudo_col = 'pseudo' if ('pseudo' in df.columns) else 'ref_pseudo'
     mask = df[pseudo_col].astype(bool)
@@ -50,6 +90,26 @@ def load_genome_metadata(path:str='../data/bac120_metadata_r207.tsv', reps_only:
     df = df.astype({col:dtype for col, dtype in GTDB_DTYPES.items() if (col in df.columns)})
 
     return df.set_index('genome_id')
+
+
+def load_pred_out(path:str, model_name:str='filter_balance_classes_and_lengths', ref_out_df:pd.DataFrame=None):
+
+    df = pd.read_csv(path, index_col=0)
+
+    cols = [col for col in df.columns if ((model_name in col) or (col == 'label'))]
+    df = df[cols].copy()
+    df = df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
+
+    if ref_out_df is not None: # Add the ref output data to the predictions. 
+        df = df.merge(ref_out_df, left_index=True, right_index=True, how='left', validate='one_to_many')
+
+    confusion_matrix = np.where((df.model_label == 1) & (df.label == 0), 'false positive', '')
+    confusion_matrix = np.where((df.model_label  == 1) & (df.label == 1), 'true positive', confusion_matrix)
+    confusion_matrix = np.where((df.model_label == 0) & (df.label == 1), 'false negative', confusion_matrix)
+    confusion_matrix = np.where((df.model_label  == 0) & (df.label == 0), 'true negative', confusion_matrix)
+    df['confusion_matrix'] = confusion_matrix
+
+    return df
 
 
 def load_ref_out(output_dir:str='../data/ref.out', genome_metadata_df:pd.DataFrame=None, feature:str=None):
