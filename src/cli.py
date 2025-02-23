@@ -88,8 +88,8 @@ def embed():
     store.close()
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/filter_dataset_train.h5 --balance-classes --model-name filter_e1"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/filter_dataset_train.h5 --balance-classes --remove-suspect --model-name filter_e2"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/filter_dataset_train.h5 --balance-classes --model-name filter_esm_650m_gap_v1"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/filter_dataset_train.h5 --balance-classes --balance-lengths --model-name filter_esm_650m_gap_v2"
 def train():
 
     parser = argparse.ArgumentParser()
@@ -102,11 +102,10 @@ def train():
     parser.add_argument('--weight-loss', action='store_true')
     parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
-    parser.add_argument('--remove-suspect', action='store_true')
 
     args = parser.parse_args()
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_seqs=True, load_labels=True, remove_suspect=args.remove_suspect)
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_seqs=True, load_labels=True)
     model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes))
     dataset_train, dataset_test = split(dataset)
     model.scale(dataset_train, fit=True)

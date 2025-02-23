@@ -39,16 +39,12 @@ class Dataset(torch.utils.data.Dataset):
 
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, load_seqs:bool=True, load_labels:bool=True, remove_suspect:bool=False):
+    def from_hdf(cls, path:str, feature_type:str=None, load_seqs:bool=True, load_labels:bool=True):
         embeddings_df = pd.read_hdf(path, key=feature_type)
         metadata_df = pd.read_hdf(path, key='metadata')
         
         assert len(embeddings_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embeddings and the metadata do not match.'
         assert np.all(embeddings_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embeddings and the metadata do not match.'
-
-        if remove_suspect:
-            metadata_df = src.remove_suspect(metadata_df)
-            embeddings_df = embeddings_df.loc[metadata_df.index, :].copy()
 
         labels = metadata_df.label.values if load_labels else None
         seqs = metadata_df.seq.values if load_seqs else None
