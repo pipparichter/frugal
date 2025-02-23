@@ -43,10 +43,10 @@ def fix_mixed_dtype_cols(df:pd.DataFrame):
     with pd.option_context('future.no_silent_downcasting', True): # Opt-in to future pandas behavior, which will raise a warning if it tries to downcast.
         for col, dtypes in mixed_dtype_cols.items():
             if (str in dtypes) and (float in dtypes):
-                df[col] = df[col].fillna('none')
+                df[col] = df[col].fillna('none').astype(str)
                 print(f'fix_mixed_dtype_cols: Replaced NaNs in column {col} with "none."')
             elif (bool in dtypes) and (float in dtypes):
-                df[col] = df[col].fillna(False)
+                df[col] = df[col].fillna(False).astype(bool)
                 print(f'fix_mixed_dtype_cols: Replaced NaNs in column {col} with False.')
             else:
                 dtypes = ' '.join([str(dtype) for dtype in dtypes])
