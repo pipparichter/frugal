@@ -27,6 +27,33 @@ def get_genome_id(input_path:str, errors='raise') -> str:
     return genome_id.group(0) if (genome_id is not None) else None
 
 
+def get_mixed_dtype_cols(df:pd.DataFrame):
+    mixed_dtype_cols = dict()
+    for col in df.columns:
+        dtypes = df[col].apply(type).unique()
+        if len(dtypes) > 1:
+            mixed_dtype_cols[col] = dtypes
+    return mixed_dtype_cols
+
+
+def fix_mixed_dtype_cols(df:pd.DataFrame):
+    df = df.copy()
+    mixed_dtype_cols = get_mixed_dtype_cols(df)
+
+    with pd.option_context('future.no_silent_downcasting', True): # Opt-in to future pandas behavior, which will raise a warning if it tries to downcast.
+        for col, dtypes in mixed_dtype_cols.items():
+            if (str in dtypes) and (float in dtypes):
+                df[col] = df[col].fillna('none')
+                print(f'fix_mixed_dtype_cols: Replaced NaNs in column {col} with "none."')
+            elif (bool in dtypes) and (float in dtypes):
+                df[col] = df[col].fillna(False)
+                print(f'fix_mixed_dtype_cols: Replaced NaNs in column {col} with False.')
+            else:
+                dtypes = ' '.join([str(dtype) for dtype in dtypes])
+                raise Exception(f'fix_mixed_dtype_cols: No rule for column {col}, with datatypes {dtypes}.')
+    return df 
+
+
 
 GTDB_DTYPES = dict()
 GTDB_DTYPES['description'] = str

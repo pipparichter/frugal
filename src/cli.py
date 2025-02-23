@@ -15,7 +15,7 @@ import re
 import glob
 from tqdm import tqdm 
 import os
-from src import get_genome_id
+from src import get_genome_id, fix_mixed_dtype_cols
 
 
 def build():
@@ -72,9 +72,10 @@ def embed():
     existing_keys = [key.replace('/', '') for key in store.keys()]
 
     if 'metadata' in existing_keys:
-        df_ = store.get('metadata')
+        df_ = store.get('metadata') # Load existing metadata. 
         assert np.all(df.index == df_.index), 'embed: The input metadata and existing metadata do not match.'
     else: # Storing in table format means I can add to the file later on. 
+        df = fix_mixed_dtype_cols(df)
         store.put('metadata', df, format='table', data_columns=None)
 
     for feature_type in args.feature_type:
