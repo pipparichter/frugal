@@ -7,65 +7,76 @@ import glob
 from src import *  
 from src.files import GBFFFile
 from tqdm import tqdm 
+import matplotlib.pyplot as plt 
 import warnings
+from sklearn.linear_model import LogisticRegression, LinearRegression
 
-def apply_line_settings(ax:plt.Axes):
-    settings = dict()
-    settings['false positive'] = {'color':'tab:red'}
-    settings['true positive'] = {'color':'tab:green'}
-    settings['false negative'] = {'color':'tab:red', 'ls':'--'}
-    settings['true negative'] = {'color':'tab:green', 'ls':'--'}
+plt.rcParams['font.family'] = 'Arial'
 
-    for line in ax.lines:
-        if line.get_label() in settings:
-            line.set(**settings[line.get_label()])
+is_n_trunc = lambda row : ((row.start > row.ref_start) and (row.strand == 1)) or ((row.stop < row.ref_stop) and (row.strand == -1)) 
+is_c_trunc = lambda row : ((row.stop < row.ref_stop) and (row.strand == 1)) or ((row.start > row.ref_start) and (row.strand == -1)) 
+is_n_ext = lambda row : ((row.start < row.ref_start) and (row.strand == 1)) or ((row.stop > row.ref_stop) and (row.strand == -1)) 
+is_c_ext = lambda row : ((row.stop > row.ref_stop) and (row.strand == 1)) or ((row.start < row.ref_start) and (row.strand == -1)) 
 
+get_col = lambda row, col : f'ref_{col}' if (f'ref_{col}' in row.index) else col
 
-def apply_patch_settings(ax:plt.Axes):
-    settings = dict()
-    settings['false positive'] = {'color':'tab:red', 'edgecolor':'black'}
-    settings['true positive'] = {'color':'tab:green', 'edgecolor':'black'}
-    settings['false negative'] = {'color':'tab:red', 'hatch':'///', 'edgecolor':'black'}
-    settings['true negative'] = {'color':'tab:green', 'hatch':'///', 'edgecolor':'black'}
+is_hypothetical = lambda row : row[get_col(row, 'product')] == 'hypothetical protein'
+is_ab_initio = lambda row : (row[get_col(row, 'evidence_type')] == 'ab initio prediction') or (pd.isnull(row[get_col(row, 'evidence_type')]))
+is_putative = lambda row : is_hypothetical(row) and is_ab_initio(row)
 
-    curr_label = '_nolegend_'
-    for patch in ax.patches:
-        if (patch.get_label() == '_nolegend_') and (curr_label != '_nolegend_'):
-            patch.set(**settings[curr_label])
-        elif patch.get_label() in settings:
-            curr_label = patch.get_label()
-            patch.set(**settings[curr_label])
+has_interpro_hit = lambda row : not (pd.isnull(row.interpro_analysis))
+has_ref_hit = lambda row : (row.n_valid_hits > 0) # Assuming all hits are for coding regions. 
 
+is_ncbi_error = lambda row : (is_putative(row)) and (not has_interpro_hit(row))
+is_prodigal_error = lambda row : (has_ref_hit(row) and is_ncbi_error(row)) or ((not has_interpro_hit(row)) and (not has_ref_hit(row)))
 
-def check_cds(df:pd.DataFrame):
-    feature_col = 'feature' if ('feature' in df.columns) else 'ref_feature' 
-    features = ', '.join([str(feature) for feature in df[feature_col].unique()])
-    # assert np.all(df[feature_col] == 'CDS'), f'check_cds: Not all entries in the input DataFrame correspond to CDS features. Found: {features}'
-    if not np.all(df[feature_col] == 'CDS'):
-        warnings.warn(f'check_cds: Not all entries in the input DataFrame correspond to CDS features. Found: {features}')
-
-def get_frac_hypothetical(df:pd.DataFrame):
-    check_cds(df)
-    return len(get_hypothetical(df)) / len(df)
-
-def get_frac_ab_initio(df:pd.DataFrame):
-    check_cds(df)
-    return len(get_ab_initio(df)) / len(df)
-
-def get_frac_suspect(df:pd.DataFrame):
-    check_cds(df)
-    return len(get_suspect(df)) / len(df)
 
 def remove_partial(df:pd.DataFrame):
-    mask = (df.ref_partial != '00') & (df.partial != '00')
-    print(f'remove_partial: Removing {mask.sum()} instances marked as partial by both Prodigal and RefSeq from the DataFrame.')
-    return df[~mask]
+    assert (df.partial.isnull().sum() == 0), 'remove_partial: Some of the proteins do not have a partial indicator.'
+    assert (df.partial.dtype == 'object') and (df.ref_partial.dtype == 'object'), 'remove_partial: It seems as though the partial indicators were not loaded in as strings.'
+    mask = ((df.partial != '00') & pd.isnull(df.ref_partial))
+    mask = mask | ((df.partial != '00') & (df.ref_partial != '00')) 
+    print(f'remove_partial: Removing {int(mask.sum())} sequences marked as partial by both Prodigal and the reference.')
+    return df[~mask].copy()
 
-def remove_pseudogenes(df:pd.DataFrame):
-    pseudo_col = 'pseudo' if ('pseudo' in df.columns) else 'ref_pseudo'
-    mask = df[pseudo_col].astype(bool)
-    print(f'remove_pseudogenes: Removing {mask.sum()} sequences marked as pseudogenes from the DataFrame.')
-    return df[~mask]
+
+def get_lengths(df:pd.DataFrame, ref:bool=True):
+    start_col, stop_col = ('ref_' if ref else '') +'start', ('ref_' if ref else '') + 'stop'
+    lengths = df[stop_col] - df[start_col] 
+    lengths = lengths // 3 + 1 # Convert to amino acid units. 
+    return lengths
+
+
+def denoise(df:pd.DataFrame, x_col:str=None, y_cols:list=None, bins:int=50):
+    bin_labels, bin_edges = pd.cut(df[x_col], bins=bins, retbins=True, labels=False)
+    df['bin_label'] = bin_labels 
+    df_ = dict()
+    df_[x_col] = df.groupby('bin_label', sort=True)[x_col].mean()
+    for y_col in y_cols:
+        df_[y_col] = df.groupby('bin_label', sort=True)[y_col].mean()
+        df_[f'{y_col}_err'] = df.groupby('bin_label').apply(lambda df : df[y_col].std() / np.sqrt(len(df)), include_groups=False)
+    df_ = pd.DataFrame(df_, index=df.bin_label.sort_values().unique())
+    return df_
+
+
+def correlation(x, y):
+    linreg = LinearRegression().fit(x.reshape(-1, 1), y) 
+    r2 = linreg.score(x.reshape(-1, 1), y)
+    return np.round(r2, 3), linreg
+
+
+def partial_correlation(x, y, z):
+    # Standardize the input arrays. 
+    x, y, z = (x - x.mean()) / x.std(), (y - y.mean()) / y.std(), (z - z.mean()) / z.std()
+
+    _, linreg_zy = correlation(z, y)
+    _, linreg_zx = correlation(z, x)
+    # Do not need to standardize the residuale (not sure if I completely understand why)
+    x_residuals = x - linreg_zx.predict(z.reshape(-1, 1))
+    y_residuals = y - linreg_zy.predict(z.reshape(-1, 1))
+
+    r2, linreg_xy = correlation(x_residuals, y_residuals)
+    return r2, linreg_xy, (x_residuals, y_residuals)
 
 
 def load_genome_metadata(path:str='../data/bac120_metadata_r207.tsv', reps_only:bool=True, refseq_only:bool=False):
@@ -92,7 +103,7 @@ def load_genome_metadata(path:str='../data/bac120_metadata_r207.tsv', reps_only:
     return df.set_index('genome_id')
 
 
-def load_pred_out(path:str, model_name:str='filter_balance_classes_and_lengths', ref_out_df:pd.DataFrame=None):
+def load_pred_out(path:str, model_name:str='', ref_out_df:pd.DataFrame=None):
 
     df = pd.read_csv(path, index_col=0)
 
@@ -112,39 +123,17 @@ def load_pred_out(path:str, model_name:str='filter_balance_classes_and_lengths',
     return df
 
 
-def load_ref_out(output_dir:str='../data/ref.out', genome_metadata_df:pd.DataFrame=None, feature:str=None):
+def load_ref_out(output_dir:str='../data/ref.out'):
 
-    df = []
-    for path in tqdm(glob.glob(os.path.join(output_dir, '*')), desc='load_ref_out'):
-        genome_id = get_genome_id(path)
-        df += [pd.read_csv(path, index_col=0, dtype={'partial':str, 'ref_partial':str}).assign(genome_id=genome_id)]
-    df = pd.concat(df)
-
-    if (feature is not None): # Filter for a specific feature, if specified.
-        df = df[df.ref_feature == feature]
-    
-    if genome_metadata_df is not None:
-        df = df.merge(genome_metadata_df, left_on='genome_id', right_index=True, how='inner')
-    
+    dtypes = {'partial':str, 'ref_partial':str}
+    paths = glob.glob(os.path.join(output_dir, '*'))
+    df = pd.concat([pd.read_csv(path, index_col=0, dtype=dtypes).assign(genome_id=get_genome_id(path)) for path in paths])
     return df 
 
-
-def load_refseq(refseq_dir:str='../data/refseq', genome_metadata_df:pd.DataFrame=None, feature:str='CDS', load_existing:str=None):
-
-    if (load_existing is not None):
-        df = pd.read_csv(load_existing, index_col=0, low_memory=False)
-    else:
-        df = []
-        for path in tqdm(glob.glob(os.path.join(refseq_dir, '*')), desc='load_refseq'):
-            genome_id = get_genome_id(path)
-            df += [GBFFFile(path).to_df().assign(genome_id=genome_id)]
-        df = pd.concat(df)
-
-    if (feature is not None): # Filter for a specific feature, if specified.
-        df = df[df.feature == feature]
     
-    if genome_metadata_df is not None:
-        df = df.merge(genome_metadata_df, left_on='genome_id', right_index=True, how='inner')
-    
-    return df  
+    # if genome_metadata_df is not None:
+    #     genome_ids = np.intersect1d(genome_metadata_df.index, df.genome_id.unique())
+    #     if len(genome_ids) < df.genome_id.nunique():
+    #         warnings.warn(f'load_ref_out: Merging the genome metadata will drop ref output for {df.genome_id.nunique() - len(genome_ids)} genomes.')
+    #     df = df.merge(genome_metadata_df, left_on='genome_id', right_index=True, how='inner')
     

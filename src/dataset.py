@@ -75,7 +75,7 @@ class Dataset(torch.utils.data.Dataset):
         index = self.index[idxs]
         scaled = self.scaled 
 
-        return Dataset(embeddings, labels=labels, seqs=seqs, index=index, scaled=scaled)
+        return Dataset(embeddings, labels=labels, seqs=seqs, index=index, scaled=scaled, feature_type=self.feature_type)
 
 
 

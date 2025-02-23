@@ -218,14 +218,14 @@ class GBFFFile():
             if (not pd.isnull(row.experiment)):
                 for experiment in row.experiment.split(';'):
                     row_ = {'index':row.Index}
-                    row_.update(GBFFFile.parse_inference(experiment))
+                    row_.update(GBFFFile.parse_experiment(experiment))
                     df_.append(row_)
         df_ = pd.DataFrame(df_)
         df_['type'] = pd.Categorical(df_['type'], categories=GBFFFile.evidence_types, ordered=True)
-        df_['category'] = pd.Categorical(df_['category'], categories=GBFFFile.evidence_categories, ordered=True)
+        # df_['category'] = pd.Categorical(df_['category'], categories=GBFFFile.evidence_categories, ordered=True)
 
         if best_evidence_only:
-            df_ = df_.sort_values(by=['type', 'category']).drop_duplicates(subset=['index'], keep='first')
+            df_ = df_.sort_values(by=['type']).drop_duplicates(subset=['index'], keep='first')
         df_ = df_.set_index('index')
         df_.index.name = df.index.name
         return df_

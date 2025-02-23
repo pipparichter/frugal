@@ -5,6 +5,10 @@ from tqdm import tqdm
 import shutil
 from typing import List
 import numpy as np 
+import warnings
+import glob
+from src.files import GBFFFile
+from src import get_genome_id
 
 
 class NCBIDatasets():
@@ -18,7 +22,7 @@ class NCBIDatasets():
     src_file_names = {'gbff':'genomic.gbff', 'genome':'*genomic.fna', 'protein':'*protein.faa'}
     dst_file_names = {'gbff':'{genome_id}_genomic.gbff', 'genome':'{genome_id}_genomic.fna', 'protein':'{genome_id}_protein.faa'}
 
-    def __init__(self, genome_dir:str='../data/genomes', gbff_dir='../data/refseq', protein_dir:str=None):
+    def __init__(self, genome_dir:str='../data/genomes', gbff_dir='../data/ncbi', protein_dir:str=None):
 
         self.dst_dirs = dict()
         self.dst_dirs['gbff'] = gbff_dir 
@@ -54,6 +58,40 @@ class NCBIDatasets():
         for dir_ in NCBIDatasets.cleanup_dirs:
             if os.path.isdir(dir_):
                 shutil.rmtree(dir_)
+
+    @staticmethod
+    def make_database(path:str, dir_:str='../data/ncbi', feature:str='CDS'):
+
+        paths = tqdm(glob.glob(os.path.join(dir_, '*')), desc=f'NCBIDatasets.make_database: Reading GBFF files in {dir_}')
+        df = pd.concat([GBFFFile(path).to_df().assign(genome_id=get_genome_id(path)) for path in paths])
+
+        if (feature is not None): # Filter for a specific feature, if specified.
+            df = df[df.feature == feature]
+
+        print(f'NCBIDatasets.make_database: Writing NCBI data to {path}')
+        df.to_csv(path)
+        
+
+def fix_b_subtilis(database_path:str='../data/ncbi_database_cds.csv'):
+    genome_id = 'GCF_000009045.1' 
+
+    df = pd.read_csv(database_path, index_col=0, dtype={'partial':str}, low_memory=False)
+    bsub_df = df[df.genome_id == genome_id].copy()
+    df = df[df.genome_id != genome_id].copy()
+
+    evidence_types = []
+    for row in bsub_df.itertuples():
+        if ('Evidence 1' in row.note) or ('Evidence 2' in row.note):
+            evidence_types.append('experiment')
+        elif ('Evidence 4' in row.note) or ('Evidence 3' in row.note):
+            evidence_types.append('similar to sequence')
+        else:
+            evidence_types.append('ab initio prediction')
+
+    bsub_df['evidence_type'] = evidence_types
+    df = pd.concat([df, bsub_df])
+    print(f'fix_b_subtilis: Writing modified database to {database_path}')
+    df.to_csv(database_path)
 
 
 

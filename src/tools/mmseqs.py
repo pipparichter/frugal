@@ -55,5 +55,6 @@ class MMseqs():
         cluster_ids = {rep:i for i, rep in enumerate(df.cluster_rep.unique())} # Add integer IDs for each cluster. 
         df['cluster'] = [cluster_ids[rep] for rep in df.cluster_rep]
         if reps_only:
+            print(f'MMseqs.load: Removing {df.cluster_rep.duplicated().sum()} non-cluster representatives.')
             df = df.drop_duplicates('cluster_rep', keep='first')
         return df.set_index('id')
