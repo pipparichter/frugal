@@ -49,6 +49,8 @@ class Sampler():
         self.n_batches = self.sample_size // batch_size + 1
 
         self.batches = self.get_batches()
+        coverage = ', '.join([f'({i}) {100 * self.coverage(i):.2f}%' for i in range(self.n_classes)])
+        print(f'Sampler.__init__: Generated {self.n_batches} batches of size {self.batch_size}. Coverage per class is {coverage}.')
 
     # def get_class_weights(self):
     #     n_per_class = [(self.labels == i).sum() for i in range(self.n_classes)] # The number of elements in each class.
