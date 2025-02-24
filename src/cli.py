@@ -113,7 +113,7 @@ def train():
 
     sampler = None
     if (args.balance_classes or args.balance_lengths):
-        sampler = Sampler(dataset_train, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths)
+        sampler = Sampler(dataset_train, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths, sample_size=20 * len(dataset_train))
     
     model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, weight_loss=args.weight_loss)
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
@@ -126,17 +126,15 @@ def predict():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--model-name', type=str)
-    parser.add_argument('--feature-type', type=str)
     parser.add_argument('--output-dir', default='./data/predict.out', type=str)
     parser.add_argument('--models-dir', default='./models', type=str)
     parser.add_argument('--load-labels', action='store_true')
-    parser.add_argument('--remove-suspect', action='store_true')
     args = parser.parse_args()
 
     output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '.predict.csv'))   
 
     model = Classifier.load(os.path.join(args.models_dir, args.model_name + '.pkl'))
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_labels=args.load_labels, remove_suspect=args.remove_suspect)
+    dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, load_labels=args.load_labels)
     model.scale(dataset, fit=False)
     labels, outputs = model.predict(dataset, include_outputs=True)
 

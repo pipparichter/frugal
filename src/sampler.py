@@ -1,5 +1,6 @@
 import numpy as np 
-import pandas as pd 
+import pandas as pd
+from tqdm import tqdm 
 import torch
 from torch.utils.data import WeightedRandomSampler
 from numpy.random import choice
@@ -7,13 +8,14 @@ from random import choices
 from scipy.special import softmax
 import matplotlib.pyplot as plt 
 import seaborn as sns
+import warnings 
 
 # TODO: Is the sample size the correct size to return for the length method? Yes! 
 # TODO: Look into why softmax doesn't seem to be behaving the way I expected. 
 
 class Sampler():
 
-    def __init__(self, dataset, batch_size:int=16, balance_classes:bool=True, balance_lengths:bool=False, sample_size:int=None, **kwargs):
+    def __init__(self, dataset, batch_size:int=16, balance_classes:bool=False, balance_lengths:bool=False, sample_size:int=None, **kwargs):
 
         self.labels = dataset.labels.numpy()
         self.n_total = len(dataset)
@@ -26,20 +28,33 @@ class Sampler():
 
         self.balance_lengths, self.balance_classes = balance_lengths, balance_classes
         self.length_weights = np.ones(len(self.idxs)) if (not balance_lengths) else self.get_length_weights(**kwargs)
-        self.class_weights = np.ones(len(self.idxs)) if (not balance_classes) else self.get_class_weights()
+        
 
-        self.batch_size = batch_size
+        if balance_classes:
+            # There are two options for balancing batches: randomly select the proportion of each batch which is made up of each class, 
+            # weighting classes according to inverse frequency, or ensuring each batch is split evenly. The latter approach has the 
+            # advantage of being faster. 
+            
+            # self.batch_size = batch_size
+            # self.class_weights = self.get_class_weights()
+            self.class_n_per_batch = batch_size // self.n_classes
+            self.batch_size = self.class_n_per_batch * self.n_classes 
+            if self.batch_size != batch_size:
+                warnings.warn(f'Sampler.__init__: Specified batch size {batch_size} is not divisible by {self.n_classes}. Using batch size {self.batch_size} instead.')
+        else:
+            self.class_weights = np.ones(len(self.idxs))
+            self.batch_size = batch_size
+
         self.sample_size = len(dataset) * self.n_classes if (sample_size is None) else sample_size
         self.n_batches = self.sample_size // batch_size + 1
 
         self.batches = self.get_batches()
 
-        
-    def get_class_weights(self):
-        n_per_class = [(self.labels == i).sum() for i in range(self.n_classes)] # The number of elements in each class.
-        weights_per_class = np.array([(1 / (n_i)) for n_i in n_per_class])
-        weights_per_class /= weights_per_class.max() # Normalize so it's on the same scale as the balance length weights. 
-        return weights_per_class[self.labels] # Assign the weights using the original labels. 
+    # def get_class_weights(self):
+    #     n_per_class = [(self.labels == i).sum() for i in range(self.n_classes)] # The number of elements in each class.
+    #     weights_per_class = np.array([(1 / (n_i)) for n_i in n_per_class])
+    #     weights_per_class /= weights_per_class.max() # Normalize so it's on the same scale as the balance length weights. 
+    #     return weights_per_class[self.labels] # Assign the weights using the original labels. 
 
     def get_length_weights(self, n_bins:int=50):
         assert self.ref_class is not None, 'Sampler.get_length_weights: Cannot balance by sequence length unless a reference class is specified.'
@@ -67,16 +82,19 @@ class Sampler():
             yield self.batches[i]
 
     def get_batches(self):
-        batches = []
-        for _ in range(self.n_batches):
+        # Pre-sort the indices and weights to avoid repeated filtering (e.g. self.idxs[self.labels == i]).
+        idxs = {i:self.idxs[self.labels == i] for i in range(self.n_classes)}
+        length_weights = {i:self.length_weights[self.labels == i] for i in range(self.n_classes)}
 
-            batch_labels = np.array(choices(self.labels, k=self.batch_size, weights=self.class_weights))
-            batch_n_per_class = [(batch_labels == i).sum() for i in range(self.n_classes)]
+        batches = [choices(idxs[i], k=self.class_n_per_batch * self.n_batches, weights=length_weights[i]) for i in range(self.n_classes)]
+        batches = np.concatenate([np.split(np.array(idxs_), self.n_batches) for idxs_ in batches], axis=1)
 
-            batch_idxs = []
-            for i, n in enumerate(batch_n_per_class):
-                batch_idxs += choices(self.idxs[self.labels == i], k=n, weights=self.length_weights[self.labels == i])
-            batches.append(np.array(batch_idxs))
+        # batches = []
+        # for _ in tqdm(range(self.n_batches), desc='Sampler.get_batches: Generating batches.'):
+        #     batch_labels = np.array(choices(self.labels, k=self.batch_size, weights=self.class_weights))
+        #     batch_n_per_class = np.bincount(batch_labels)
+        #     batch_idxs = [idx for i, n in enumerate(batch_n_per_class) for idx in choices(idxs[i], k=n, weights=length_weights[i])]
+        #     batches.append(np.array(batch_idxs))
 
         return batches
 

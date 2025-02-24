@@ -44,6 +44,8 @@ def get_lengths(df:pd.DataFrame, ref:bool=True):
     start_col, stop_col = ('ref_' if ref else '') +'start', ('ref_' if ref else '') + 'stop'
     lengths = df[stop_col] - df[start_col] 
     lengths = lengths // 3 + 1 # Convert to amino acid units. 
+    if pd.isnull(lengths).sum() > 0:
+        warnings.warn('get_lengths: Some of the returned lengths are NaNs, which probably means there are sequences that do not have NCBI reference hits.')
     return lengths
 
 
@@ -103,16 +105,13 @@ def load_genome_metadata(path:str='../data/bac120_metadata_r207.tsv', reps_only:
     return df.set_index('genome_id')
 
 
-def load_pred_out(path:str, model_name:str='', ref_out_df:pd.DataFrame=None):
+def load_pred_out(path:str, model_name:str=''):
 
     df = pd.read_csv(path, index_col=0)
 
     cols = [col for col in df.columns if ((model_name in col) or (col == 'label'))]
     df = df[cols].copy()
     df = df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
-
-    if ref_out_df is not None: # Add the ref output data to the predictions. 
-        df = df.merge(ref_out_df, left_index=True, right_index=True, how='left', validate='one_to_many')
 
     confusion_matrix = np.where((df.model_label == 1) & (df.label == 0), 'false positive', '')
     confusion_matrix = np.where((df.model_label  == 1) & (df.label == 1), 'true positive', confusion_matrix)
