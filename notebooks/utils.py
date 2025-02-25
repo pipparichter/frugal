@@ -22,13 +22,16 @@ get_col = lambda row, col : f'ref_{col}' if (f'ref_{col}' in row.index) else col
 
 is_hypothetical = lambda row : row[get_col(row, 'product')] == 'hypothetical protein'
 is_ab_initio = lambda row : (row[get_col(row, 'evidence_type')] == 'ab initio prediction') or (pd.isnull(row[get_col(row, 'evidence_type')]))
-is_putative = lambda row : is_hypothetical(row) and is_ab_initio(row)
+
+is_putative_ncbi = lambda row : is_hypothetical(row) and is_ab_initio(row)
+is_putative_prodigal = lambda row : (row.n_valid_hits == 0)  # Assuming all hits are for coding regions. 
 
 has_interpro_hit = lambda row : not (pd.isnull(row.interpro_analysis))
-has_ref_hit = lambda row : (row.n_valid_hits > 0) # Assuming all hits are for coding regions. 
 
-is_ncbi_error = lambda row : (is_putative(row)) and (not has_interpro_hit(row))
-is_prodigal_error = lambda row : (has_ref_hit(row) and is_ncbi_error(row)) or ((not has_interpro_hit(row)) and (not has_ref_hit(row)))
+is_validated = lambda row : (not is_putative_ncbi(row)) and (not is_putative_prodigal(row))
+
+# is_ncbi_error = lambda row : (is_putative(row)) and (not has_interpro_hit(row))
+# is_prodigal_error = lambda row : (has_ref_hit(row) and is_ncbi_error(row)) or ((not has_interpro_hit(row)) and (not has_ref_hit(row)))
 
 
 def remove_partial(df:pd.DataFrame):
@@ -118,6 +121,7 @@ def load_pred_out(path:str, model_name:str=''):
     confusion_matrix = np.where((df.model_label == 0) & (df.label == 1), 'false negative', confusion_matrix)
     confusion_matrix = np.where((df.model_label  == 0) & (df.label == 0), 'true negative', confusion_matrix)
     df['confusion_matrix'] = confusion_matrix
+    df['model_name'] = model_name
 
     return df
 
