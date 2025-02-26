@@ -8,11 +8,13 @@ import numpy as np
 import warnings
 import glob
 from src.files import GBFFFile
-from src import get_genome_id
+from src import get_genome_id, fix_mixed_dtype_cols
+import io 
 
+# datasets summary genome taxon 2 --reference --annotated --assembly-level complete --mag exclude --assembly-source RefSeq --exclude-atypical --report sequence --as-json-lines | dataformat tsv genome-seq --fields accession,genbank-seq-acc,refseq-seq-acc,chr-name,seq-length,gc-percent
 
 class NCBIDatasets():
-
+    taxonomy_fields = ['Taxid', 'Tax name', 'Authority', 'Rank', 'Basionym', 'Basionym authority', 'Curator common name', 'Has type material', 'Group name', 'Superkingdom name', 'Superkingdom taxid', 'Kingdom name', 'Kingdom taxid', 'Phylum name', 'Phylum taxid', 'Class name', 'Class taxid', 'Order name', 'Order taxid', 'Family name', 'Family taxid', 'Genus name', 'Genus taxid', 'Species name', 'Species taxid'] 
     cleanup_files = ['README.md', 'md5sum.txt', 'ncbi.zip']
     cleanup_dirs = ['ncbi_dataset']
 
@@ -22,16 +24,69 @@ class NCBIDatasets():
     src_file_names = {'gbff':'genomic.gbff', 'genome':'*genomic.fna', 'protein':'*protein.faa'}
     dst_file_names = {'gbff':'{genome_id}_genomic.gbff', 'genome':'{genome_id}_genomic.fna', 'protein':'{genome_id}_protein.faa'}
 
-    def __init__(self, genome_dir:str='../data/genomes', gbff_dir='../data/ncbi', protein_dir:str=None):
+    def __init__(self, taxonomy_metadata_path:str='../data/ncbi_taxonomy_metadata.tsv', genome_metadata_path:str='../data/ncbi_genome_metadata.tsv', genome_dir:str='../data/genomes', gbff_dir:str='../data/proteins/ncbi'):
 
         self.dst_dirs = dict()
         self.dst_dirs['gbff'] = gbff_dir 
         self.dst_dirs['genome'] = genome_dir
-        self.dst_dirs['protein'] = protein_dir
+        # self.dst_dirs['protein'] = protein_dir
 
-    def run(self, genome_ids:List[str], include:List[str]=['gbff', 'genome']):
+        self.taxonomy_metadata_path = taxonomy_metadata_path
+        self.genome_metadata_path = genome_metadata_path
+
+    @staticmethod
+    def _get_metadata(ids:list, cmd:str=None, path:str=None, chunk_size:int=100) -> pd.DataFrame:
+
+        df = [] if (not os.path.exists(path)) else [pd.read_csv(path, sep='\t')]
+
+        n_chunks = len(ids) // chunk_size + 1
+        ids = [str(id_) for id_ in ids] # Convert the IDs to strings for joining. 
+        ids = [','.join(ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
+
+        for id_ in tqdm(ids, desc='NCBIDatasets._get_metadata: Downloading metadata.'):
+            output = subprocess.run(cmd.format(id_=id_), shell=True, check=True, capture_output=True)
+            output = output.stdout.decode('utf-8').strip()
+            output = output.split('\n')
+            df_ = pd.read_csv(io.StringIO('\n'.join(output)), sep='\t')
+            df_ = df_.drop(columns=['Query'], errors='ignore') # Drop the Query column, which is redundant. Only present when getting taxonomy metadata. 
+            df.append(df_)
+
+        return pd.concat(df)
+
+    def _get_taxonomy_metadata(self, taxonomy_ids:list):
         
-        pbar = tqdm(genome_ids, desc='NCBIDatasets.run: Downloading data from NCBI.')
+        cmd = 'datasets summary taxonomy taxon {id_} --as-json-lines | dataformat tsv taxonomy --template tax-summary'
+        df = NCBIDatasets._get_metadata(taxonomy_ids, cmd=cmd, path=self.taxonomy_metadata_path)
+        df = df.set_index('Taxid') 
+        df.to_csv(self.taxonomy_path, sep='\t')
+    
+    def _get_genome_metadata(self, genome_ids:list):
+
+        def merge(df:pd.DataFrame):
+            funcs = dict()
+            funcs['GenBank seq accession'] = lambda series : ';'.join(list(series))
+            funcs['RefSeq seq accession'] = lambda series : ';'.join(list(series))
+            funcs['Chromosome name'] = lambda series : ';'.join(list(series))
+            funcs['GC Percent'] = 'mean'
+            funcs['Seq length'] = 'sum'
+            df = df.groupby('Assembly Accession').aggregate(funcs)
+            return df.reset_index()
+
+        fields = 'accession,genbank-seq-acc,refseq-seq-acc,chr-name,seq-length,gc-percent'
+        cmd = 'datasets summary genome accession {id_} --report sequence --as-json-lines | dataformat tsv genome-seq --fields ' + fields
+        df = NCBIDatasets._get_metadata(genome_ids, cmd=cmd, path=self.genome_metadata_path)
+        try:
+            df = fix_mixed_dtype_cols(df)
+            df = merge(df)
+            df = df.set_index('Assembly Accession') 
+        except:
+            print('yikes')
+            df.to_csv(self.genome_metadata_path, sep='\t')
+        df.to_csv(self.genome_metadata_path, sep='\t')
+    
+    def _get_genome(self, genome_ids:list, include:list=['gbff', 'genome']):
+
+        pbar = tqdm(genome_ids)
         for genome_id in pbar:
             src_paths = [os.path.join(NCBIDatasets.src_dir, genome_id, NCBIDatasets.src_file_names[i]) for i in include]
             dst_paths = [os.path.join(self.dst_dirs[i], NCBIDatasets.dst_file_names[i].format(genome_id=genome_id)) for i in include]
@@ -40,16 +95,26 @@ class NCBIDatasets():
                 continue
 
             cmd = f"datasets download genome accession {genome_id} --filename ncbi.zip --include {','.join(include)} --no-progressbar"
-            pbar.set_description(f'NCBIDatasets.run: Downloading data for {genome_id}.')
+            pbar.set_description(f'NCBIDatasets._get_genome: Downloading data for {genome_id}.')
             try:
                 subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
                 # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
                 subprocess.run(f'unzip -o ncbi.zip -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
+                # Unpack the downloaded NCBI data package, which 
                 for src_path, dst_path in zip(src_paths, dst_paths):
                     subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except:
-                print(f'NCBIDatasets.run: Failed to download data for {genome_id}.')
+                print(f'NCBIDatasets._get_genome: Failed to download data for {genome_id}.')
+
+
+    def run(self, genome_ids:list=None, taxonomy_ids:list=None, include:list=['gbff', 'genome'], metadata_only:bool=False):
+
+        if not (genome_ids is None) and (not metadata_only):
+            self._get_genome(genome_ids, include=include)
+        if not (genome_ids is None):
+            self._get_genome_metadata(genome_ids)
+        if not (taxonomy_ids is None):
+            self._get_taxonomy_metadata(taxonomy_ids)
 
     def cleanup(self):
         for file in NCBIDatasets.cleanup_files:
@@ -72,7 +137,7 @@ class NCBIDatasets():
         df.to_csv(path)
         
 
-def fix_b_subtilis(database_path:str='../data/ncbi_database_cds.csv'):
+def fix_b_subtilis(database_path:str='../data/ncbi_cds.csv'):
     genome_id = 'GCF_000009045.1' 
 
     df = pd.read_csv(database_path, index_col=0, dtype={'partial':str}, low_memory=False)

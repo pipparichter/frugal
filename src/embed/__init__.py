@@ -1,4 +1,3 @@
-from src.embedders.plm import ESMEmbedder, ProtT5Embedder
 import re 
 
 esm_embedder_pattern = re.compile('esm_(650m|3b)_(log|cls|gap)')

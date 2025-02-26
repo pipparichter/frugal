@@ -3,14 +3,14 @@ seed(42) # Make sure everything is random-seeded for reproducibility.
 
 import numpy as np 
 import pandas as pd 
-from src.build import Build 
 from src.dataset import Dataset, split, Datasets
 from src.sampler import Sampler
 from src.classifier import Classifier
 import argparse
 from src.genome import ReferenceGenome
 from src.files import FASTAFile
-from src.embedders import get_embedder
+from src.embed import get_embedder
+from src.embed.library import EmbeddingLibrary
 import re
 import glob
 from tqdm import tqdm 
@@ -19,7 +19,37 @@ from src import get_genome_id, fix_mixed_dtype_cols
 
 
 def build():
-    pass 
+    parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers(title='build', dest='subcommand', required=True)
+
+    parser_library = subparser.add_parser('library')
+    parser_library.add_argument('--feature-type', default='esm_650m_gap', type=sts)
+    parser_library.add_argument('--input-dir', type=str, default=None)
+    parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
+    parser_library.add_argument('--max-length', type=int, default=2000)
+
+    args = parser.parse_args()
+    
+    if args.subcommand == 'library':
+        build_library(args)
+
+
+def build_library(args):
+
+    lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type)
+
+    # Expects the input directory to contain a bunch of FASTA protein files.
+    pbar = tqdm(os.listdir(args.input_dir))
+    for file_name in pbar:
+        try:
+            genome_id = get_genome_id(file_name)
+            pbar.set_description(f'build_library: Generating embeddings for genome {genome_id}.')
+            df = FASTAFile(path=os.path.join(args.input_dir, file_name)).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
+            df = df[df.seq.apply(len) < args.max_length] # Filter out sequences which exceed the specified maximum length
+            lib.add(genome_id, df)
+        except Exception as err:
+            print(f'build_library: Failed to generate embeddings for genome {genome_id}.')
+            print(err)
 
 
 def ref():
@@ -27,7 +57,7 @@ def ref():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', nargs='+', type=str)
     parser.add_argument('--output-dir', default='../data/ref.out/', type=str)
-    parser.add_argument('--database-path', default='../data/ncbi_database_cds.csv', type=str)
+    parser.add_argument('--database-path', default='../data/ncbi_cds.csv', type=str)
     parser.add_argument('--prodigal-output', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
@@ -59,6 +89,7 @@ def embed():
     parser.add_argument('--output-path', default=None, type=str)
     parser.add_argument('--feature-type', nargs='+', default=['esm_650m_gap', 'esm_3b_gap', 'pt5_3b_gap'], type=str)
     parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--library-dir', default='../data/embeddings')
     args = parser.parse_args()
 
     output_path = args.output_path if (args.output_path is not None) else args.input_path.replace('.csv', '.h5')
@@ -125,37 +156,39 @@ def predict():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
-    parser.add_argument('--model-name', type=str)
-    parser.add_argument('--output-dir', default='./data/predict.out', type=str)
+    parser.add_argument('--model-path', nargs='+', type=str, default=None)
+    parser.add_argument('--output-dir', default='./data/predict', type=str)
     parser.add_argument('--models-dir', default='./models', type=str)
     parser.add_argument('--load-labels', action='store_true')
     args = parser.parse_args()
 
     output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '.predict.csv'))   
 
-    model = Classifier.load(os.path.join(args.models_dir, args.model_name + '.pkl'))
-    dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, load_labels=args.load_labels)
-    model.scale(dataset, fit=False)
-    labels, outputs = model.predict(dataset, include_outputs=True)
+    for model_path in args.model_path:
+        model_name = os.path.basename(model_path).replace('.pkl', '')
+        model = Classifier.load(model_path)
+        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, load_labels=args.load_labels)
+        model.scale(dataset, fit=False)
+        labels, outputs = model.predict(dataset, include_outputs=True)
 
-    df = dict()
-    df[f'{args.model_name}_label'] = labels
-    df['id'] = dataset.index 
-    for i in range(outputs.shape[-1]): # Iterate over the model predictions for each class, which correspond to a "probability."
-        df[f'{args.model_name}_output_{i}'] = outputs[:, i]
-    if args.load_labels: # If the Dataset is labeled, include the labels in the output. 
-        df['label'] = dataset.labels.numpy()
+        df = dict()
+        df[f'{model_name}_label'] = labels
+        df['id'] = dataset.index 
+        for i in range(outputs.shape[-1]): # Iterate over the model predictions for each class, which correspond to a "probability."
+            df[f'{model_name}_output_{i}'] = outputs[:, i]
+        if args.load_labels: # If the Dataset is labeled, include the labels in the output. 
+            df['label'] = dataset.labels.numpy()
 
-    df = pd.DataFrame(df).set_index('id')
+        df = pd.DataFrame(df).set_index('id')
 
-    if os.path.exists(output_path):
-        df_ = pd.read_csv(output_path, index_col=0)
-        df_ = df_.drop(columns=df.columns, errors='ignore')
-        assert np.all(df_.index == df.index), f'predict: Failed to add new predictions to existing predictions file at {output_path}, indices do not match.'
-        df = df.merge(df_, left_index=True, right_index=True, how='left')
-    
-    df.to_csv(output_path)
-    if args.load_labels: # If the dataset is labeled, compute and report the balanced accuracy. 
-        print(f'predict: Balanced accuracy on the input dataset is {model.accuracy(dataset)}')
-    print(f'predict: Saved model {args.model_name} predictions on {args.input_path} to {output_path}')
+        if os.path.exists(output_path):
+            df_ = pd.read_csv(output_path, index_col=0)
+            df_ = df_.drop(columns=df.columns, errors='ignore')
+            assert np.all(df_.index == df.index), f'predict: Failed to add new predictions to existing predictions file at {output_path}, indices do not match.'
+            df = df.merge(df_, left_index=True, right_index=True, how='left')
+        
+        df.to_csv(output_path)
+        if args.load_labels: # If the dataset is labeled, compute and report the balanced accuracy. 
+            print(f'predict: Balanced accuracy on the input dataset is {model.accuracy(dataset)}')
+        print(f'predict: Saved model {model_name} predictions on {args.input_path} to {output_path}')
 
