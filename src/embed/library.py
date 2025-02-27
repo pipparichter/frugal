@@ -3,7 +3,7 @@ import numpy as np
 from src import get_genome_id
 import os 
 from src.embed import get_embedder
-
+from src.files import FASTAFile
 
 class EmbeddingLibrary():
     '''This object is to make working with directories of PLM embeddings easier. Each directory holds a set of CSV files,

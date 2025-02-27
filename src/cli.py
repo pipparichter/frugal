@@ -41,6 +41,7 @@ def build():
         build_library(args)
 
 
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --partition gpu --gpus-per-task 4 --mem-per-gpu 300GB --gres gpu --time 24:00:00 --wrap "build library"
 def build_library(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type)
