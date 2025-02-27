@@ -51,12 +51,12 @@ class EmbeddingLibrary():
 def add(lib:EmbeddingLibrary, *paths:list):
     # Expects the input directory to contain a bunch of FASTA protein files.
     for path in paths:
+        genome_id = get_genome_id(path)
         try:
-            genome_id = get_genome_id(path)
-            print(f'build_library: Generating embeddings for genome {genome_id}.')
+            print(f'add: Generating embeddings for genome {genome_id}.')
             df = FASTAFile(path=path).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
             df = df[df.seq.apply(len) < 2000] # Filter out sequences which exceed the specified maximum length
             lib.add(genome_id, df)
         except Exception as err:
-            print(f'build_library: Failed to generate embeddings for genome {genome_id}.')
+            print(f'add: Failed to generate embeddings for genome {genome_id}.')
             print(err)
