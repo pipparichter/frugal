@@ -33,7 +33,7 @@ class EmbeddingLibrary():
             print(f'EmbeddingLibrary.add: File {path} already exists in the library.')
             return 
 
-        embedder = get_embedder(feature_type)
+        embedder = get_embedder(self.feature_type)
         embeddings = self.embedder(df.seq.values.tolist())
         embeddings_df = pd.DataFrame(index=df.index)
         embeddings_df.to_csv(path)
