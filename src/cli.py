@@ -45,7 +45,7 @@ def build_library(args):
 
     if args.parallelize:
         n_processes = 5
-        inputs = [[lib] + list(file_names) for file_names in np.array_split(file_names, args.n_processes)]
+        inputs = [[lib] + list(file_names) for file_names in np.array_split(file_names, 20)]
         pool = Pool(args.n_processes)
         pool.starmap(src.embed.library.add, inputs)
         pool.close()
