@@ -47,6 +47,7 @@ def build_library(args):
         args = [[lib] + list(file_names) for file_names in np.array_split(file_names, n_processes)]
         pool = Pool(n_processes)
         pool.starmap(src.embed.library.add, args)
+        pool.close()
     else:
         src.embed.library.add(*file_names)
 
