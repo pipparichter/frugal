@@ -30,6 +30,7 @@ def build():
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
     # parser_library.add_argument('--max-length', type=int, default=2000)
     parser_library.add_argument('--parallelize', action='store_true')
+    parser_library.add_argument('--n-processes', default=4, type=int)
 
     args = parser.parse_args()
     
@@ -44,8 +45,8 @@ def build_library(args):
 
     if args.parallelize:
         n_processes = 5
-        args = [[lib] + list(file_names) for file_names in np.array_split(file_names, n_processes)]
-        pool = Pool(n_processes)
+        args = [[lib] + list(file_names) for file_names in np.array_split(file_names, args.n_processes)]
+        pool = Pool(args.n_processes)
         pool.starmap(src.embed.library.add, args)
         pool.close()
     else:
