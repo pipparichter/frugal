@@ -19,6 +19,8 @@ import os
 from src import get_genome_id, fillna
 from multiprocessing import Pool
 import src.embed.library
+from transformers import logging
+logging.set_verbosity_error() # Turn off the warning about uninitialized weights. 
 
 
 def build():
