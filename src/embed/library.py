@@ -17,7 +17,7 @@ class EmbeddingLibrary():
 
         self.feature_type = feature_type
         self.file_names = os.listdir(self.dir_)
-        self.genome_ids = [get_genome_id(file_name) for file_name in file_names]
+        self.genome_ids = [get_genome_id(file_name) for file_name in self.file_names]
         self.file_name_map = {genome_id:file_name for genome_id, file_name in zip(self.genome_ids, self.file_names)}
 
         self.embedder = get_embedder(self.feature_type)
