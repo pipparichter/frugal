@@ -140,7 +140,7 @@ class GBFFFile():
             self.contigs[contig_id] = re.sub(r'[\n\s0-9]', '', contig_seq).upper() # Remove line numbers and newlines from the contig sequence
             if (contig_df is not None):
                 self.df.append(contig_df)
-                
+
         # It's important to reset the index after concatenating so every feature has a unique label for the subsequent evidence merging. 
         self.df = pd.concat(self.df).reset_index(drop=True)
         self.add_evidence()
@@ -226,7 +226,7 @@ class GBFFFile():
         evidence_df = GBFFFile.get_evidence(self.df, drop_duplicates=True)
         evidence_df.columns = ['evidence_' + col for col in evidence_df.columns]
         df = self.df.merge(evidence_df, left_index=True, right_index=True, how='left')
-        df[evidence_df.columns] = fillna(df[evidence_df.columns], rules={str:'none'}, check=True) # Fill the things which became NaN in the merge.
+        df[evidence_df.columns] = fillna(df[evidence_df.columns].copy(), rules={str:'none'}, check=True) # Fill the things which became NaN in the merge.
         self.df = df
 
 

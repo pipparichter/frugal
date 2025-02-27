@@ -33,12 +33,11 @@ def has_mixed_dtypes(df:pd.DataFrame):
 
 
 def get_dtypes(df:pd.DataFrame):
+    nan = [float, type(pd.NA)]
     dtypes = dict()
     for col in df.columns:
-        dtype = df[col].apply(type).unique()
-        assert ((float in dtype) and (len(dtype) > 1)) or (len(dtype) == 1), f'get_dtypes: Expected one of the types to be float in a column with mixed datatypes, found {dtype}.'
-        dtype = dtype[dtype != float] if (len(dtype) > 1) else dtype
-        dtypes[col] = dtype[0]
+        dtype = df[col].dropna().apply(type).values[0]
+        dtypes[col] = dtype
     return dtypes
 
 

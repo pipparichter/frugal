@@ -12,6 +12,7 @@ class EmbeddingLibrary():
     def __init__(self, dir_:str='../data/embeddings', feature_type:str='esm_650m_gap'):
         self.dir_ = os.path.join(dir_, feature_type)
         if not os.path.exists(self.dir_):
+            print('EmbeddingLibrary.__init__: Creating library directory {self.dir_}.')
             os.makedirs(self.dir_) # Make the directory if it doesn't exist.
 
         self.feature_type = feature_type

@@ -24,7 +24,7 @@ def build():
     subparser = parser.add_subparsers(title='build', dest='subcommand', required=True)
 
     parser_library = subparser.add_parser('library')
-    parser_library.add_argument('--feature-type', default='esm_650m_gap', type=sts)
+    parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser_library.add_argument('--input-dir', type=str, default='./data/proteins/prodigal')
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
     parser_library.add_argument('--max-length', type=int, default=2000)
