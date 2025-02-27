@@ -2,6 +2,7 @@ from src import seed
 seed(42) # Make sure everything is random-seeded for reproducibility. 
 
 import numpy as np 
+import copy 
 import pandas as pd 
 from src.dataset import Dataset, split, Datasets
 from src.sampler import Sampler
@@ -45,7 +46,7 @@ def build_library(args):
 
     if args.parallelize:
         n_processes = 5
-        inputs = [[lib] + list(file_names) for file_names in np.array_split(file_names, 20)]
+        inputs = [[lib] + list(file_names) for file_names in np.array_split(file_names, len(file_names) // 10)]
         pool = Pool(args.n_processes)
         pool.starmap(src.embed.library.add, inputs)
         pool.close()

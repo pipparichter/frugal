@@ -26,6 +26,9 @@ class EmbeddingLibrary():
     def __len__(self):
         return len(self.genome_ids)
 
+    def __copy__(self):
+        return EmbeddingLibrary(dir_=self.dir_, feature_type=self.feature_type)
+
     def add(self, genome_id:str, df:pd.DataFrame):
 
         path = os.path.join(self.dir_, f'{genome_id}_embedding.csv')
