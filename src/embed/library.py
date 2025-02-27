@@ -48,13 +48,13 @@ class EmbeddingLibrary():
         return embeddings_df.loc[ids, :].copy() if (ids is not None) else embeddings_df
 
 
-def add(lib:EmbeddingLibrary, *file_names:list):
+def add(lib:EmbeddingLibrary, *paths:list):
     # Expects the input directory to contain a bunch of FASTA protein files.
-    for file_name in file_names:
+    for path in paths:
         try:
-            genome_id = get_genome_id(file_name)
+            genome_id = get_genome_id(path)
             print(f'build_library: Generating embeddings for genome {genome_id}.')
-            df = FASTAFile(path=os.path.join(args.input_dir, file_name)).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
+            df = FASTAFile(path=path).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
             df = df[df.seq.apply(len) < 2000] # Filter out sequences which exceed the specified maximum length
             lib.add(genome_id, df)
         except Exception as err:

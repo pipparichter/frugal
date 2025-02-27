@@ -45,16 +45,16 @@ def build():
 def build_library(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type)
-    file_names = os.listdir(args.input_dir)
+    paths = glob.glob(args.input_dir)
 
     if args.parallelize:
-        n_processes = 5
-        inputs = [[copy.copy(lib)] + list(file_names) for file_names in np.array_split(file_names, len(file_names) // 10)]
+        # Add a library to the start of each set of arguments. If I didn't copy it, I was getting a "too many open files" error, though I am not sure why.
+        inputs = [[copy.copy(lib)] + list(paths_) for paths_ in np.array_split(paths, len(paths) // args.n_processes)]
         pool = Pool(args.n_processes)
         pool.starmap(src.embed.library.add, inputs)
         pool.close()
     else:
-        src.embed.library.add(*file_names)
+        src.embed.library.add(lib, *paths)
 
 
 def ref():
