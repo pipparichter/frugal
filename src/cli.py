@@ -45,7 +45,7 @@ def build():
 def build_library(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type)
-    paths = glob.glob(args.input_dir)
+    paths = glob.glob(os.path.join(args.input_dir, '*'))
 
     if args.parallelize:
         # Add a library to the start of each set of arguments. If I didn't copy it, I was getting a "too many open files" error, though I am not sure why.
