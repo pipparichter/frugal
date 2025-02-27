@@ -12,14 +12,12 @@ class EmbeddingLibrary():
 
     def __init__(self, dir_:str='../data/embeddings', feature_type:str='esm_650m_gap'):
         self.dir_ = os.path.join(dir_, feature_type)
-        print(self.dir_)
         if not os.path.exists(self.dir_):
             print(f'EmbeddingLibrary.__init__: Creating library directory {self.dir_}.')
             os.makedirs(self.dir_) # Make the directory if it doesn't exist.
 
         self.feature_type = feature_type
         self.file_names = os.listdir(self.dir_)
-        print(self.file_names)
         self.genome_ids = [get_genome_id(file_name) for file_name in self.file_names]
         self.file_name_map = {genome_id:file_name for genome_id, file_name in zip(self.genome_ids, self.file_names)}
 
