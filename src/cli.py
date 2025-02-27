@@ -28,7 +28,7 @@ def build():
     parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser_library.add_argument('--input-dir', type=str, default='./data/proteins/prodigal')
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
-    parser_library.add_argument('--max-length', type=int, default=2000)
+    # parser_library.add_argument('--max-length', type=int, default=2000)
     parser_library.add_argument('--parallelize', action='store_true')
 
     args = parser.parse_args()
@@ -43,8 +43,9 @@ def build_library(args):
     file_names = os.listdir(args.input_dir)
 
     if args.parallelize:
-        args = [[lib] + list(file_names) for file_names in np.array_split(file_names, os.cpu_count())]
-        pool = Pool(os.cpu_count())
+        n_processes = 5
+        args = [[lib] + list(file_names) for file_names in np.array_split(file_names, n_processes)]
+        pool = Pool(n_processes)
         pool.starmap(src.embed.library.add, args)
     else:
         src.embed.library.add(*file_names)
