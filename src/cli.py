@@ -17,6 +17,7 @@ from tqdm import tqdm
 import os
 from src import get_genome_id, fillna
 from multiprocessing import Pool
+import src.embed.library
 
 
 def build():
@@ -41,24 +42,12 @@ def build_library(args):
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type)
     file_names = os.listdir(args.input_dir)
 
-    def add(*file_names:list):
-        # Expects the input directory to contain a bunch of FASTA protein files.
-        for file_name in file_names:
-            try:
-                genome_id = get_genome_id(file_name)
-                print(f'build_library: Generating embeddings for genome {genome_id}.')
-                df = FASTAFile(path=os.path.join(args.input_dir, file_name)).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
-                df = df[df.seq.apply(len) < args.max_length] # Filter out sequences which exceed the specified maximum length
-                lib.add(genome_id, df)
-            except Exception as err:
-                print(f'build_library: Failed to generate embeddings for genome {genome_id}.')
-                print(err)
-
     if args.parallelize:
+        args = [[lib] + list(file_names) for file_names in np.array_split(file_names, os.cpu_count())]
         pool = Pool(os.cpu_count())
-        pool.starmap(add, np.array_split(file_names, os.cpu_count()))
+        pool.starmap(src.embed.library.add, args)
     else:
-        add(*file_names)
+        src.embed.library.add(*file_names)
 
 
 def ref():
