@@ -27,30 +27,30 @@ def get_genome_id(input_path:str, errors='raise') -> str:
     return genome_id.group(0) if (genome_id is not None) else None
 
 
-def get_mixed_dtype_cols(df:pd.DataFrame):
-    mixed_dtype_cols = dict()
+def has_mixed_dtypes(df:pd.DataFrame):
+    n_dtypes = np.array([df[col].apply(type).nunique() for col in df.columns])
+    return (n_dtypes > 1).sum() == 0
+
+
+def get_dtypes(df:pd.DataFrame):
+    dtypes = dict()
     for col in df.columns:
-        dtypes = df[col].apply(type).unique()
-        if len(dtypes) > 1:
-            mixed_dtype_cols[col] = dtypes
-    return mixed_dtype_cols
+        dtype = df[col].apply(type).unique()
+        assert ((float in dtype) and (len(dtype) > 1)) or (len(dtype) == 1), f'get_dtypes: Expected one of the types to be float in a column with mixed datatypes, found {dtype}.'
+        dtype = dtype[dtype != float] if (len(dtype) > 1) else dtype
+        dtypes[col] = dtype[0]
+    return dtypes
 
 
-def fix_mixed_dtype_cols(df:pd.DataFrame):
-    df = df.copy()
-    mixed_dtype_cols = get_mixed_dtype_cols(df)
-
+def fillna(df:pd.DataFrame, rules:dict={bool:False, str:'none', int:0}, check:bool=True):
     with pd.option_context('future.no_silent_downcasting', True): # Opt-in to future pandas behavior, which will raise a warning if it tries to downcast.
-        for col, dtypes in mixed_dtype_cols.items():
-            if (str in dtypes) and (float in dtypes):
-                df[col] = df[col].fillna('none').astype(str)
-                print(f'fix_mixed_dtype_cols: Replaced NaNs in column {col} with "none."')
-            elif (bool in dtypes) and (float in dtypes):
-                df[col] = df[col].fillna(False).astype(bool)
-                print(f'fix_mixed_dtype_cols: Replaced NaNs in column {col} with False.')
-            else:
-                dtypes = ' '.join([str(dtype) for dtype in dtypes])
-                raise Exception(f'fix_mixed_dtype_cols: No rule for column {col}, with datatypes {dtypes}.')
+        for col, dtype in get_dtypes(df).items():
+            value = rules.get(dtype, None)
+            if value is not None:
+                df[col] = df[col].fillna(rules[dtype]).astype(dtype)
+                # print(f'fillna: Replaced NaNs in column {col} with "{rules[dtype]}."')
+            if check:
+                assert df[col].isnull().sum() == 0, f'fillna: There are still NaNs in column {col}.'
     return df 
 
 

@@ -10,7 +10,7 @@ def get_output_path(input_path:str, output_dir:str):
 
 class Pyrodigal():
 
-    def __init__(self, output_dir:str='../data/prodigal'):
+    def __init__(self, output_dir:str='../data/proteins/prodigal'):
         self.output_dir = output_dir 
 
     def run(self, input_path:str, output_path:str=None, min_length:int=10, max_overlap:int=None, translation_table:int=11):
@@ -26,7 +26,7 @@ class Pyrodigal():
 
 class Prodigal():
 
-    def __init__(self, output_dir:str='../data/prodigal'):
+    def __init__(self, output_dir:str='../data/proteins/prodigal'):
         self.output_dir = output_dir 
 
     def run(self, input_path:str, output_path:str=None, translation_table:int=11):

@@ -84,10 +84,17 @@ def partial_correlation(x, y, z):
     return r2, linreg_xy, (x_residuals, y_residuals)
 
 
-def load_genome_metadata(path:str='../data/ncbi_genome_metadata.tsv', reps_only:bool=True, refseq_only:bool=False):
-    df = pd.read_csv(path, delimiter='\t', low_memory=False)
-    df.columns = ['_'.join(col.lower().split()) for col in df.columns]
+def load_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata.tsv', taxonomy_metadata_path:str='../data/ncbi_taxonomy_metadata.tsv'):
+    taxonomy_metadata_df = pd.read_csv(taxonomy_metadata_path, delimiter='\t', low_memory=False)
+    genome_metadata_df = pd.read_csv(genome_metadata_path, delimiter='\t', low_memory=False)
+
+    taxonomy_metadata_df = taxonomy_metadata_df.drop_duplicates('Taxid')
+    genome_metadata_df = genome_metadata_df.drop_duplicates('Assembly Accession')
+
+    df = genome_metadata_df.merge(taxonomy_metadata_df, right_on='Taxid', left_on='Organism Taxonomic ID', how='left')
+    df = df.rename(columns={col:'_'.join(col.lower().split()) for col in df.columns})
     df = df.rename(columns={'assembly_accession':'genome_id'})
+    df = fillna(df, rules={str:'none'}, check=False)
     return df.set_index('genome_id')
 
 

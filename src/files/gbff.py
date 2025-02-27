@@ -4,6 +4,7 @@ from typing import List, Dict, Tuple
 from tqdm import tqdm 
 import pandas as pd 
 import numpy as np 
+from src import fillna
 
 # TODO: I should automatically detect the features instead of specifying beforehand.
 # TODO: Make sure that dropping things with null locus tags is not causing issues. I did it because repeat regions are not assigned 
@@ -12,18 +13,23 @@ import numpy as np
 class GBFFFile():
     fields = ['feature', 'contig_id', 'strand', 'start', 'stop', 'partial', 'product', 'note', 'protein_id', 'seq', 'pseudo', 'locus_tag', 'inference', 'experiment']
     fields += ['evidence_type', 'evidence_category', 'evidence_details', 'evidence_source']
-    dtypes = {'start':int, 'stop':int, 'strand':int, 'pseudo':bool}
+    dtypes = {'start':int, 'stop':int, 'strand':int, 'pseudo':bool, 'feature':str}
+    for field in fields: # Set all other fields to the string datatype.
+        dtypes[field] = dtypes.get(field, str) 
+
     features = ['gene', 'CDS', 'tRNA', 'ncRNA', 'rRNA', 'misc_RNA','repeat_region', 'misc_feature', 'mobile_element']
 
-    qualifier_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"') # Two capturing groups so that re.finall gets a list of tuples. 
+    qualifier_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"') # Two capturing groups so that re.findall gets a list of tuples. 
     coordinate_pattern = re.compile(r'complement\([\<\d]+\.\.[\>\d]+\)|[\<\d]+\.\.[\>\d]+')
+    translation_table_pattern = re.compile(r'/transl_table=([\d]+)')
     feature_pattern = r'[\s]{2,}(' + '|'.join(features) + r')[\s]{2,}'
 
-    evidence_types = ["experiment"]
-    evidence_types += ["alignment"]
-    evidence_types += ["similar to sequence", "similar to AA sequence", "similar to DNA sequence", "similar to RNA sequence", "similar to RNA sequence, mRNA", "similar to RNA sequence, EST", "similar to RNA sequence, other RNA"]
-    evidence_types += ["profile", "nucleotide motif", "protein motif", "ab initio prediction"]
-    evidence_types += ["non-experimental evidence, no additional details recorded"]
+    evidence_types = ['experiment']
+    evidence_types += ['alignment']
+    evidence_types += ['similar to sequence', 'similar to AA sequence', 'similar to DNA sequence', 'similar to RNA sequence', 'similar to RNA sequence, mRNA', 'similar to RNA sequence, EST', 'similar to RNA sequence, other RNA']
+    evidence_types += ['profile', 'nucleotide motif', 'protein motif', 'ab initio prediction']
+    evidence_types += ['non-experimental evidence, no additional details recorded']
+    evidence_types += ['none']
 
     evidence_categories = ['EXISTENCE', 'COORDINATES', 'DESCRIPTION']
 
@@ -31,9 +37,7 @@ class GBFFFile():
     def used_pgap(path:str) -> bool:
         content = ''
         with open(path, 'r') as f:
-            for line in f:
-                # Read in the file until the first set of features, and then see if PGAP
-                # is mentioned anywhere in the comment. 
+            for line in f: # Read in the file until the first set of features, and then see if PGAP is mentioned anywhere in the comment. 
                 if 'FEATURES' in line:
                     break
                 content += line 
@@ -41,8 +45,6 @@ class GBFFFile():
 
     @staticmethod
     def parse_coordinate(coordinate:str):
-        '''Parse a string indicating gene boundaries. These strings contain information about the start codon location, 
-        stop codon location, and strand.'''
         parsed_coordinate = dict()
         parsed_coordinate['strand'] = -1 if ('complement' in coordinate) else 1
         # NOTE: Details about coordinate format: https://www.ncbi.nlm.nih.gov/genbank/samplerecord/
@@ -71,34 +73,36 @@ class GBFFFile():
         return parsed_qualifiers
 
     @staticmethod
-    def parse_feature(feature:str, feature_data:str) -> dict:
+    def parse_feature(feature:str, qualifiers:str) -> dict:
         assert feature in GBFFFile.features, f'GBFFFile.parse_feature: Feature {feature} is not specified in GBFFFile.features.'
 
         # Extract the gene coordinates, which do not follow the typical field pattern. 
-        coordinate = re.search(GBFFFile.coordinate_pattern, feature_data).group(0)
-        pseudo = ('/pseudo' in feature_data)
-        feature_data = re.sub(GBFFFile.coordinate_pattern, '', feature_data)
+        coordinate = re.search(GBFFFile.coordinate_pattern, qualifiers).group(0)
+        pseudo = ('/pseudo' in qualifiers)
+        # Need a special case to extract the translation table, as it is not surrounded by double quotation marks,
+        translation_table = re.search(GBFFFile.translation_table_pattern, qualifiers).group(0) if re.match(GBFFFile.translation_table_pattern, qualifiers) else 'none'
+        # qualifiers = re.sub(GBFFFile.coordinate_pattern, '', qualifiers) # Remove the parsed coordinate.
 
         # Remove all newlines or any more than one consecutive whitespace character.
         # This accomodates the fact that some of the fields are multi-line. 
-        feature_data = re.sub(r'[\s]{2,}|\n', ' ', feature_data) 
-        qualifiers = re.findall(GBFFFile.qualifier_pattern, feature_data) # Returns a list of matches. 
-        qualifiers = GBFFFile.parse_qualifiers(qualifiers)
+        qualifiers = re.sub(r'[\s]{2,}|\n', ' ', qualifiers) 
+        qualifiers = re.findall(GBFFFile.qualifier_pattern, qualifiers) # Returns a list of matches. 
+        qualifiers = GBFFFile.parse_qualifiers(qualifiers) # Convert the qualifiers to a dictionary. 
 
-        parsed_feature_data = dict()
-        parsed_feature_data['coordinate'] = coordinate
-        parsed_feature_data['pseudo'] = pseudo
-        parsed_feature_data['feature'] = feature
-        parsed_feature_data['note'] = qualifiers.get('note', '')
-        parsed_feature_data['experiment'] = qualifiers.get('experiment', None)
-        parsed_feature_data['inference'] = qualifiers.get('inference', None)
-        parsed_feature_data['seq'] = qualifiers.get('translation', None)
-        parsed_feature_data['product'] = qualifiers.get('product', None)
-        parsed_feature_data['protein_id'] = qualifiers.get('protein_id', None)
-        parsed_feature_data['locus_tag'] = qualifiers.get('locus_tag', None)
-        parsed_feature_data.update(GBFFFile.parse_coordinate(coordinate))
+        parsed_qualifiers = dict()
+        parsed_qualifiers['coordinate'] = coordinate
+        parsed_qualifiers['pseudo'] = pseudo
+        parsed_qualifiers['feature'] = feature
+        parsed_qualifiers['note'] = qualifiers.get('note', '')
+        parsed_qualifiers['experiment'] = qualifiers.get('experiment', None)
+        parsed_qualifiers['inference'] = qualifiers.get('inference', None)
+        parsed_qualifiers['seq'] = qualifiers.get('translation', None)
+        parsed_qualifiers['product'] = qualifiers.get('product', None)
+        parsed_qualifiers['protein_id'] = qualifiers.get('protein_id', None)
+        parsed_qualifiers['locus_tag'] = qualifiers.get('locus_tag', None)
+        parsed_qualifiers.update(GBFFFile.parse_coordinate(coordinate))
 
-        return parsed_feature_data 
+        return parsed_qualifiers 
 
     @staticmethod
     def parse_contig(contig:str) -> pd.DataFrame:
@@ -119,11 +123,6 @@ class GBFFFile():
 
         return contig_id, seq, df 
 
-    @staticmethod
-    def clean_nt_seq(nt_seq:str):
-        nt_seq = re.sub(r'[\n\s0-9]', '', nt_seq)
-        nt_seq = nt_seq.upper()
-        return nt_seq
 
     def __init__(self, path:str, add_evidence:bool=True):
         
@@ -138,33 +137,29 @@ class GBFFFile():
  
         for contig in contigs:
             contig_id, contig_seq, contig_df = GBFFFile.parse_contig(contig)
-            self.contigs[contig_id] = GBFFFile.clean_nt_seq(contig_seq)
+            self.contigs[contig_id] = re.sub(r'[\n\s0-9]', '', contig_seq).upper() # Remove line numbers and newlines from the contig sequence
             if (contig_df is not None):
                 self.df.append(contig_df)
+                
         # It's important to reset the index after concatenating so every feature has a unique label for the subsequent evidence merging. 
         self.df = pd.concat(self.df).reset_index(drop=True)
         self.add_evidence()
 
-
-    def check(self):
-        for field, dtype in GBFFFile.dtypes.items():
-            assert self.df[field].dtype == dtype, f'GBFFFile.check: Data type is incorrect for field {col}.'
-
     def to_df(self):
-        self.check()
         df = self.df.copy()[GBFFFile.fields] 
-        df = df[~df.locus_tag.isnull()]
         df['used_pgap'] = GBFFFile.used_pgap(self.path)
         return df
 
     @staticmethod
     def parse_inference(inference:str):
-        parsed_inference, input_inference = dict(), inference
+        parsed_inference = dict()
         
+        # Remove the PubMed IDs, if present, which can interfere with the inference parsing. 
         inference = re.sub(r'\[PMID[^\]]+\]', '', inference)
         inference = re.sub(r'PMID:([0-9]+(, ){,1})+', '', inference)
         assert 'PMID' not in inference, f'GBFFFile.parse_inference: Failed to remove the PubMed ID from inference {inference}'
 
+        # Extract the inference category, if one is present. 
         category = re.match(f"({"|".join(GBFFFile.evidence_categories)}):", inference)
         if category is not None:
             category = category.group(1)
@@ -182,8 +177,7 @@ class GBFFFile():
             inference = inference.replace(f'{source}:', '')
             parsed_inference['source'] = source
         except:
-            pass
-            # print(f'GBFFFile.parse_inference: Problem parsing inference {input_inference}.')
+            print(f'GBFFFile.parse_inference: Problem parsing inference {inference}.')
 
         parsed_inference['details'] = inference
         return parsed_inference
@@ -203,12 +197,11 @@ class GBFFFile():
         return parsed_experiment
 
     @staticmethod
-    def _get_evidence(df:pd.DataFrame, best_evidence_only:bool=True, errors:str='raise'):
+    def get_evidence(df:pd.DataFrame, drop_duplicates:bool=True):
         df_ = []
         for row in df.itertuples():
-            # There should be at least *some* evidence for every entry. 
-            if errors == 'raise':
-                assert not (pd.isnull(row.inference) and pd.isnull(row.experiment)), f'GBFFFile._get_evidence: There is no evidence for row {row.Index}.'
+            # There does not seep to be evidence for every entry. 
+            # assert not (pd.isnull(row.inference) and pd.isnull(row.experiment)), f'GBFFFile._get_evidence: There is no evidence for row {row.Index}.'
 
             if (not pd.isnull(row.inference)):
                 for inference in row.inference.split(';'):
@@ -220,30 +213,20 @@ class GBFFFile():
                     row_ = {'index':row.Index}
                     row_.update(GBFFFile.parse_experiment(experiment))
                     df_.append(row_)
-        df_ = pd.DataFrame(df_)
-        df_['type'] = pd.Categorical(df_['type'], categories=GBFFFile.evidence_types, ordered=True)
-        # df_['category'] = pd.Categorical(df_['category'], categories=GBFFFile.evidence_categories, ordered=True)
 
-        if best_evidence_only:
-            df_ = df_.sort_values(by=['type']).drop_duplicates(subset=['index'], keep='first')
+        df_ = fillna(pd.DataFrame(df_), rules={str:'none'}, check=True)
+        df_['type'] = pd.Categorical(df_['type'], categories=GBFFFile.evidence_types, ordered=True)
+        df_ = df_.sort_values(by=['type'])
+        df_ = df_.drop_duplicates(subset=['index'], keep='first') if drop_duplicates else df_
         df_ = df_.set_index('index')
         df_.index.name = df.index.name
         return df_
 
     def add_evidence(self):
-        evidence_df = GBFFFile._get_evidence(self.df, best_evidence_only=True, errors='ignore')
+        evidence_df = GBFFFile.get_evidence(self.df, drop_duplicates=True)
         evidence_df.columns = ['evidence_' + col for col in evidence_df.columns]
-        assert self.df.index.nunique() == len(self.df)
         df = self.df.merge(evidence_df, left_index=True, right_index=True, how='left')
-
-        assert len(df) == len(self.df), f'GBFFFile.add_evidence: Error while merging evidence DataFrame. Expected merged DataFrame of size {len(self.df)}, but got {len(df)}.'
-        # assert len(evidence_df) == len(self.df), 'GBFFFile.add_evidence: There should be exactly one best evidence qualifier per feature.'
-        
-        # Looking at the source files, it seems that no evidence qualifiers is not a bad thing, necessarily. The M. tuberculosis genome, which is manually curated,
-        # is missing many of these. 
-        # if df.evidence_details.isnull().sum() > 0: 
-        #     print(f'\nGBFFFile.add_evidence: There is no provided evidence for {df.evidence_details.isnull().sum()} out of {len(self.df)} features.')
-        
+        df[evidence_df.columns] = fillna(df[evidence_df.columns], rules={str:'none'}, check=True) # Fill the things which became NaN in the merge.
         self.df = df
 
 

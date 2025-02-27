@@ -15,7 +15,8 @@ import re
 import glob
 from tqdm import tqdm 
 import os
-from src import get_genome_id, fix_mixed_dtype_cols
+from src import get_genome_id, fillna
+from multiprocessing import Pool
 
 
 def build():
@@ -24,9 +25,10 @@ def build():
 
     parser_library = subparser.add_parser('library')
     parser_library.add_argument('--feature-type', default='esm_650m_gap', type=sts)
-    parser_library.add_argument('--input-dir', type=str, default=None)
+    parser_library.add_argument('--input-dir', type=str, default='./data/proteins/prodigal')
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
     parser_library.add_argument('--max-length', type=int, default=2000)
+    parser_library.add_argument('--parallelize', action='store_true')
 
     args = parser.parse_args()
     
@@ -37,48 +39,59 @@ def build():
 def build_library(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type)
+    file_names = os.listdir(args.input_dir)
 
-    # Expects the input directory to contain a bunch of FASTA protein files.
-    pbar = tqdm(os.listdir(args.input_dir))
-    for file_name in pbar:
-        try:
-            genome_id = get_genome_id(file_name)
-            pbar.set_description(f'build_library: Generating embeddings for genome {genome_id}.')
-            df = FASTAFile(path=os.path.join(args.input_dir, file_name)).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
-            df = df[df.seq.apply(len) < args.max_length] # Filter out sequences which exceed the specified maximum length
-            lib.add(genome_id, df)
-        except Exception as err:
-            print(f'build_library: Failed to generate embeddings for genome {genome_id}.')
-            print(err)
+    def add(*file_names:list):
+        # Expects the input directory to contain a bunch of FASTA protein files.
+        for file_name in file_names:
+            try:
+                genome_id = get_genome_id(file_name)
+                print(f'build_library: Generating embeddings for genome {genome_id}.')
+                df = FASTAFile(path=os.path.join(args.input_dir, file_name)).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
+                df = df[df.seq.apply(len) < args.max_length] # Filter out sequences which exceed the specified maximum length
+                lib.add(genome_id, df)
+            except Exception as err:
+                print(f'build_library: Failed to generate embeddings for genome {genome_id}.')
+                print(err)
+
+    if args.parallelize:
+        pool = Pool(os.cpu_count())
+        pool.starmap(add, np.array_split(file_names, os.cpu_count()))
+    else:
+        add(*file_names)
 
 
 def ref():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', nargs='+', type=str)
-    parser.add_argument('--output-dir', default='../data/ref.out/', type=str)
+    parser.add_argument('--output-dir', default='../data/ref/', type=str)
     parser.add_argument('--database-path', default='../data/ncbi_cds.csv', type=str)
     parser.add_argument('--prodigal-output', action='store_true')
+    parser.add_argument('--summarize', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
 
     pbar = tqdm(args.input_path)
     for path in pbar:
-
         genome_id = get_genome_id(path, errors='raise')
-        output_path = os.path.join(args.output_dir, f'{genome_id}_protein.ref.csv')
+        results_output_path = os.path.join(args.output_dir, f'{genome_id}_results.csv')
+        summary_output_path = os.path.join(args.output_dir, f'{genome_id}_summary.csv')
+
         pbar.set_description(f'ref: Searching reference for {genome_id}.')
-        
-        if os.path.exists(output_path) and (not args.overwrite):
+        if os.path.exists(results_output_path) and (not args.overwrite):
+            print(f'ref: Search results for {genome_id} are already present in {args.output_dir}.')
             continue
 
-        genome = ReferenceGenome(genome_id, database_path=args.database_path)
+        genome = ReferenceGenome(path)
+        query_df = FASTAFile(path=path).to_df(prodigal_output=args.prodigal_output)
+        results_df, summary_df = genome.search(query_df, verbose=False, summarize=args.summarize)
 
-        df = FASTAFile(path=path).to_df(prodigal_output=args.prodigal_output)
-        results_df = genome.search(df, verbose=False)
-        results_df.to_csv(output_path)
+        results_df.to_csv(results_output_path)
+        if not (summary_df is None):
+            summary_df.to_csv(summary_output_path)
 
-    print(f'ref: Search complete. Output written to {args.output_dir}')
+    print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 500GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed --input-path ./data/filter_dataset_train.csv"
@@ -106,7 +119,7 @@ def embed():
         df_ = store.get('metadata') # Load existing metadata. 
         assert np.all(df.index == df_.index), 'embed: The input metadata and existing metadata do not match.'
     else: # Storing in table format means I can add to the file later on. 
-        df = fix_mixed_dtype_cols(df)
+        df = fillna(df, rules={str:'none', bool:False}, check=False)
         store.put('metadata', df, format='table', data_columns=None)
 
     for feature_type in args.feature_type:

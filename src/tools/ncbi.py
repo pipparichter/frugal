@@ -8,8 +8,10 @@ import numpy as np
 import warnings
 import glob
 from src.files import GBFFFile
-from src import get_genome_id, fix_mixed_dtype_cols
+from src import get_genome_id
 import io 
+import time 
+from src import fillna
 
 # datasets summary genome taxon 2 --reference --annotated --assembly-level complete --mag exclude --assembly-source RefSeq --exclude-atypical --report sequence --as-json-lines | dataformat tsv genome-seq --fields accession,genbank-seq-acc,refseq-seq-acc,chr-name,seq-length,gc-percent
 
@@ -18,7 +20,7 @@ class NCBIDatasets():
     cleanup_files = ['README.md', 'md5sum.txt', 'ncbi.zip']
     cleanup_dirs = ['ncbi_dataset']
 
-    include = ['gbff', 'genome', 'protein']
+    include = ['gbff', 'genome'] # , 'protein']
 
     src_dir = 'ncbi_dataset/data'
     src_file_names = {'gbff':'genomic.gbff', 'genome':'*genomic.fna', 'protein':'*protein.faa'}
@@ -35,21 +37,30 @@ class NCBIDatasets():
         self.genome_metadata_path = genome_metadata_path
 
     @staticmethod
-    def _get_metadata(ids:list, cmd:str=None, path:str=None, chunk_size:int=100) -> pd.DataFrame:
+    def _get_metadata(ids:list, cmd:str=None, path:str=None, chunk_size:int=20) -> pd.DataFrame:
 
-        df = [] if (not os.path.exists(path)) else [pd.read_csv(path, sep='\t')]
+        df = list()
+        if os.path.exists(path):
+            df_ = pd.read_csv(path, sep='\t')
+            print(f'NCBIDatasets._get_metadata: Found metadata entries for {len(df_)} IDs already in {path}.')
+            ids = [id_ for id_ in ids if id_ not in df_.iloc[:, 0].values] # Don't repeatedly download the same ID.
+            df.append(df_)
 
-        n_chunks = len(ids) // chunk_size + 1
+        n_chunks = 0 if (len(ids) == 0) else len((ids) // chunk_size + 1) # Handle case where ID list is empty.
         ids = [str(id_) for id_ in ids] # Convert the IDs to strings for joining. 
         ids = [','.join(ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
 
         for id_ in tqdm(ids, desc='NCBIDatasets._get_metadata: Downloading metadata.'):
-            output = subprocess.run(cmd.format(id_=id_), shell=True, check=True, capture_output=True)
-            output = output.stdout.decode('utf-8').strip()
-            output = output.split('\n')
-            df_ = pd.read_csv(io.StringIO('\n'.join(output)), sep='\t')
-            df_ = df_.drop(columns=['Query'], errors='ignore') # Drop the Query column, which is redundant. Only present when getting taxonomy metadata. 
-            df.append(df_)
+            try:
+                output = subprocess.run(cmd.format(id_=id_), shell=True, check=True, capture_output=True)
+                content = output.stdout.decode('utf-8').strip().split('\n')
+                df_ = pd.read_csv(io.StringIO('\n'.join(content)), sep='\t')
+                df_ = df_.drop(columns=['Query'], errors='ignore') # Drop the Query column, which is redundant. Only present when getting taxonomy metadata. 
+                df.append(df_)
+            except pd.errors.EmptyDataError as err: # Raised when the call to pd.read_csv fails, I think due to nothing written to stdout.
+                print(f'NCBIDatasets._get_metadata: Failed on query {id_}. NCBI returned the following error message.')
+                print(output.stderr.decode('utf-8'))
+                return pd.concat(df) # Return everything that has been downloaded already to not lose progress.
 
         return pd.concat(df)
 
@@ -58,30 +69,19 @@ class NCBIDatasets():
         cmd = 'datasets summary taxonomy taxon {id_} --as-json-lines | dataformat tsv taxonomy --template tax-summary'
         df = NCBIDatasets._get_metadata(taxonomy_ids, cmd=cmd, path=self.taxonomy_metadata_path)
         df = df.set_index('Taxid') 
-        df.to_csv(self.taxonomy_path, sep='\t')
+        df.to_csv(self.taxonomy_metadata_path, sep='\t')
     
     def _get_genome_metadata(self, genome_ids:list):
 
-        def merge(df:pd.DataFrame):
-            funcs = dict()
-            funcs['GenBank seq accession'] = lambda series : ';'.join(list(series))
-            funcs['RefSeq seq accession'] = lambda series : ';'.join(list(series))
-            funcs['Chromosome name'] = lambda series : ';'.join(list(series))
-            funcs['GC Percent'] = 'mean'
-            funcs['Seq length'] = 'sum'
-            df = df.groupby('Assembly Accession').aggregate(funcs)
-            return df.reset_index()
+        # https://www.ncbi.nlm.nih.gov/datasets/docs/v2/command-line-tools/using-dataformat/genome-data-reports/ 
+        fields = 'accession,checkm-completeness,annotinfo-method,annotinfo-pipeline,assmstats-gc-percent,assmstats-total-sequence-len,'
+        fields += 'assmstats-number-of-contigs,organism-tax-id,annotinfo-featcount-gene-pseudogene,annotinfo-featcount-gene-protein-coding,'
+        fields += 'annotinfo-featcount-gene-non-coding'
 
-        fields = 'accession,genbank-seq-acc,refseq-seq-acc,chr-name,seq-length,gc-percent'
-        cmd = 'datasets summary genome accession {id_} --report sequence --as-json-lines | dataformat tsv genome-seq --fields ' + fields
+        cmd = 'datasets summary genome accession {id_} --report genome --as-json-lines | dataformat tsv genome --fields ' + fields
         df = NCBIDatasets._get_metadata(genome_ids, cmd=cmd, path=self.genome_metadata_path)
-        try:
-            df = fix_mixed_dtype_cols(df)
-            df = merge(df)
-            df = df.set_index('Assembly Accession') 
-        except:
-            print('yikes')
-            df.to_csv(self.genome_metadata_path, sep='\t')
+        df = fillna(df, rules={str:'none'}, check=False)
+        df = df.set_index('Assembly Accession') 
         df.to_csv(self.genome_metadata_path, sep='\t')
     
     def _get_genome(self, genome_ids:list, include:list=['gbff', 'genome']):
@@ -112,7 +112,7 @@ class NCBIDatasets():
         if not (genome_ids is None) and (not metadata_only):
             self._get_genome(genome_ids, include=include)
         if not (genome_ids is None):
-            self._get_genome_metadata(genome_ids)
+            self._get_genome_metadata(list(genome_ids))
         if not (taxonomy_ids is None):
             self._get_taxonomy_metadata(taxonomy_ids)
 
