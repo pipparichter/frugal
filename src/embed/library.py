@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np 
 from src import get_genome_id
 import os 
+from src.embed import get_embedder
 
 
 class EmbeddingLibrary():
