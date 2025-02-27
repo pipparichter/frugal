@@ -1,4 +1,6 @@
 import re 
+from src.embed.plm import ESMEmbedder, ProtT5Embedder
+
 
 esm_embedder_pattern = re.compile('esm_(650m|3b)_(log|cls|gap)')
 pt5_embedder_pattern = re.compile('pt5_3b_gap')
