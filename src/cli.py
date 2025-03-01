@@ -80,7 +80,7 @@ def library_get(args):
         embeddings_df.append(lib.get(genome_id, ids=df_.index))
     embeddings_df = pd.concat(embeddings_df)
     embeddings_df = embeddings_df.loc[df.index, :] # Make sure the embeddings are in the same order as the metadata. 
-
+    print(embeddings_df)
     store.put(args.feature_type, embeddings_df, format='table')
     store.close()
     print(f'library_get: Embeddings of type {args.feature_type} written to {output_path}')
@@ -159,8 +159,7 @@ def embed():
     store.close()
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/filter_dataset_train.h5 --balance-classes --model-name filter_esm_650m_gap_v1"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/filter_dataset_train.h5 --balance-classes --balance-lengths --model-name filter_esm_650m_gap_v2"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v1"
 def train():
 
     parser = argparse.ArgumentParser()
