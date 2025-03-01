@@ -69,7 +69,7 @@ def library_get(args):
     output_path = args.input_path.replace('csv', 'h5') if (args.output_path is None) else args.output_path
     store = pd.HDFStore(output_path, mode='a')
 
-    lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type, max_length=args.max_length)
+    lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type) # , max_length=args.max_length)
     
     df = pd.read_csv(args.input_path, index_col=0, dtypes={'partial':str, 'top_hit_partial':str}) # Expect the index column to be the sequence ID. 
     store.put('metadata', df)
