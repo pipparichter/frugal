@@ -17,6 +17,7 @@ import glob
 from tqdm import tqdm 
 import os
 from src import get_genome_id, fillna
+from sklearn import GroupShuffleSplit
 from multiprocessing import Pool
 from transformers import logging
 logging.set_verbosity_error() # Turn off the warning about uninitialized weights. 
@@ -178,7 +179,8 @@ def train():
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_seqs=True, load_labels=True)
     model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes))
-    dataset_train, dataset_test = split(dataset)
+    # I think I want to split along the genome IDs here as well, possibly even sample to make sure the class distribution is even.
+    dataset_train, dataset_test = split(dataset, by='genome_id') 
     model.scale(dataset_train, fit=True)
     model.scale(dataset_test, fit=False)
 
