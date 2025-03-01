@@ -17,7 +17,7 @@ import glob
 from tqdm import tqdm 
 import os
 from src import get_genome_id, fillna
-from sklearn import GroupShuffleSplit
+from sklearn.model_selection import GroupShuffleSplit
 from multiprocessing import Pool
 from transformers import logging
 logging.set_verbosity_error() # Turn off the warning about uninitialized weights. 
