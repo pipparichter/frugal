@@ -102,7 +102,7 @@ def split(dataset:Dataset, test_size:float=0.2, by:bool='genome_id'):
     if by is not None:
         groups = dataset.metadata[by].values # Extract the values to split by. 
         gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=42)
-        train_idxs, test_idxs = list(gss.split(idxs, groups=groups))[0]
+        idxs_train, idxs_test = list(gss.split(idxs, groups=groups))[0]
     else:
         idxs_train, idxs_test = train_test_split(idxs, test_size=test_size)
     
