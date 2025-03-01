@@ -80,7 +80,6 @@ def library_get(args):
         embeddings_df.append(lib.get(genome_id, ids=df_.index))
     embeddings_df = pd.concat(embeddings_df)
     embeddings_df = embeddings_df.loc[df.index, :] # Make sure the embeddings are in the same order as the metadata. 
-    print(embeddings_df)
     store.put(args.feature_type, embeddings_df, format='table')
     store.close()
     print(f'library_get: Embeddings of type {args.feature_type} written to {output_path}')
