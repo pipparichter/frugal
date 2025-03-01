@@ -4,6 +4,7 @@ import random
 import re
 import matplotlib.pyplot as plt 
 import pandas as pd 
+import warnings 
 
 plt.rcParams['font.family'] = 'Arial'
 
@@ -29,15 +30,17 @@ def get_genome_id(input_path:str, errors='raise') -> str:
 
 def has_mixed_dtypes(df:pd.DataFrame):
     n_dtypes = np.array([df[col].apply(type).nunique() for col in df.columns])
-    return (n_dtypes > 1).sum() == 0
+    return (n_dtypes > 1).sum() > 0
 
 
 def get_dtypes(df:pd.DataFrame):
-    nan = [float, type(pd.NA)]
     dtypes = dict()
     for col in df.columns:
-        dtype = df[col].dropna().apply(type).values[0]
-        dtypes[col] = dtype
+        dtype = df[col].dropna().apply(type).values
+        if len(dtype) == 0:
+            warnings.warn(f'get_dtypes: Column "{col}" only contains NaNs. Inferring datatype as strings.')
+            dtype = [str]
+        dtypes[col] = dtype[0]
     return dtypes
 
 

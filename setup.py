@@ -13,8 +13,8 @@ setuptools.setup(
     url='https://github.com/pipparichter/tripy',
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
-    packages=['src', 'src.files', 'src.tools', 'src.embedders'], 
-    entry_points={'console_scripts':['build=src.cli:build', 'ref=src.cli:ref', 'embed=src.cli:embed', 'train=src.cli:train', 'predict=src.cli:predict']},
+    packages=['src', 'src.files', 'src.tools', 'src.embed', 'src.embed.embedders', 'src.genome'], 
+    entry_points={'console_scripts':['library=src.cli:library', 'ref=src.cli:ref', 'embed=src.cli:embed', 'train=src.cli:train', 'predict=src.cli:predict']},
     install_requires=get_requirements())
 
 

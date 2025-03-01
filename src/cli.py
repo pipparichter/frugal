@@ -2,7 +2,6 @@ from src import seed
 seed(42) # Make sure everything is random-seeded for reproducibility. 
 
 import numpy as np 
-import copy 
 import pandas as pd 
 from src.dataset import Dataset, split, Datasets
 from src.sampler import Sampler
@@ -10,77 +9,110 @@ from src.classifier import Classifier
 import argparse
 from src.genome import ReferenceGenome
 from src.files import FASTAFile
-from src.embed import get_embedder
-from src.embed.library import EmbeddingLibrary
+from src.embed import get_embedder, EmbeddingLibrary
+from src.embed.library import add 
 import re
 import glob
 from tqdm import tqdm 
 import os
 from src import get_genome_id, fillna
 from multiprocessing import Pool
-import src.embed.library
 from transformers import logging
 logging.set_verbosity_error() # Turn off the warning about uninitialized weights. 
 
 
-def build():
+def library():
     parser = argparse.ArgumentParser()
-    subparser = parser.add_subparsers(title='build', dest='subcommand', required=True)
+    subparser = parser.add_subparsers(title='library', dest='subcommand', required=True)
 
-    parser_library = subparser.add_parser('library')
+    parser_library = subparser.add_parser('add')
     parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser_library.add_argument('--input-dir', type=str, default='./data/proteins/prodigal')
+    parser_library.add_argument('--max-length', default=2000, type=int)
+    parser_library.add_argument('--input-path', nargs='+', default=None)
+    parser_library.add_argument('--input-dir', type='str')
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
-    # parser_library.add_argument('--max-length', type=int, default=2000)
     parser_library.add_argument('--parallelize', action='store_true')
     parser_library.add_argument('--n-processes', default=4, type=int)
-
+    
+    parser_library = subparser.add_parser('get')
+    parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    parser_library.add_argument('--input-path', default=None)
+    parser_library.add_argument('--output-path', default=None)
+    parser_library.add_argument('--input-dir', type='str')
+    parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
+    
     args = parser.parse_args()
     
-    if args.subcommand == 'library':
-        build_library(args)
+    if args.subcommand == 'add':
+        library_add(args)
+    if args.subcommand == 'get':
+        library_get(args)
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --partition gpu --gpus-per-task 4 --mem-per-gpu 300GB --gres gpu --time 24:00:00 --wrap "build library"
-def build_library(args):
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --partition gpu --gpus-per-task 4 --mem-per-gpu 300GB --gres gpu --time 24:00:00 --wrap "library add"
+def library_add(args):
 
-    lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type)
-    paths = glob.glob(os.path.join(args.input_dir, '*'))
+    lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type, max_length=args.max_length)
+    paths = args.input_path if (args.input_path is not None) else glob.glob(os.path.join(args.input_dir, '*'))
 
     if args.parallelize:
         # Add a library to the start of each set of arguments. If I didn't copy it, I was getting a "too many open files" error, though I am not sure why.
-        inputs = [[copy.copy(lib)] + list(paths_) for paths_ in np.array_split(paths, len(paths) // args.n_processes)]
+        inputs = [[lib.copy()] + list(paths_) for paths_ in np.array_split(paths, len(paths) // args.n_processes)]
         pool = Pool(args.n_processes)
-        pool.starmap(src.embed.library.add, inputs)
+        pool.starmap(add, inputs)
         pool.close()
     else:
-        src.embed.library.add(lib, *paths)
+        add(lib, *paths)
+
+
+def library_get(args):
+
+    output_path = args.input_path.replace('csv', 'h5') if (args.output_path is None) else args.output_path
+    store = pd.HDFStore(output_path, mode='a')
+
+    lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type, max_length=args.max_length)
+    
+    df = pd.read_csv(args.input_path, index_col=0, dtypes={'partial':str, 'top_hit_partial':str}) # Expect the index column to be the sequence ID. 
+    store.put('metadata', df)
+
+    embeddings_df = list()
+    for genome_id, df_ in df.groupby(): # Read in the embeddings from the genome file. 
+        print(f'library_get: Loading {len(df_)} embeddings for genome {genome_id}.')
+        embeddings_df.append(lib.get(genome_id, ids=df_.index))
+    embeddings_df = pd.concat(embeddings_df)
+    embeddings_df = embeddings_df.loc[df.index, :] # Make sure the embeddings are in the same order as the metadata. 
+
+    store.put(args.feature_type, embeddings_df)
+    store.close()
+    print(f'library_get: Embeddings of type {args.feature_type} written to {output_path}')
 
 
 def ref():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', nargs='+', type=str)
-    parser.add_argument('--output-dir', default='../data/ref/', type=str)
-    parser.add_argument('--database-path', default='../data/ncbi_cds.csv', type=str)
+    parser.add_argument('--output-dir', default='./data/ref/', type=str)
+    parser.add_argument('--reference-dir', default='./data/proteins/ncbi', type=str)
     parser.add_argument('--prodigal-output', action='store_true')
     parser.add_argument('--summarize', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
 
-    pbar = tqdm(args.input_path)
-    for path in pbar:
-        genome_id = get_genome_id(path, errors='raise')
+    input_paths = args.input_path
+    genome_ids = [get_genome_id(path, errors='raise') for path in input_paths]
+    ref_paths = [glob.glob(os.path.join(args.reference_dir, genome_id + '*'))[0] for genome_id in genome_ids]
+    
+    pbar = tqdm(zip(genome_ids, input_paths, ref_paths), total=len(genome_ids))
+    for genome_id, input_path, ref_path in pbar:
         results_output_path = os.path.join(args.output_dir, f'{genome_id}_results.csv')
         summary_output_path = os.path.join(args.output_dir, f'{genome_id}_summary.csv')
 
         pbar.set_description(f'ref: Searching reference for {genome_id}.')
         if os.path.exists(results_output_path) and (not args.overwrite):
-            print(f'ref: Search results for {genome_id} are already present in {args.output_dir}.')
             continue
 
-        genome = ReferenceGenome(path)
-        query_df = FASTAFile(path=path).to_df(prodigal_output=args.prodigal_output)
+        genome = ReferenceGenome(ref_path)
+        query_df = FASTAFile(path=input_path).to_df(prodigal_output=args.prodigal_output)
         results_df, summary_df = genome.search(query_df, verbose=False, summarize=args.summarize)
 
         results_df.to_csv(results_output_path)

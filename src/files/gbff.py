@@ -12,17 +12,24 @@ from src import fillna
 
 class GBFFFile():
     fields = ['feature', 'contig_id', 'strand', 'start', 'stop', 'partial', 'product', 'note', 'protein_id', 'seq', 'pseudo', 'locus_tag', 'inference', 'experiment']
-    fields += ['evidence_type', 'evidence_category', 'evidence_details', 'evidence_source']
-    dtypes = {'start':int, 'stop':int, 'strand':int, 'pseudo':bool, 'feature':str}
+    fields += ['evidence_type', 'evidence_category', 'evidence_details', 'evidence_source', 'translation_table', 'ribosomal_slippage', 'continuous']
+    dtypes = {'start':int, 'stop':int, 'strand':int, 'pseudo':bool, 'ribosomal_slippage':bool, 'continuous':bool, 'feature':str}
     for field in fields: # Set all other fields to the string datatype.
         dtypes[field] = dtypes.get(field, str) 
 
-    features = ['gene', 'CDS', 'tRNA', 'ncRNA', 'rRNA', 'misc_RNA','repeat_region', 'misc_feature', 'mobile_element']
+    
+    noncoding_features = ['tRNA', 'ncRNA', 'rRNA', 'misc_RNA', 'tmRNA']
+    coding_features = ['CDS']
+    nucleotide_features = ['stem_loop', 'misc_structure']
+    features = noncoding_features + coding_features + nucleotide_features + ['gene', 'repeat_region', 'misc_feature', 'mobile_element', 'regulatory', 'misc_binding', 'operon', 'unsure']
 
     qualifier_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"') # Two capturing groups so that re.findall gets a list of tuples. 
-    coordinate_pattern = re.compile(r'complement\([\<\d]+\.\.[\>\d]+\)|[\<\d]+\.\.[\>\d]+')
-    translation_table_pattern = re.compile(r'/transl_table=([\d]+)')
+    translation_table_pattern = re.compile(r'/transl_table=([0-9]+)')
     feature_pattern = r'[\s]{2,}(' + '|'.join(features) + r')[\s]{2,}'
+
+    # The order of these coordinate patterns is important, as want to prioritize the outer match; coordinates can be of the form complement(join(..)),
+    # for example, and I want to make sure I don't just match the substring. It is also important to enable multiline, as sometimes the coordinates span multiple lines.
+    coordinate_pattern = re.compile('|'.join([r'(complement\(.+\))', r'(join\(.+\))', r'(order\(.+\))', r'([\<\d]+\.\.[\>\d]+)']), flags=re.MULTILINE)
 
     evidence_types = ['experiment']
     evidence_types += ['alignment']
@@ -45,17 +52,32 @@ class GBFFFile():
 
     @staticmethod
     def parse_coordinate(coordinate:str):
-        parsed_coordinate = dict()
-        parsed_coordinate['strand'] = -1 if ('complement' in coordinate) else 1
-        # NOTE: Details about coordinate format: https://www.ncbi.nlm.nih.gov/genbank/samplerecord/
-        start, stop = re.findall(r'[\>\<0-9]+', coordinate)
-        partial = ('1' if ('<' in start) else '0') + ('1' if ('>' in stop) else '0')
-        start = int(start.replace('<', ''))
-        stop = int(stop.replace('>', ''))
+        '''For information on location operators, see section 3.4.2.2 of https://www.insdc.org/submitting-standards/feature-table/#3.4.2.2'''
+        # In bacteria, the joins can be used in cases like programmed frameshifts (e.g. if there is ribosomal slippage)
+        parsed_coordinate = list()
 
-        parsed_coordinate['start'] = start
-        parsed_coordinate['stop'] = stop
-        parsed_coordinate['partial'] = partial
+        strand = 1
+        if re.match(r'complement\((.+)\)', coordinate) is not None:
+            strand = -1 
+            coordinate = re.match(r'complement\((.+)\)', coordinate).group(1) 
+        
+        continuous = True
+        if re.match(r'join\((.+)\)', coordinate) is not None:
+            continuous = False 
+            coordinate = re.match(r'join\((.+)\)', coordinate).group(1)
+
+        if re.match(r'order\((.+)\)', coordinate) is not None:
+            continuous = False 
+            coordinate = re.match(r'order\((.+)\)', coordinate).group(1)  
+
+        for range_ in coordinate.split(','): # Handles the case of a potential join. 
+            try: # Edge case where coordinate looks like join(876461,1..1493)
+                start, stop = range_.split('..')
+            except ValueError:
+                start, stop = range_, range_
+            partial = ('1' if ('<' in start) else '0') + ('1' if ('>' in stop) else '0')
+            start, stop = int(start.replace('<', '')), int(stop.replace('>', ''))
+            parsed_coordinate.append({'start':start, 'stop':stop, 'continuous':continuous, 'strand':strand, 'partial':partial})
 
         return parsed_coordinate
 
@@ -79,9 +101,10 @@ class GBFFFile():
         # Extract the gene coordinates, which do not follow the typical field pattern. 
         coordinate = re.search(GBFFFile.coordinate_pattern, qualifiers).group(0)
         pseudo = ('/pseudo' in qualifiers)
-        # Need a special case to extract the translation table, as it is not surrounded by double quotation marks,
-        translation_table = re.search(GBFFFile.translation_table_pattern, qualifiers).group(0) if re.match(GBFFFile.translation_table_pattern, qualifiers) else 'none'
-        # qualifiers = re.sub(GBFFFile.coordinate_pattern, '', qualifiers) # Remove the parsed coordinate.
+        ribosomal_slippage = ('/ribosomal_slippage' in qualifiers)
+        # Need a special case to extract the translation table, as it is not surrounded by double quotation marks.
+
+        translation_table = re.search(GBFFFile.translation_table_pattern, qualifiers).group(1) if re.search(GBFFFile.translation_table_pattern, qualifiers) else 'none'
 
         # Remove all newlines or any more than one consecutive whitespace character.
         # This accomodates the fact that some of the fields are multi-line. 
@@ -89,24 +112,29 @@ class GBFFFile():
         qualifiers = re.findall(GBFFFile.qualifier_pattern, qualifiers) # Returns a list of matches. 
         qualifiers = GBFFFile.parse_qualifiers(qualifiers) # Convert the qualifiers to a dictionary. 
 
-        parsed_qualifiers = dict()
-        parsed_qualifiers['coordinate'] = coordinate
-        parsed_qualifiers['pseudo'] = pseudo
-        parsed_qualifiers['feature'] = feature
-        parsed_qualifiers['note'] = qualifiers.get('note', '')
-        parsed_qualifiers['experiment'] = qualifiers.get('experiment', None)
-        parsed_qualifiers['inference'] = qualifiers.get('inference', None)
-        parsed_qualifiers['seq'] = qualifiers.get('translation', None)
-        parsed_qualifiers['product'] = qualifiers.get('product', None)
-        parsed_qualifiers['protein_id'] = qualifiers.get('protein_id', None)
-        parsed_qualifiers['locus_tag'] = qualifiers.get('locus_tag', None)
-        parsed_qualifiers.update(GBFFFile.parse_coordinate(coordinate))
+        parsed_feature = list()
+        for parsed_coordinate in GBFFFile.parse_coordinate(coordinate):
+            parsed_feature_ = dict()
+            parsed_feature_['coordinate'] = coordinate
+            parsed_feature_['translation_table'] = translation_table
+            parsed_feature_['pseudo'] = pseudo
+            parsed_feature_['ribosomal_slippage'] = ribosomal_slippage 
+            parsed_feature_['feature'] = feature
+            parsed_feature_['note'] = qualifiers.get('note', 'none')
+            parsed_feature_['experiment'] = qualifiers.get('experiment', 'none')
+            parsed_feature_['inference'] = qualifiers.get('inference', 'none')
+            parsed_feature_['seq'] = re.sub(r'[\s]+', '', qualifiers.get('translation', 'none')) # Remove leftover whitespace in sequence. 
+            parsed_feature_['product'] = qualifiers.get('product', 'none')
+            parsed_feature_['protein_id'] = qualifiers.get('protein_id', 'none')
+            parsed_feature_['locus_tag'] = qualifiers.get('locus_tag', 'none')
+            parsed_feature_.update(parsed_coordinate)
+            parsed_feature.append(parsed_feature_)
 
-        return parsed_qualifiers 
+        return parsed_feature 
 
     @staticmethod
     def parse_contig(contig:str) -> pd.DataFrame:
-        seq = re.search(r'ORIGIN(.*?)(?=//)', contig, flags=re.DOTALL).group(1)
+        seq = re.search(r'ORIGIN(.*?)(?=(//)|$)', contig, flags=re.DOTALL).group(1)
         contig_id = contig.split()[0].strip()
         # Because I use parentheses around the features in the pattern, this is a "capturing group", and the label is contained in the output. 
         contig = re.split(GBFFFile.feature_pattern, contig, flags=re.MULTILINE)
@@ -117,8 +145,7 @@ class GBFFFile():
 
         features = [(features[i], features[i + 1]) for i in range(0, len(features), 2)] # Tuples of form (feature, data). 
         features = [feature for feature in features if feature[0] != 'gene'] # Remove the gene entries, which I think are kind of redundant with the products. 
-        df = pd.DataFrame([GBFFFile.parse_feature(*feature) for feature in features])
-        df = df.rename(columns={'translation':'seq'}) 
+        df = pd.DataFrame([parsed_feature for feature in features for parsed_feature in GBFFFile.parse_feature(*feature)])
         df['contig_id'] = contig_id
 
         return contig_id, seq, df 
@@ -203,12 +230,12 @@ class GBFFFile():
             # There does not seep to be evidence for every entry. 
             # assert not (pd.isnull(row.inference) and pd.isnull(row.experiment)), f'GBFFFile._get_evidence: There is no evidence for row {row.Index}.'
 
-            if (not pd.isnull(row.inference)):
+            if (not (row.inference == 'none')):
                 for inference in row.inference.split(';'):
                     row_ = {'index':row.Index}
                     row_.update(GBFFFile.parse_inference(inference))
                     df_.append(row_)
-            if (not pd.isnull(row.experiment)):
+            if (not (row.experiment == 'none')):
                 for experiment in row.experiment.split(';'):
                     row_ = {'index':row.Index}
                     row_.update(GBFFFile.parse_experiment(experiment))

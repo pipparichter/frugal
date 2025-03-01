@@ -1,8 +1,7 @@
 import pandas as pd 
 import numpy as np 
 from src import get_genome_id
-import os 
-from src.embed import get_embedder
+from src.embed.embedders import get_embedder
 from src.files import FASTAFile
 
 class EmbeddingLibrary():
@@ -10,8 +9,9 @@ class EmbeddingLibrary():
     where each file contains the embeddings for each gene in a particular microbial genome.'''
     feature_types = ['esm_650m_gap', 'esm_3b_gap', 'pt5_3b_gap']
 
-    def __init__(self, dir_:str='../data/embeddings', feature_type:str='esm_650m_gap'):
+    def __init__(self, dir_:str='../data/embeddings', feature_type:str='esm_650m_gap', max_length:int=2000):
         self.dir_ = os.path.join(dir_, feature_type)
+        self.max_length = max_length
         if not os.path.exists(self.dir_):
             print(f'EmbeddingLibrary.__init__: Creating library directory {self.dir_}.')
             os.makedirs(self.dir_) # Make the directory if it doesn't exist.
@@ -26,8 +26,8 @@ class EmbeddingLibrary():
     def __len__(self):
         return len(self.genome_ids)
 
-    def __copy__(self):
-        return EmbeddingLibrary(dir_=os.path.dirname(self.dir_), feature_type=self.feature_type)
+    def copy(self):
+        return EmbeddingLibrary(dir_=os.path.dirname(self.dir_), feature_type=self.feature_type, max_length=self.max_length)
 
     def add(self, genome_id:str, df:pd.DataFrame):
 
@@ -55,8 +55,7 @@ def add(lib:EmbeddingLibrary, *paths:list):
         try:
             print(f'add: Generating embeddings for genome {genome_id}.')
             df = FASTAFile(path=path).to_df() # Don't need to parse the Prodigal output, as we just want the sequences.
-            df = df[df.seq.apply(len) < 2000] # Filter out sequences which exceed the specified maximum length
+            df = df[df.seq.apply(len) < lib.max_length] # Filter out sequences which exceed the specified maximum length
             lib.add(genome_id, df)
         except Exception as err:
-            print(f'add: Failed to generate embeddings for genome {genome_id}.')
-            print(err)
+            print(f'add: Failed to generate embeddings for genome {genome_id}. Returned error message "{err}"')

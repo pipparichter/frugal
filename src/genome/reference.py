@@ -9,7 +9,7 @@ class ReferenceGenome():
 
     def __init__(self, path:str):
 
-        self.genome_id = get_genome_id(genome_id)
+        self.genome_id = get_genome_id(path)
         df = GBFFFile(path).to_df()
         df['genome_id'] = self.genome_id
         self.df = df
@@ -24,7 +24,6 @@ class ReferenceGenome():
 
         ref_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
         hits_df = ref_df[~(ref_df.start > query.stop) & ~(ref_df.stop < query.start)].copy() # Everything which passes this filter overlaps with the query region. 
-        hits_df.columns = ['subject_' + col for col in hits_df.columns]
         
         if len(hits_df) == 0:
             return None
@@ -33,7 +32,7 @@ class ReferenceGenome():
         for subject in hits_df.itertuples():
             hit = dict()
             hit['query_id'] = query.Index
-            hit['subject_id'] = str(subject.Index) # This will be an integer ID, convert to a string.
+            hit['subject_id'] = subject.Index # This will be an integer ID, convert to a string.
             hit['query_strand'] = query.strand 
             hit['same_strand'] = (subject.strand == query.strand)
             # Computed overlap is relative to the query sequence, so can't exceed the length of the query. 
@@ -44,26 +43,26 @@ class ReferenceGenome():
             hit['stop_aligned'] = (subject.stop == query.stop)
             hit['match'] = (hit['start_aligned'] and hit['stop_aligned']) and hit['same_strand']
             hit['in_frame'] = ((query.stop - subject.stop) % 3 == 0) and ((query.stop - subject.stop) % 3 == 0)
-            hit['valid'] = (hit['same_strand'] and hit['in_frame']) and (subject.feature == 'CDS')
+            hit['valid'] = (hit['same_strand'] and hit['in_frame']) and (subject.feature == 'CDS') # This will consider pseudogenes as valid hits.
             hits_info_df.append(hit)
         
-        hits_df = pd.concat([hits_df, hits_info_df], ignore_index=True) # This will reset the index, which is no longer important. 
+        hits_df.columns = ['subject_' + col for col in hits_df.columns]
+        hits_df = hits_df.merge(pd.DataFrame(hits_info_df), left_index=True, right_on='subject_id', validate='one_to_one') # This will reset the index, which is no longer important. 
         return hits_df
 
     def search(self, query_df:pd.DataFrame, verbose:bool=True, summarize:bool=True):
         results_df = list()
         for query in tqdm(list(query_df.itertuples()), desc='ReferenceGenome.search', disable=(not verbose)):
-            hits_df = self._get_hit(query) # Get the hit with the biggest overlap, with a preference for "valid" hits.
-            if hits_df_ is not None:
+            hits_df = self._get_hits(query) # Get the hit with the biggest overlap, with a preference for "valid" hits.
+            if hits_df is not None:
                 results_df.append(hits_df)
 
-        results_df = pd.concat(search_df).reset_index()
-        summary_df = ReferenceGenome.summarize(query_df, results_df) if summarize else NOne
+        results_df = pd.concat(results_df).reset_index(drop=True)
+        summary_df = ReferenceGenome.summarize(query_df, results_df) if summarize else None
         return results_df, summary_df
 
     @staticmethod
     def summarize(query_df:pd.DataFrame, results_df:pd.DataFrame):
-
         summary_df = []
         for query_id, df in results_df.groupby('query_id'):
             row = dict()
@@ -74,23 +73,19 @@ class ReferenceGenome():
             row['n_hits_opposite_strand'] = len(df) - row['n_hits_same_strand']
             row['n_hits_in_frame'] = df.in_frame.sum()
             # Sort values on a boolean will put False (0) first, and True (1) last if ascending is True. 
-            top_hit = search_df.sort_values(by=['valid', 'overlap_length'], ascending=False).iloc[0]
-            row['top_hit_overlap'] = top_hit['overlap']
-            row['top_hit_locus_tag'] = top_hit['subject_locus_tag']
-            row['top_hit_feature'] = top_hit['subject_feature']
-            row['top_hit_id'] = top_hit['subject_id']
-            row['top_hit_product'] = top_hit['subject_product']
-            row['top_hit_valid'] = top_hit['valid']
+            top_hit = df.sort_values(by=['valid', 'overlap_length'], ascending=False).iloc[0]
+            top_hit = {'top_hit_' + field.replace('subject_', ''):value for field, value in top_hit.to_dict().items()}
+            row.update(top_hit)
             summary_df.append(row)
 
         summary_df = pd.DataFrame(summary_df).set_index('query_id')
         # Add the query IDs which had no search results to the summary DataFrame. 
         index = pd.Index(name='query_id', data=[id_ for id_ in query_df.index if (id_ not in summary_df.index)])
         summary_df = pd.concat([summary_df, pd.DataFrame(index=index, columns=summary_df.columns)])
-        summary_df = summary_df.set_index('query_id')
+        # summary_df = summary_df.set_index('query_id')
         summary_df = summary_df.loc[query_df.index] # Make sure the DataFrames are in the same order for convenience.
 
-        return fillna(summary_df, rules={bool:False, str:'none', int:0}, check=True)
+        return fillna(summary_df, rules={bool:False, str:'none', int:0, float:0}, check=True)
 
 
 

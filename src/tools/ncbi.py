@@ -124,17 +124,7 @@ class NCBIDatasets():
             if os.path.isdir(dir_):
                 shutil.rmtree(dir_)
 
-    @staticmethod
-    def make_database(path:str, dir_:str='../data/ncbi', feature:str='CDS'):
 
-        paths = tqdm(glob.glob(os.path.join(dir_, '*')), desc=f'NCBIDatasets.make_database: Reading GBFF files in {dir_}')
-        df = pd.concat([GBFFFile(path).to_df().assign(genome_id=get_genome_id(path)) for path in paths])
-
-        if (feature is not None): # Filter for a specific feature, if specified.
-            df = df[df.feature == feature]
-
-        print(f'NCBIDatasets.make_database: Writing NCBI data to {path}')
-        df.to_csv(path)
         
 
 def fix_b_subtilis(database_path:str='../data/ncbi_cds.csv'):
@@ -159,4 +149,14 @@ def fix_b_subtilis(database_path:str='../data/ncbi_cds.csv'):
     df.to_csv(database_path)
 
 
+    # @staticmethod
+    # def make_database(path:str, dir_:str='../data/ncbi', feature:str='CDS'):
 
+    #     paths = tqdm(glob.glob(os.path.join(dir_, '*')), desc=f'NCBIDatasets.make_database: Reading GBFF files in {dir_}')
+    #     df = pd.concat([GBFFFile(path).to_df().assign(genome_id=get_genome_id(path)) for path in paths])
+
+    #     if (feature is not None): # Filter for a specific feature, if specified.
+    #         df = df[df.feature == feature]
+
+    #     print(f'NCBIDatasets.make_database: Writing NCBI data to {path}')
+    #     df.to_csv(path)

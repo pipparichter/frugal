@@ -5,7 +5,7 @@ from src import GTDB_DTYPES
 import os 
 import glob
 from src import *  
-from src.files import GBFFFile
+from src.files import GBFFFile, FASTAFile
 from tqdm import tqdm 
 import matplotlib.pyplot as plt 
 import warnings
@@ -13,25 +13,24 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 
 plt.rcParams['font.family'] = 'Arial'
 
-is_n_trunc = lambda row : ((row.start > row.ref_start) and (row.strand == 1)) or ((row.stop < row.ref_stop) and (row.strand == -1)) 
-is_c_trunc = lambda row : ((row.stop < row.ref_stop) and (row.strand == 1)) or ((row.start > row.ref_start) and (row.strand == -1)) 
-is_n_ext = lambda row : ((row.start < row.ref_start) and (row.strand == 1)) or ((row.stop > row.ref_stop) and (row.strand == -1)) 
-is_c_ext = lambda row : ((row.stop > row.ref_stop) and (row.strand == 1)) or ((row.start < row.ref_start) and (row.strand == -1)) 
+is_n_truncated = lambda df : ((df.start > df.top_hit_start) & (df.strand == 1)) | ((df.stop < df.top_hit_stop) & (df.strand == -1)) 
+is_c_truncated = lambda df : ((df.stop < df.top_hit_stop) & (df.strand == 1)) | ((df.start > df.top_hit_start) & (df.strand == -1)) 
+is_n_extended = lambda df : ((df.start < df.top_hit_start) & (df.strand == 1)) | ((df.stop > df.top_hit_stop) & (df.strand == -1)) 
+is_c_extended = lambda df : ((df.stop > df.top_hit_stop) & (df.strand == 1)) | ((df.start < df.top_hit_start) & (df.strand == -1)) 
 
-get_col = lambda row, col : f'ref_{col}' if (f'ref_{col}' in row.index) else col
+is_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
+is_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
+is_suspect = lambda df : is_hypothetical(df) & is_ab_initio(df) # This will be False for intergenic sequences. 
 
-is_hypothetical = lambda row : row[get_col(row, 'product')] == 'hypothetical protein'
-is_ab_initio = lambda row : (row[get_col(row, 'evidence_type')] == 'ab initio prediction') or (pd.isnull(row[get_col(row, 'evidence_type')]))
 
-is_putative_ncbi = lambda row : is_hypothetical(row) and is_ab_initio(row)
-is_putative_prodigal = lambda row : (row.n_valid_hits == 0)  # Assuming all hits are for coding regions. 
+# Need to make sure to check that n_hits > 0 for the spurious check, or there is overlap with intergenic.
+is_intergenic = lambda df : df.n_hits == 0 # Uncertain label. 
+is_suspect_match = lambda df : is_suspect(df) & df.top_hit_valid # Uncertain label. 
+is_suspect_conflict = lambda df : is_suspect(df) & ~df.top_hit_valid & (df.n_hits > 0) # Uncertain label. 
+is_spurious = lambda df : ~is_suspect(df) & ~df.top_hit_valid & (df.n_hits > 0) # Certain negative label. 
+is_real = lambda df : ~is_suspect(df) & df.top_hit_valid # Certain positive label. 
 
 has_interpro_hit = lambda row : not (pd.isnull(row.interpro_analysis))
-
-is_validated = lambda row : (not is_putative_ncbi(row)) and (not is_putative_prodigal(row))
-
-# is_ncbi_error = lambda row : (is_putative(row)) and (not has_interpro_hit(row))
-# is_prodigal_error = lambda row : (has_ref_hit(row) and is_ncbi_error(row)) or ((not has_interpro_hit(row)) and (not has_ref_hit(row)))
 
 
 def remove_partial(df:pd.DataFrame):
@@ -43,13 +42,16 @@ def remove_partial(df:pd.DataFrame):
     return df[~mask].copy()
 
 
-def get_lengths(df:pd.DataFrame, ref:bool=True):
-    start_col, stop_col = ('ref_' if ref else '') +'start', ('ref_' if ref else '') + 'stop'
-    lengths = df[stop_col] - df[start_col] 
-    lengths = lengths // 3 + 1 # Convert to amino acid units. 
+def get_lengths(df:pd.DataFrame, top_hit:bool=True):
+    start_col, stop_col = ('top_hit_' if top_hit else '') +'start', ('top_hit_' if top_hit else '') + 'stop'
+    lengths = (df[stop_col] - (df[start_col] - 1)) # The start position is inclusive but one-indexes, and the stop position is non-inclusive
+
+    if np.any((lengths % 3) != 0):
+        warnings.warn('get_lengths: Not all gene lengths are divisible by three.')
     if pd.isnull(lengths).sum() > 0:
         warnings.warn('get_lengths: Some of the returned lengths are NaNs, which probably means there are sequences that do not have NCBI reference hits.')
-    return lengths
+
+    return lengths // 3
 
 
 def denoise(df:pd.DataFrame, x_col:str=None, y_cols:list=None, bins:int=50):
@@ -84,18 +86,39 @@ def partial_correlation(x, y, z):
     return r2, linreg_xy, (x_residuals, y_residuals)
 
 
-def load_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata.tsv', taxonomy_metadata_path:str='../data/ncbi_taxonomy_metadata.tsv'):
+def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata.tsv', taxonomy_metadata_path:str='../data/ncbi_taxonomy_metadata.tsv'):
     taxonomy_metadata_df = pd.read_csv(taxonomy_metadata_path, delimiter='\t', low_memory=False)
     genome_metadata_df = pd.read_csv(genome_metadata_path, delimiter='\t', low_memory=False)
 
     taxonomy_metadata_df = taxonomy_metadata_df.drop_duplicates('Taxid')
     genome_metadata_df = genome_metadata_df.drop_duplicates('Assembly Accession')
 
-    df = genome_metadata_df.merge(taxonomy_metadata_df, right_on='Taxid', left_on='Organism Taxonomic ID', how='left')
-    df = df.rename(columns={col:'_'.join(col.lower().split()) for col in df.columns})
-    df = df.rename(columns={'assembly_accession':'genome_id'})
-    df = fillna(df, rules={str:'none'}, check=False)
-    return df.set_index('genome_id')
+    genome_metadata_df = genome_metadata_df.merge(taxonomy_metadata_df, right_on='Taxid', left_on='Organism Taxonomic ID', how='left')
+    genome_metadata_df = genome_metadata_df.drop(columns=['Organism Taxonomic ID']) # This column is redundant now. 
+    genome_metadata_df = genome_metadata_df.rename(columns={col:'_'.join(col.lower().split()) for col in genome_metadata_df.columns})
+
+    col_names = dict()
+    col_names['annotation_count_gene_protein-coding'] = 'n_gene_protein_coding'
+    col_names['annotation_count_gene_non-coding'] = 'n_gene_non_coding'
+    col_names['annotation_count_gene_pseudogene'] = 'n_pseudogene'
+    col_names['assembly_stats_gc_percent'] = 'gc_percent'
+    col_names['assembly_stats_total_sequence_length'] = 'total_sequence_length'
+    col_names['assembly_stats_number_of_contigs'] = 'n_contigs'
+    col_names['taxid'] = 'taxonomy_id'
+    levels = ['phylum', 'superkingdom', 'kingdom', 'class', 'order', 'genus', 'species']
+    col_names.update({f'{level}_taxid':f'{level}_taxonomy_id' for level in levels})
+    col_names.update({f'{level}_name':f'{level}' for level in levels})
+    col_names['phylum_taxid'] = 'phylum_taxonomy_id'
+    col_names['class_taxid'] = 'class_taxonomy_id'
+    col_names['order_taxid'] = 'order_taxonomy_id'
+    col_names['genus_taxid'] = 'genus_taxonomy_id'
+    col_names['species_taxid'] = 'species_taxonomy_id'
+    col_names['kingdom_taxid'] = 'kingdom_taxonomy_id'
+    col_names['assembly_accession'] = 'genome_id'
+
+    genome_metadata_df = genome_metadata_df.rename(columns=col_names)
+    genome_metadata_df = fillna(genome_metadata_df, rules={str:'none'}, check=False)
+    return genome_metadata_df.set_index('genome_id')
 
 
 def load_pred_out(path:str, model_name:str=''):
@@ -116,17 +139,22 @@ def load_pred_out(path:str, model_name:str=''):
     return df
 
 
-def load_ref_out(output_dir:str='../data/ref.out'):
+def load_ref(genome_ids:list):
 
-    dtypes = {'partial':str, 'ref_partial':str}
-    paths = glob.glob(os.path.join(output_dir, '*'))
-    df = pd.concat([pd.read_csv(path, index_col=0, dtype=dtypes).assign(genome_id=get_genome_id(path)) for path in paths])
-    return df 
+    summary_paths = [f'../data/ref/{genome_id}_summary.csv' for genome_id in genome_ids]
+    query_paths = [f'../data/proteins/prodigal/{genome_id}_protein.faa' for genome_id in genome_ids] 
 
-    
-    # if genome_metadata_df is not None:
-    #     genome_ids = np.intersect1d(genome_metadata_df.index, df.genome_id.unique())
-    #     if len(genome_ids) < df.genome_id.nunique():
-    #         warnings.warn(f'load_ref_out: Merging the genome metadata will drop ref output for {df.genome_id.nunique() - len(genome_ids)} genomes.')
-    #     df = df.merge(genome_metadata_df, left_on='genome_id', right_index=True, how='inner')
-    
+    summary_df = pd.concat([pd.read_csv(path, index_col=0, dtype={'top_hit_partial':str}) for path in summary_paths])
+    query_df = pd.concat([FASTAFile(path).to_df(prodigal_output=True).assign(genome_id=get_genome_id(path)) for path in query_paths])
+
+    ref_df = query_df.merge(summary_df, left_index=True, right_index=True, validate='one_to_one')
+    ref_df['suspect_match'] = is_suspect_match(ref_df)
+    ref_df['suspect_conflict'] = is_suspect_conflict(ref_df)
+    ref_df['intergenic'] = is_intergenic(ref_df)
+    ref_df['real'] = is_real(ref_df)
+    ref_df['spurious'] = is_spurious(ref_df)
+
+    categories = ['real', 'spurious', 'intergenic', 'suspect_match', 'suspect_conflict']
+    assert (ref_df[categories].sum(axis=1) != 1).sum() == 0, 'load_ref: Each ref output entry should have exactly one assigned category.'
+
+    return ref_df
