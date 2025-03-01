@@ -12,6 +12,7 @@ from src.files import FASTAFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
 import re
+import random
 import glob
 from tqdm import tqdm 
 import os
@@ -53,6 +54,7 @@ def library_add(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type, max_length=args.max_length)
     paths = args.input_path if (args.input_path is not None) else glob.glob(os.path.join(args.input_dir, '*'))
+    random.shuffle(paths) # Shuffle so starting multiple processes works better. 
 
     if args.parallelize:
         # Add a library to the start of each set of arguments. If I didn't copy it, I was getting a "too many open files" error, though I am not sure why.
