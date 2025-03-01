@@ -29,7 +29,7 @@ def library():
     parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser_library.add_argument('--max-length', default=2000, type=int)
     parser_library.add_argument('--input-path', nargs='+', default=None)
-    parser_library.add_argument('--input-dir', type='str')
+    parser_library.add_argument('--input-dir', type=str)
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
     parser_library.add_argument('--parallelize', action='store_true')
     parser_library.add_argument('--n-processes', default=4, type=int)
@@ -38,7 +38,6 @@ def library():
     parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser_library.add_argument('--input-path', default=None)
     parser_library.add_argument('--output-path', default=None)
-    parser_library.add_argument('--input-dir', type='str')
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
     
     args = parser.parse_args()
