@@ -71,7 +71,7 @@ def library_get(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type) # , max_length=args.max_length)
     
-    df = pd.read_csv(args.input_path, index_col=0, dtypes={'partial':str, 'top_hit_partial':str}) # Expect the index column to be the sequence ID. 
+    df = pd.read_csv(args.input_path, index_col=0, dtype={'partial':str, 'top_hit_partial':str}) # Expect the index column to be the sequence ID. 
     store.put('metadata', df)
 
     embeddings_df = list()
