@@ -72,16 +72,16 @@ def library_get(args):
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type) # , max_length=args.max_length)
     
     df = pd.read_csv(args.input_path, index_col=0, dtype={'partial':str, 'top_hit_partial':str}) # Expect the index column to be the sequence ID. 
-    store.put('metadata', df)
+    store.put('metadata', df, format='table')
 
     embeddings_df = list()
-    for genome_id, df_ in df.groupby(): # Read in the embeddings from the genome file. 
+    for genome_id, df_ in df.groupby('genome_id'): # Read in the embeddings from the genome file. 
         print(f'library_get: Loading {len(df_)} embeddings for genome {genome_id}.')
         embeddings_df.append(lib.get(genome_id, ids=df_.index))
     embeddings_df = pd.concat(embeddings_df)
     embeddings_df = embeddings_df.loc[df.index, :] # Make sure the embeddings are in the same order as the metadata. 
 
-    store.put(args.feature_type, embeddings_df)
+    store.put(args.feature_type, embeddings_df, format='table')
     store.close()
     print(f'library_get: Embeddings of type {args.feature_type} written to {output_path}')
 
