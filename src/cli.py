@@ -92,14 +92,14 @@ def ref():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', nargs='+', type=str)
-    parser.add_argument('--output-dir', default='./data/ref/', type=str)
-    parser.add_argument('--reference-dir', default='./data/proteins/ncbi', type=str)
+    parser.add_argument('--output-dir', default='../data/ref/', type=str)
+    parser.add_argument('--reference-dir', default='../data/proteins/ncbi', type=str)
     parser.add_argument('--prodigal-output', action='store_true')
     parser.add_argument('--summarize', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
 
-    input_paths = args.input_path
+    input_paths = args.input_path # glob.glob(args.input_path) # Supports the user being able to specify a pattern.
     genome_ids = [get_genome_id(path, errors='raise') for path in input_paths]
     ref_paths = [glob.glob(os.path.join(args.reference_dir, genome_id + '*'))[0] for genome_id in genome_ids]
     
@@ -209,7 +209,7 @@ def predict():
     for model_path in args.model_path:
         model_name = os.path.basename(model_path).replace('.pkl', '')
         model = Classifier.load(model_path)
-        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, load_labels=args.load_labels)
+        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=['label'])
         model.scale(dataset, fit=False)
         labels, outputs = model.predict(dataset, include_outputs=True)
 

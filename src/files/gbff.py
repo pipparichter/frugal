@@ -6,14 +6,12 @@ import pandas as pd
 import numpy as np 
 from src import fillna
 
-# TODO: I should automatically detect the features instead of specifying beforehand.
-# TODO: Make sure that dropping things with null locus tags is not causing issues. I did it because repeat regions are not assigned 
-#   locus tags, and trying to merge during search is annoying. 
+# TODO: I should automatically detect the feature labels instead of specifying beforehand.
 
 class GBFFFile():
     fields = ['feature', 'contig_id', 'strand', 'start', 'stop', 'partial', 'product', 'note', 'protein_id', 'seq', 'pseudo', 'locus_tag', 'inference', 'experiment']
-    fields += ['evidence_type', 'evidence_category', 'evidence_details', 'evidence_source', 'translation_table', 'ribosomal_slippage', 'continuous']
-    dtypes = {'start':int, 'stop':int, 'strand':int, 'pseudo':bool, 'ribosomal_slippage':bool, 'continuous':bool, 'feature':str}
+    fields += ['evidence_type', 'evidence_category', 'evidence_details', 'evidence_source', 'translation_table', 'ribosomal_slippage', 'continuous', 'codon_start']
+    dtypes = {'start':int, 'stop':int, 'strand':int, 'pseudo':bool, 'ribosomal_slippage':bool, 'continuous':bool}
     for field in fields: # Set all other fields to the string datatype.
         dtypes[field] = dtypes.get(field, str) 
 
@@ -25,6 +23,7 @@ class GBFFFile():
 
     qualifier_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"') # Two capturing groups so that re.findall gets a list of tuples. 
     translation_table_pattern = re.compile(r'/transl_table=([0-9]+)')
+    codon_start_pattern = re.compile(r'/codon_start=([0-9]+)')
     feature_pattern = r'[\s]{2,}(' + '|'.join(features) + r')[\s]{2,}'
 
     # The order of these coordinate patterns is important, as want to prioritize the outer match; coordinates can be of the form complement(join(..)),
@@ -105,6 +104,7 @@ class GBFFFile():
         # Need a special case to extract the translation table, as it is not surrounded by double quotation marks.
 
         translation_table = re.search(GBFFFile.translation_table_pattern, qualifiers).group(1) if re.search(GBFFFile.translation_table_pattern, qualifiers) else 'none'
+        codon_start = re.search(GBFFFile.codon_start_pattern, qualifiers).group(1) if re.search(GBFFFile.codon_start_pattern, qualifiers) else 'none'
 
         # Remove all newlines or any more than one consecutive whitespace character.
         # This accomodates the fact that some of the fields are multi-line. 
@@ -117,6 +117,7 @@ class GBFFFile():
             parsed_feature_ = dict()
             parsed_feature_['coordinate'] = coordinate
             parsed_feature_['translation_table'] = translation_table
+            parsed_feature_['codon_start'] = codon_start 
             parsed_feature_['pseudo'] = pseudo
             parsed_feature_['ribosomal_slippage'] = ribosomal_slippage 
             parsed_feature_['feature'] = feature

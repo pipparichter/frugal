@@ -7,7 +7,7 @@ from typing import List
 import numpy as np 
 import warnings
 import glob
-from src.files import GBFFFile
+from src.files import GBFFFile, FASTAFile
 from src import get_genome_id
 import io 
 import time 
@@ -23,18 +23,11 @@ class NCBIDatasets():
     include = ['gbff', 'genome'] # , 'protein']
 
     src_dir = 'ncbi_dataset/data'
-    src_file_names = {'gbff':'genomic.gbff', 'genome':'*genomic.fna', 'protein':'*protein.faa'}
+    src_file_names = {'gbff':'genomic.gbff', 'genome':'*genomic.fna', 'protein':'*protein.faa', 'gene':'gene.fna'}
     dst_file_names = {'gbff':'{genome_id}_genomic.gbff', 'genome':'{genome_id}_genomic.fna', 'protein':'{genome_id}_protein.faa'}
 
-    def __init__(self, taxonomy_metadata_path:str='../data/ncbi_taxonomy_metadata.tsv', genome_metadata_path:str='../data/ncbi_genome_metadata.tsv', genome_dir:str='../data/genomes', gbff_dir:str='../data/proteins/ncbi'):
-
-        self.dst_dirs = dict()
-        self.dst_dirs['gbff'] = gbff_dir 
-        self.dst_dirs['genome'] = genome_dir
-        # self.dst_dirs['protein'] = protein_dir
-
-        self.taxonomy_metadata_path = taxonomy_metadata_path
-        self.genome_metadata_path = genome_metadata_path
+    def __init__(self):
+        pass
 
     @staticmethod
     def _get_metadata(ids:list, cmd:str=None, path:str=None, chunk_size:int=20) -> pd.DataFrame:
@@ -47,7 +40,7 @@ class NCBIDatasets():
             df.append(df_)
 
         n_chunks = 0 if (len(ids) == 0) else len((ids) // chunk_size + 1) # Handle case where ID list is empty.
-        ids = [str(id_) for id_ in ids] # Convert the IDs to strings for joining. 
+        ids = [str(id_) for id_ in ids] # Convert the IDs to strings for joining, needed for the taxonomy IDs. 
         ids = [','.join(ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
 
         for id_ in tqdm(ids, desc='NCBIDatasets._get_metadata: Downloading metadata.'):
@@ -64,14 +57,14 @@ class NCBIDatasets():
 
         return pd.concat(df)
 
-    def _get_taxonomy_metadata(self, taxonomy_ids:list):
+    def _get_taxonomy_metadata(self, taxonomy_ids:list, path:str='../data/ncbi_taxonomy_metadata.tsv'):
         
         cmd = 'datasets summary taxonomy taxon {id_} --as-json-lines | dataformat tsv taxonomy --template tax-summary'
-        df = NCBIDatasets._get_metadata(taxonomy_ids, cmd=cmd, path=self.taxonomy_metadata_path)
+        df = NCBIDatasets._get_metadata(taxonomy_ids, cmd=cmd, path=path)
         df = df.set_index('Taxid') 
-        df.to_csv(self.taxonomy_metadata_path, sep='\t')
+        df.to_csv(path, sep='\t')
     
-    def _get_genome_metadata(self, genome_ids:list):
+    def _get_genome_metadata(self, genome_ids:list, path:str='../data/ncbi_genome_metadata.tsv'):
 
         # https://www.ncbi.nlm.nih.gov/datasets/docs/v2/command-line-tools/using-dataformat/genome-data-reports/ 
         fields = 'accession,checkm-completeness,annotinfo-method,annotinfo-pipeline,assmstats-gc-percent,assmstats-total-sequence-len,'
@@ -79,17 +72,17 @@ class NCBIDatasets():
         fields += 'annotinfo-featcount-gene-non-coding'
 
         cmd = 'datasets summary genome accession {id_} --report genome --as-json-lines | dataformat tsv genome --fields ' + fields
-        df = NCBIDatasets._get_metadata(genome_ids, cmd=cmd, path=self.genome_metadata_path)
+        df = NCBIDatasets._get_metadata(genome_ids, cmd=cmd, path=path)
         df = fillna(df, rules={str:'none'}, check=False)
         df = df.set_index('Assembly Accession') 
-        df.to_csv(self.genome_metadata_path, sep='\t')
+        df.to_csv(path, sep='\t')
     
-    def _get_genome(self, genome_ids:list, include:list=['gbff', 'genome']):
+    def _get_genome(self, genome_ids:list, include:list=['gbff', 'genome'], dirs={'genome':'../data/genomes', 'gbff':'../data/proteins/ncbi'}):
 
         pbar = tqdm(genome_ids)
         for genome_id in pbar:
             src_paths = [os.path.join(NCBIDatasets.src_dir, genome_id, NCBIDatasets.src_file_names[i]) for i in include]
-            dst_paths = [os.path.join(self.dst_dirs[i], NCBIDatasets.dst_file_names[i].format(genome_id=genome_id)) for i in include]
+            dst_paths = [os.path.join(dirs[i], NCBIDatasets.dst_file_names[i].format(genome_id=genome_id)) for i in include]
 
             if np.all([os.path.exists(path) for path in dst_paths]): # Skip if already downloaded. 
                 continue
@@ -100,21 +93,42 @@ class NCBIDatasets():
                 subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
                 # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
                 subprocess.run(f'unzip -o ncbi.zip -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                # Unpack the downloaded NCBI data package, which 
+                # Unpack the downloaded NCBI data package. 
                 for src_path, dst_path in zip(src_paths, dst_paths):
                     subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except:
                 print(f'NCBIDatasets._get_genome: Failed to download data for {genome_id}.')
 
+    def _get_proteins(self, protein_ids:list, include=['protein'], path:str=None, chunk_size:int=20):
+        # Need to break into chunks because the API doesn't support more than a handful of sequences. 
+        n_chunks = np.ceil(len(protein_ids) / chunk_size).astype(int)
+        protein_ids = [','.join(protein_ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
+        
+        df = list()
+        src_path = os.path.join(NCBIDatasets.src_dir, 'protein.faa')
+        for protein_ids_ in tqdm(protein_ids, 'NCBIDatasets._get_proteins'):
+            cmd = f"datasets download gene accession {protein_ids_} --include protein --filename ncbi.zip"
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
+            subprocess.run(f'unzip -o ncbi.zip -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            df.append(FASTAFile(path=src_path).to_df(prodigal_output=False))
+        df = pd.concat(df)
+        
+        if path is not None:
+            print(f'NCBIDatasets._get_proteins: Proteins saved to {path}')
+            FASTAFile(df=df).write(path)
+        return df 
 
-    def run(self, genome_ids:list=None, taxonomy_ids:list=None, include:list=['gbff', 'genome'], metadata_only:bool=False):
+    def run(self, genome_ids:list=None, taxonomy_ids:list=None, protein_ids:list=None, metadata:bool=False, **kwargs):
 
-        if not (genome_ids is None) and (not metadata_only):
-            self._get_genome(genome_ids, include=include)
+        if not (genome_ids is None) and (not metadata):
+            return self._get_genome(genome_ids, **kwargs)
         if not (genome_ids is None):
-            self._get_genome_metadata(list(genome_ids))
+            return self._get_genome_metadata(list(genome_ids), **kwargs)
         if not (taxonomy_ids is None):
-            self._get_taxonomy_metadata(taxonomy_ids)
+            return self._get_taxonomy_metadata(taxonomy_ids, **kwargs)
+        if not (protein_ids is None):
+            return self._get_proteins(list(protein_ids), **kwargs)
 
     def cleanup(self):
         for file in NCBIDatasets.cleanup_files:

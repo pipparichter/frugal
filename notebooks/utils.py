@@ -22,36 +22,25 @@ is_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
 is_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
 is_suspect = lambda df : is_hypothetical(df) & is_ab_initio(df) # This will be False for intergenic sequences. 
 
+MAX_OVERLAP = 30
 
-# Need to make sure to check that n_hits > 0 for the spurious check, or there is overlap with intergenic.
-is_intergenic = lambda df : df.n_hits == 0 # Uncertain label. 
-is_suspect_match = lambda df : is_suspect(df) & df.top_hit_valid # Uncertain label. 
-is_suspect_conflict = lambda df : is_suspect(df) & ~df.top_hit_valid & (df.n_hits > 0) # Uncertain label. 
-is_spurious = lambda df : ~is_suspect(df) & ~df.top_hit_valid & (df.n_hits > 0) # Certain negative label. 
-is_real = lambda df : ~is_suspect(df) & df.top_hit_valid # Certain positive label. 
-
-has_interpro_hit = lambda row : not (pd.isnull(row.interpro_analysis))
+is_intergenic = lambda df : (df.overlap_length < MAX_OVERLAP) & ~df.in_frame # Uncertain label. 
+is_suspect_match = lambda df : is_suspect(df) & df.in_frame # Uncertain label. 
+is_suspect_conflict = lambda df : ~is_intergenic(df) & is_suspect(df) & ~df.in_frame # Uncertain label. 
+is_spurious = lambda df : ~is_intergenic(df) & ~is_suspect(df) & ~df.in_frame # Certain negative label. 
+is_real = lambda df : ~is_suspect(df) & df.in_frame # Certain positive label. 
 
 
-def remove_partial(df:pd.DataFrame):
-    assert (df.partial.isnull().sum() == 0), 'remove_partial: Some of the proteins do not have a partial indicator.'
-    assert (df.partial.dtype == 'object') and (df.ref_partial.dtype == 'object'), 'remove_partial: It seems as though the partial indicators were not loaded in as strings.'
-    mask = ((df.partial != '00') & pd.isnull(df.ref_partial))
-    mask = mask | ((df.partial != '00') & (df.ref_partial != '00')) 
-    print(f'remove_partial: Removing {int(mask.sum())} sequences marked as partial by both Prodigal and the reference.')
-    return df[~mask].copy()
-
-
-def get_lengths(df:pd.DataFrame, top_hit:bool=True):
+def get_lengths(df:pd.DataFrame, top_hit:bool=True, units='aa'):
     start_col, stop_col = ('top_hit_' if top_hit else '') +'start', ('top_hit_' if top_hit else '') + 'stop'
-    lengths = (df[stop_col] - (df[start_col] - 1)) # The start position is inclusive but one-indexes, and the stop position is non-inclusive
+    lengths = (df[stop_col] - (df[start_col] + 1)) # The start and stop are both inclusive, so add one to the length. 
 
     if np.any((lengths % 3) != 0):
         warnings.warn('get_lengths: Not all gene lengths are divisible by three.')
     if pd.isnull(lengths).sum() > 0:
         warnings.warn('get_lengths: Some of the returned lengths are NaNs, which probably means there are sequences that do not have NCBI reference hits.')
 
-    return lengths // 3
+    return lengths // 3 if (units == 'aa') else lengths
 
 
 def denoise(df:pd.DataFrame, x_col:str=None, y_cols:list=None, bins:int=50):
@@ -139,15 +128,11 @@ def load_pred_out(path:str, model_name:str=''):
     return df
 
 
-def load_ref(genome_ids:list):
+def load_ref(genome_ids:list=None):
 
-    summary_paths = [f'../data/ref/{genome_id}_summary.csv' for genome_id in genome_ids]
-    query_paths = [f'../data/proteins/prodigal/{genome_id}_protein.faa' for genome_id in genome_ids] 
+    paths = [f'../data/ref/{genome_id}_summary.csv' for genome_id in genome_ids] if (genome_ids is None) else glob.glob('../data/ref/*_summary.csv')
 
-    summary_df = pd.concat([pd.read_csv(path, index_col=0, dtype={'top_hit_partial':str}) for path in summary_paths])
-    query_df = pd.concat([FASTAFile(path).to_df(prodigal_output=True).assign(genome_id=get_genome_id(path)) for path in query_paths])
-
-    ref_df = query_df.merge(summary_df, left_index=True, right_index=True, validate='one_to_one')
+    ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype={'top_hit_partial':str, 'query_partial':str}) for path in paths])
     ref_df['suspect_match'] = is_suspect_match(ref_df)
     ref_df['suspect_conflict'] = is_suspect_conflict(ref_df)
     ref_df['intergenic'] = is_intergenic(ref_df)

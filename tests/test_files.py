@@ -8,6 +8,8 @@ from src import has_mixed_dtypes
 import numpy as np 
 import pandas as pd
 
+# TODO: Test to make sure that every CDS has a "codon_start" qualifier. 
+# TODO: Add tests to make sure the gene boundaries actually result in the provided sequence.
 
 
 class TestGBFFFile(unittest.TestCase):

@@ -20,78 +20,66 @@ Datasets = namedtuple('Datasets', ['train', 'test'])
 #     sys.exit(load_entry_point('tripy', 'console_scripts', 'train')())
 #              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
 #   File "/central/groups/fischergroup/prichter/tripy/src/cli.py", line 180, in train
-#     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_seqs=True, load_labels=True)
+#     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, load_seq=True, load_label=True)
 #   File "/central/groups/fischergroup/prichter/tripy/src/dataset.py", line 52, in from_hdf
-#     return cls(embeddings_df.values, labels=labels, seqs=seqs, index=embeddings_df.index.values, feature_type=feature_type, scaled=False)
+#     return cls(embedding_df.values, label=label, seq=seq, index=embedding_df.index.values, feature_type=feature_type, scaled=False)
 #   File "/central/groups/fischergroup/prichter/tripy/src/dataset.py", line 30, in __init__
-#     self.embeddings = torch.from_numpy(embeddings).to(DEVICE)
+#     self.embedding = torch.from_numpy(embedding).to(DEVICE)
 #                       ~~~~~~~~~~~~~~~~^^^^^^^^^^^^
 # ValueError: given numpy array strides not a multiple of the element byte size. Copy the numpy array to reallocate the memory.
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, embeddings:np.ndarray, metadata:pd.DataFrame=None, labels:np.ndarray=None, seqs:np.ndarray=None, index:np.ndarray=None, scaled:bool=False, feature_type:str=None):
+    def __init__(self, embedding:np.ndarray, index:np.ndarray=None, scaled:bool=False, feature_type:str=None, **kwargs):
 
-        self.labels = labels
-        self.n_features = embeddings.shape[-1]
-        self.feature_type = feature_type 
-        self.metadata = metadata 
-
-        if (self.labels is not None):
-            self.n_classes = len(np.unique(labels)) # Infer the number of classes based on the labels. 
-            self.labels = torch.from_numpy(self.labels).type(torch.LongTensor)
-            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
-
+        self.embedding = torch.from_numpy(embedding).to(DEVICE)
+        self.n_features = self.embedding.shape[-1]
         self.index = index
-        self.embeddings = torch.from_numpy(embeddings).to(DEVICE)
-        self.seqs = seqs
-        self.n_features = self.embeddings.shape[-1]
-
+        self.feature_type = feature_type 
         self.scaled = scaled
-        self.length = len(embeddings)
         
-    def __len__(self) -> int:
-        return len(self.embeddings)
+        self.attrs = list(kwargs.keys())
+        for attr, value in kwargs.items():
+            setattr(self, key, value)
 
+        if ('label' in self.attrs):
+            self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
+            self.label = torch.from_numpy(self.label).type(torch.LongTensor)
+            self.label_one_hot_encoded = one_hot(self.label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
+
+    def __len__(self) -> int:
+        return len(self.embedding)
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, load_seqs:bool=True, load_labels:bool=True, load_metadata:bool=True):
-        embeddings_df = pd.read_hdf(path, key=feature_type)
+    def from_hdf(cls, path:str, feature_type:str=None, attrs:list=['genome_id', 'seq', 'label']):
+        embedding_df = pd.read_hdf(path, key=feature_type)
         metadata_df = pd.read_hdf(path, key='metadata')
         
-        assert len(embeddings_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embeddings and the metadata do not match.'
-        assert np.all(embeddings_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embeddings and the metadata do not match.'
+        assert len(embedding_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
+        assert np.all(embedding_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
 
-        kwargs = dict()
-        kwargs['labels'] = metadata_df.label.values if load_labels else None
-        kwargs['seqs'] = metadata_df.seq.values if load_seqs else None
-        kwargs['metadata'] = metadata_df if load_metadata else None
-        kwargs['index'] = metadata_df.index.values
+        index = embedding_df.index.copy()
+        embedding = embedding_df.values.copy() # Why do I need to copy this?
 
-        return cls(embeddings_df.values.copy(), feature_type=feature_type, scaled=False, **kwargs)
+        kwargs = {getattr(metadata_df, attr, None) for attr in attrs}
+        kwargs = {attr:np.array(value) for attr, value in kwargs.items() if (value is not None)}
+        return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
     
     def shape(self):
-        return self.embeddings.shape
+        return self.embedding.shape
 
     def __getitem__(self, idx:int) -> dict:
-        item = {'embedding':self.embeddings[idx], 'idx':idx} # , 'index':[self.index[idx]]}
-        if self.labels is not None: # Include the label if the Dataset is labeled.
-            item['label'] = self.labels[idx]
-            item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
-        # if self.seqs is not None:
-            # item['seq'] = [self.seqs[idx]]
+        item = {'embedding':self.embedding[idx], 'idx':idx} # , 'index':[self.index[idx]]}
+        if hasattr(self, 'label'): # Include the label if the Dataset is labeled.
+            item['label'] = self.label[idx]
+            item['label_one_hot_encoded'] = self.label_one_hot_encoded[idx]
         return item
 
     def subset(self, idxs):
-
-        embeddings = self.embeddings.cpu().numpy()[idxs, :].copy()  
-        labels = self.labels.cpu().numpy()[idxs] if (self.labels is not None) else None
-        metadata = self.metadata.iloc[idxs].copy() if (self.metadata is not None) else None
-        seqs = self.seqs[idxs].copy()
+        embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
         index = self.index[idxs].copy()
-        scaled = self.scaled 
-
-        return Dataset(embeddings, labels=labels, seqs=seqs, index=index, scaled=scaled, feature_type=self.feature_type)
+        kwargs = {attr:getattr(self, attr)[idxs].copy() for attr in self.attrs}
+        return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
 
 
 
@@ -100,9 +88,8 @@ def split(dataset:Dataset, test_size:float=0.2, by:bool='genome_id'):
     idxs = np.arange(len(dataset))
 
     if by is not None:
-        groups = dataset.metadata[by].values # Extract the values to split by. 
         gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=42)
-        idxs_train, idxs_test = list(gss.split(idxs, groups=groups))[0]
+        idxs_train, idxs_test = list(gss.split(idxs, groups=getattr(dataset, by)))[0]
     else:
         idxs_train, idxs_test = train_test_split(idxs, test_size=test_size)
     

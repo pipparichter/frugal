@@ -91,7 +91,7 @@ class Classifier(torch.nn.Module):
 
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
-            outputs = self(dataset.embeddings) # Run a forward pass of the model.
+            outputs = self(dataset.embedding) # Run a forward pass of the model.
             outputs = torch.nn.functional.softmax(outputs, 1) # Apply sigmoid activation, which is applied as a part of the loss function during training. 
             outputs = outputs.cpu().numpy()
         
@@ -109,11 +109,11 @@ class Classifier(torch.nn.Module):
         # subsequent applications of a scaler would have no effect. 
         assert not dataset.scaled, 'Classifier.scale: The dataset has already been scaled.'
 
-        embeddings = dataset.embeddings.cpu().numpy()
+        embedding = dataset.embedding.cpu().numpy()
         if fit: # If specified, fit the scaler first. 
-            self.scaler.fit(embeddings)
-        embeddings = self.scaler.transform(embeddings)
-        dataset.embeddings = torch.FloatTensor(embeddings).to(DEVICE) 
+            self.scaler.fit(embedding)
+        embedding = self.scaler.transform(embedding)
+        dataset.embedding = torch.FloatTensor(embedding).to(DEVICE) 
         dataset.scaled = True
 
     def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, sampler=None, weight_loss:bool=False):
@@ -137,7 +137,7 @@ class Classifier(torch.nn.Module):
         else:
             dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
-        pbar = tqdm(range(epochs), desc=f'Classifier.fit: Training classifier, epoch 0 out of {epochs}.') 
+        pbar = tqdm(list(range(epochs))) 
         for epoch in pbar:
             self.loss = list()
             for batch in dataloader:
