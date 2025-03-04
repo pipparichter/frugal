@@ -42,9 +42,10 @@ class Dataset(torch.utils.data.Dataset):
         for attr, value in kwargs.items():
             setattr(self, attr, value)
 
+        # I think that prepending an underscore to the attribute name makes the attribute inaccessible from outside the class. 
         if ('label' in self.attrs):
-            self.n_classes = len(np.unique(self._label)) # Infer the number of classes based on the label. 
-            self._label = torch.from_numpy(self._label).type(torch.LongTensor)
+            self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
+            self._label = torch.from_numpy(self.label).type(torch.LongTensor)
             self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
 
     def __len__(self) -> int:
