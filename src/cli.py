@@ -8,7 +8,7 @@ from src.sampler import Sampler
 from src.classifier import Classifier
 import argparse
 from src.genome import ReferenceGenome
-from src.files import FASTAFile
+from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
 import re
