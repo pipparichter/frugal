@@ -190,7 +190,7 @@ class Classifier(torch.nn.Module):
                 optimizer.zero_grad()
             
             model_labels = self.predict(datasets.test) # Avoid re-computing labels for each metric. 
-            metrics = self.get_metrics(datasets.test, model_labels=model_labels, verbose=True)
+            metrics = self.get_metrics(datasets.test, model_labels=model_labels)
 
             pbar.set_description(f'Classifier.fit: {metrics}')
             pbar.refresh()
