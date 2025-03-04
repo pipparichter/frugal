@@ -34,13 +34,13 @@ class Dataset(torch.utils.data.Dataset):
 
         self.embedding = torch.from_numpy(embedding).to(DEVICE)
         self.n_features = self.embedding.shape[-1]
-        self.index = index
+        self.index = index.values
         self.feature_type = feature_type 
         self.scaled = scaled
         
         self.attrs = list(kwargs.keys())
         for attr, value in kwargs.items():
-            setattr(self, attr, value)
+            setattr(self, attr, value.values)
 
         if ('label' in self.attrs):
             self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
@@ -77,7 +77,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
-        index = self.index.cpu().numpy()[idxs].copy()
+        index = self.index.copy()
         kwargs = {attr:getattr(self, attr)[idxs].copy() for attr in self.attrs}
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
 
