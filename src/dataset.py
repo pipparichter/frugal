@@ -34,7 +34,7 @@ class Dataset(torch.utils.data.Dataset):
 
         self.embedding = torch.from_numpy(embedding).to(DEVICE)
         self.n_features = self.embedding.shape[-1]
-        self.index = index.values
+        self.index = index
         self.feature_type = feature_type 
         self.scaled = scaled
         
@@ -77,7 +77,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
-        index = self.index.copy()
+        index = copy.copy(self.index)
         kwargs = {attr:copy.copy(getattr(self, attr)[idxs]) for attr in self.attrs}
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
 
