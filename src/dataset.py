@@ -58,7 +58,7 @@ class Dataset(torch.utils.data.Dataset):
         assert len(embedding_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
         assert np.all(embedding_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
 
-        index = embedding_df.index.copy()
+        index = embedding_df.index.values.copy() # Make sure this is a numpy array. 
         embedding = embedding_df.values.copy() # Why do I need to copy this?
 
         kwargs = {attr:getattr(metadata_df, attr, None) for attr in attrs}
@@ -77,8 +77,11 @@ class Dataset(torch.utils.data.Dataset):
 
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
-        index = copy.copy(self.index)
-        kwargs = {attr:copy.copy(getattr(self, attr)[idxs]) for attr in self.attrs}
+        index = self.index.copy()
+        kwargs = {attr:getattr(self, attr)[idxs].copy() for attr in self.attrs}
+        # Need to explicitly convert labels back to a numpy array for this to work. 
+        if 'label' in kwargs:
+            kwargs['label'] = kwargs['label'].cpu().numpy()
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
 
 
