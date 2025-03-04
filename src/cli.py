@@ -176,11 +176,14 @@ def train():
     parser.add_argument('--balance-classes', action='store_true')
     parser.add_argument('--balance-lengths', action='store_true')
     parser.add_argument('--fit-loss-func', action='store_true')
-    parser.add_argument('--loss-func-weights', nargs='?', type=int, default=None)
+    parser.add_argument('--loss-func-weights', type=str, default=None)
     parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
 
     args = parser.parse_args()
+
+    # Parse any specified loss function weights, which should be a comma-separated string of integers.
+    loss_func_weights = [int(w) for w in args.loss_func_weights.split(',')] if (args.loss_func_weights is not None) else loss_func_weights
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
     model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes), loss_func_weights=args.loss_func_weights)
