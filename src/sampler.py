@@ -91,13 +91,6 @@ class Sampler():
         batches = [choices(idxs[i], k=self.class_n_per_batch * self.n_batches, weights=length_weights[i]) for i in range(self.n_classes)]
         batches = np.concatenate([np.split(np.array(idxs_), self.n_batches) for idxs_ in batches], axis=1)
 
-        # batches = []
-        # for _ in tqdm(range(self.n_batches), desc='Sampler.get_batches: Generating batches.'):
-        #     batch_labels = np.array(choices(self.labels, k=self.batch_size, weights=self.class_weights))
-        #     batch_n_per_class = np.bincount(batch_labels)
-        #     batch_idxs = [idx for i, n in enumerate(batch_n_per_class) for idx in choices(idxs[i], k=n, weights=length_weights[i])]
-        #     batches.append(np.array(batch_idxs))
-
         return batches
 
     def __len__(self):
