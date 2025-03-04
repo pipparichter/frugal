@@ -41,7 +41,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
     def fit(self, dataset):
         '''Compute the weights to use based on the inverse frequencies of each class. '''
-        n_per_class = [(dataset._label == i).sum() for i in range(dataset.n_classes)]
+        n_per_class = [(dataset.label == i).sum() for i in range(dataset.n_classes)]
         self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n]).to(DEVICE)
 
     def forward(self, outputs, targets):
