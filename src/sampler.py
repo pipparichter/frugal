@@ -17,7 +17,7 @@ class Sampler():
 
     def __init__(self, dataset, batch_size:int=16, balance_classes:bool=False, balance_lengths:bool=False, sample_size:int=None, **kwargs):
 
-        self.labels = dataset.labels.numpy()
+        self.labels = dataset.label
         self.n_total = len(dataset)
         self.n_classes = dataset.n_classes
         self.seqs = dataset.seqs
