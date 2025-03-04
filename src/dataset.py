@@ -43,9 +43,9 @@ class Dataset(torch.utils.data.Dataset):
             setattr(self, attr, value)
 
         if ('label' in self.attrs):
-            self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
-            self.label = torch.from_numpy(self.label).type(torch.LongTensor)
-            self.label_one_hot_encoded = one_hot(self.label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
+            self.n_classes = len(np.unique(self._label)) # Infer the number of classes based on the label. 
+            self._label = torch.from_numpy(self._label).type(torch.LongTensor)
+            self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
 
     def __len__(self) -> int:
         return len(self.embedding)
@@ -71,27 +71,16 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx:int) -> dict:
         item = {'embedding':self.embedding[idx], 'idx':idx} # , 'index':[self.index[idx]]}
         if hasattr(self, 'label'): # Include the label if the Dataset is labeled.
-            item['label'] = self.label[idx]
-            item['label_one_hot_encoded'] = self.label_one_hot_encoded[idx]
+            item['label'] = self._label[idx]
+            item['label_one_hot_encoded'] = self._label_one_hot_encoded[idx]
         return item
 
-    def attrs(self):
-        attrs = dict()
-        for attr in self.attrs:
-            value = getattr(self, field)
-            # Convert to a numpy array if it is not already (i.e., if it is a Tensor)
-            value = value if (type(attr) == np.ndarray) else (value.cpu().numpy())
-            attrs[attr] = value
-        return attrs
         
 
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
         index = self.index.copy()
-        kwargs = {attr:value.copy() for attr, value in self.attrs().items()}
-        # Need to explicitly convert labels back to a numpy array for this to work. 
-        if 'label' in kwargs:
-            kwargs['label'] = kwargs['label'].cpu().numpy()
+        kwargs = {attr:getattr(self, attr) for attr in self.attrs}
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
 
 

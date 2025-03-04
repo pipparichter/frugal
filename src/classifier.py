@@ -41,7 +41,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
     def fit(self, dataset):
         '''Compute the weights to use based on the inverse frequencies of each class. '''
-        n_per_class = [(dataset.labels == i).sum() for i in range(dataset.n_classes)]
+        n_per_class = [(dataset._label == i).sum() for i in range(dataset.n_classes)]
         self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n]).to(DEVICE)
 
     def forward(self, outputs, targets):
@@ -101,7 +101,7 @@ class Classifier(torch.nn.Module):
 
     def accuracy(self, dataset) -> float:
         '''Compute the balanced accuracy of the model on the input dataset.'''
-        labels = dataset.labels.cpu().numpy().ravel() # Get the non-one-hot encoded labels from the dataset. 
+        labels = dataset.label # Get the non-one-hot encoded labels from the dataset. 
         return balanced_accuracy_score(labels, self.predict(dataset))
     
     def scale(self, dataset, fit:bool=True):
