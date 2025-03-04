@@ -74,8 +74,8 @@ def library_get(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type) # , max_length=args.max_length)
     
-    dtypes = {f'query_{field}':dtype for field, dtype in GBFFFile.dtypes}
-    dtypes.update({f'top_hit_{field}':dtype for field, dtype in GBFFFile.dtypes})
+    dtypes = {f'query_{field}':dtype for field, dtype in GBFFFile.dtypes.items()}
+    dtypes.update({f'top_hit_{field}':dtype for field, dtype in GBFFFile.dtypes.items()})
     df = pd.read_csv(args.input_path, index_col=0, dtype=dtypes) # Expect the index column to be the sequence ID. 
     store.put('metadata', df, format='table')
 
