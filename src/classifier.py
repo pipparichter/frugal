@@ -13,6 +13,7 @@ import pickle
 from sklearn.metrics import balanced_accuracy_score
 import io
 import matplotlib.pyplot as plt
+import warnings 
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes?
@@ -32,15 +33,23 @@ class Unpickler(pickle.Unpickler):
 
 class WeightedCrossEntropyLoss(torch.nn.Module):
 
-    def __init__(self, n_classes:int=2):
+    def __init__(self, n_classes:int=2, weights:list=None):
 
         super(WeightedCrossEntropyLoss, self).__init__()
 
-        self.weights = torch.FloatTensor([1] * n_classes).to(DEVICE)
+        weights = [1] * n_classes if (weights is None) else weights
+        assert len(weights) == n_classes, f'WeightedCrossEntropyLoss.__init__: Specified weights must be equal to the number of classes, {n_classes}.'
+        
+        self.weights = torch.FloatTensor(weights).to(DEVICE)
         self.to(DEVICE) # Not actually sure if this is necessary. 
+
+        self.user_specified_weights = (weights is not None)
 
     def fit(self, dataset):
         '''Compute the weights to use based on the inverse frequencies of each class. '''
+        if self.user_specified_weights: # Make sure the user knows that specified weights in __init__ are being overwritten. 
+            warnings.warn('WeightedCrossEntropyLoss.fit: Fitting the loss function is overriding user-specified weights.')
+
         n_per_class = [(dataset.label == i).sum() for i in range(dataset.n_classes)]
         self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n]).to(DEVICE)
 
@@ -65,6 +74,7 @@ class Classifier(torch.nn.Module):
         super(Classifier, self).__init__()
        
         self.dtype = torch.float32
+        self.n_classes = dims[-1]
 
         self.model = torch.nn.Sequential(
             torch.nn.Linear(dims[0], dims[1], dtype=self.dtype),
@@ -75,9 +85,22 @@ class Classifier(torch.nn.Module):
         self.scaler = StandardScaler()
         self.to(DEVICE)
 
-        self.metrics = dict()
-        self.metrics['train_loss'] = []
-        self.metrics['test_acc'] = []
+        self.metrics = {'train_loss':[], 'test_accuracy':[]}
+        self.metrics.update({f'test_precision_{i}':[] for i in range(self.n_classes)})
+        self.metrics.update({f'test_recall_{i}':[] for i in range(self.n_classes)})
+
+
+    def get_metrics(self, dataset, model_labels:np.ndarray=None):
+        self.metrics['train_loss'] += [np.mean(self.loss)]
+        self.metrics['test_accuracy'] += [self.accuracy(dataset, model_labels=model_labels)]
+        for i in range(self.n_classes):
+            self.metrics[f'test_precision_{i}'] += [self.precision(dataset, model_labels=model_labels, class_=i)]
+            self.metrics[f'test_recall_{i}'] += [self.recall(dataset, model_labels=model_labels, class_=i)]
+
+        metrics = ['test_accuracy', 'test_precision_0', 'test_recall_0'] # Metrics to show in the progress bar.
+        metrics = [f'{metric}={np.round(self.metrics[metric][-1], 3)}' for metric in metrics]
+        return ', '.join(metrics)
+
 
     def forward(self, inputs:torch.FloatTensor):
         return self.model(inputs) 
@@ -98,11 +121,34 @@ class Classifier(torch.nn.Module):
         labels = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings.
         return (labels, outputs) if include_outputs else labels
 
-
-    def accuracy(self, dataset) -> float:
+    # I care about the ratio of false negatives relative to the total number of negative instances (how frequently is the model marking
+    # something as spurious when it is not?). Also, there are a lot of This is FN / (FN + TN), or (1 - recall)
+    def accuracy(self, dataset, model_labels:np.ndarray=None) -> float:
         '''Compute the balanced accuracy of the model on the input dataset.'''
         labels = dataset.label # Get the non-one-hot encoded labels from the dataset. 
-        return balanced_accuracy_score(labels, self.predict(dataset))
+        model_labels = self.predict(dataset) if (model_labels is None) else model_labels
+
+        return balanced_accuracy_score(labels, model_labels)
+
+    def recall(self, dataset, class_:int=0, model_labels:np.ndarray=None) -> float:
+        '''Compute the recall for a particular class on the input dataset, i.e. the ability of the model
+        to correctly-identify instances of that class.'''
+        labels = dataset.label 
+        model_labels = self.predict(dataset) if (model_labels is None) else model_labels
+
+        n = (model_labels == class_) & (labels == class_)
+        N = (labels == class_).sum() # Total number of relevant instances (i.e. members of the class)
+        return n / N
+
+    def precision(self, dataset, class_:int=0, model_labels:np.ndarray=None):
+        '''Compute the precision for a particular class on the input dataset, i.e. the ability of the model
+        to correctly distinguish between the classes.'''
+        labels = dataset.label 
+        model_labels = self.predict(dataset) if (model_labels is None) else model_labels
+
+        n = (model_labels == class_) & (labels == class_)
+        N = (model_labels == class_).sum() # Total number of retrieved instances (i.e. predicted members of the class)
+        return n / N
     
     def scale(self, dataset, fit:bool=True):
         # Repeatedly scaling a Dataset causes problems, though I am not sure why. I would have thought that
@@ -129,9 +175,6 @@ class Classifier(torch.nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
 
-        self.metrics['train_loss'] += [np.nan]
-        self.metrics['test_acc'] += [self.accuracy(datasets.test)]
-
         if (sampler is None):
             dataloader = DataLoader(datasets.train, batch_size=batch_size, shuffle=True)
         else:
@@ -139,7 +182,7 @@ class Classifier(torch.nn.Module):
 
         pbar = tqdm(list(range(epochs))) 
         for epoch in pbar:
-            self.loss = list()
+            self.loss = list() # Re-initialize the epoch loss. 
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
                 outputs, targets = self(batch['embedding']), batch['label_one_hot_encoded'] 
@@ -150,13 +193,13 @@ class Classifier(torch.nn.Module):
                 optimizer.step()
                 optimizer.zero_grad()
             
-            self.metrics['train_loss'] += [np.mean(self.loss)]
-            self.metrics['test_acc'] += [self.accuracy(datasets.test)]
+            model_labels = self.predict(datasets.test) # Avoid re-computing labels for each metric. 
+            metrics = self.get_metrics(dataset.test, model_labels=model_labels, verbose=True)
 
-            pbar.set_description(f'Classifier.fit: test_acc={self.metrics['test_acc'][-1]}')
+            pbar.set_description(f'Classifier.fit: {metrics}')
             pbar.refresh()
 
-            if self.metrics['test_acc'][-1] > max(self.metrics['test_acc'][:-1]):
+            if self.metrics['test_accuracy'][-1] > max(self.metrics['test_accuracy'][:-1]):
                 best_epoch, best_model_weights = epoch, copy.deepcopy(self.state_dict())
 
         pbar.close()
@@ -196,7 +239,7 @@ class Classifier(torch.nn.Module):
         ax.set_ylabel('cross-entropy loss')
         # Plot the accuracy on the validation set. 
         ax = ax.twinx()
-        handles += ax.plot(np.arange(self.epochs + 1), self.metrics['test_acc'], color='black', label='test acc.')
+        handles += ax.plot(np.arange(self.epochs + 1), self.metrics['test_accuracy'], color='black', label='test acc.')
         ax.set_ylabel('balanced accuracy')
         ax.set_xlabel('epoch')
         handles += [ax.vlines([self.best_epoch], ymin=0, ymax=ax.get_ylim()[-1], ls='--', color='tab:blue', lw=0.7, alpha=0.7, label='best epoch')]

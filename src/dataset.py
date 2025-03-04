@@ -76,8 +76,6 @@ class Dataset(torch.utils.data.Dataset):
             item['label_one_hot_encoded'] = self._label_one_hot_encoded[idx]
         return item
 
-        
-
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
         index = self.index.copy()

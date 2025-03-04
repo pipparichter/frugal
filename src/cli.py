@@ -213,7 +213,10 @@ def predict():
     for model_path in args.model_path:
         model_name = os.path.basename(model_path).replace('.pkl', '')
         model = Classifier.load(model_path)
-        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=['label'])
+
+        attrs = ['genome_id', 'seq'] + ['label'] if args.load_labels else ['genome_id', 'seq']
+        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=attrs)
+
         model.scale(dataset, fit=False)
         labels, outputs = model.predict(dataset, include_outputs=True)
 
@@ -222,13 +225,12 @@ def predict():
         df['id'] = dataset.index 
         for i in range(outputs.shape[-1]): # Iterate over the model predictions for each class, which correspond to a "probability."
             df[f'{model_name}_output_{i}'] = outputs[:, i]
-        if args.load_labels: # If the Dataset is labeled, include the labels in the output. 
-            df['label'] = dataset.labels.numpy()
-
+        for attr in dataset.attrs: # Add all dataset attributes to the DataFrame. 
+            df[attr] = getattr(dataset, attr)
         df = pd.DataFrame(df).set_index('id')
 
         if os.path.exists(output_path):
-            df_ = pd.read_csv(output_path, index_col=0)
+            df_ = pd.read_csv(output_path, index_col=0) # Drop any overlapping columns. 
             df_ = df_.drop(columns=df.columns, errors='ignore')
             assert np.all(df_.index == df.index), f'predict: Failed to add new predictions to existing predictions file at {output_path}, indices do not match.'
             df = df.merge(df_, left_index=True, right_index=True, how='left')
