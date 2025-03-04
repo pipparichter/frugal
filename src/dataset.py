@@ -40,7 +40,7 @@ class Dataset(torch.utils.data.Dataset):
         
         self.attrs = list(kwargs.keys())
         for attr, value in kwargs.items():
-            setattr(self, key, value)
+            setattr(self, attr, value)
 
         if ('label' in self.attrs):
             self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
