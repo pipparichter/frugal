@@ -181,7 +181,7 @@ def train():
 
     args = parser.parse_args()
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label'])
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
     model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes))
     # I think I want to split along the genome IDs here as well, possibly even sample to make sure the class distribution is even.
     dataset_train, dataset_test = split(dataset, by='genome_id') 
