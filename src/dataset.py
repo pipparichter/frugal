@@ -75,10 +75,20 @@ class Dataset(torch.utils.data.Dataset):
             item['label_one_hot_encoded'] = self.label_one_hot_encoded[idx]
         return item
 
+    def attrs(self):
+        attrs = dict()
+        for attr in self.attrs:
+            value = getattr(self, field)
+            # Convert to a numpy array if it is not already (i.e., if it is a Tensor)
+            value = value if (type(attr) == np.ndarray) else (value.cpu().numpy())
+            attrs[attr] = value
+        return attrs
+        
+
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
         index = self.index.copy()
-        kwargs = {attr:getattr(self, attr)[idxs].copy() for attr in self.attrs}
+        kwargs = {attr:value.copy() for attr, value in self.attrs().items()}
         # Need to explicitly convert labels back to a numpy array for this to work. 
         if 'label' in kwargs:
             kwargs['label'] = kwargs['label'].cpu().numpy()
