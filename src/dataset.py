@@ -61,7 +61,7 @@ class Dataset(torch.utils.data.Dataset):
         index = embedding_df.index.copy()
         embedding = embedding_df.values.copy() # Why do I need to copy this?
 
-        kwargs = {getattr(metadata_df, attr, None) for attr in attrs}
+        kwargs = {attr:getattr(metadata_df, attr, None) for attr in attrs}
         kwargs = {attr:np.array(value) for attr, value in kwargs.items() if (value is not None)}
         return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
     
