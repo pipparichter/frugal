@@ -7,6 +7,7 @@ from parameterized import parameterized
 
 # TODO: Add tests to make sure the gene boundaries actually result in the provided sequence.
 # TODO: Test that things that are in-frame have high sequence identity when translated. 
+# TODO: Test that all pseudogenes without a homologous sequence used some non-AA seq based evidence. 
 
 class TestReferenceGenome(unittest.TestCase):
 

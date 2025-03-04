@@ -92,8 +92,10 @@ def ref():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', nargs='+', type=str)
-    parser.add_argument('--output-dir', default='../data/ref/', type=str)
-    parser.add_argument('--reference-dir', default='../data/proteins/ncbi', type=str)
+    parser.add_argument('--output-dir', default='./data/ref/', type=str)
+    parser.add_argument('--reference-dir', default='./data/proteins/ncbi', type=str)
+    parser.add_argument('--homologs-dir', default='./data/proteins/homologs', type=str)
+    parser.add_argument('--load-homologs', action='store_true')
     parser.add_argument('--prodigal-output', action='store_true')
     parser.add_argument('--summarize', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
@@ -112,7 +114,7 @@ def ref():
         if os.path.exists(results_output_path) and (not args.overwrite):
             continue
 
-        genome = ReferenceGenome(ref_path)
+        genome = ReferenceGenome(ref_path, load_homologs=args.load_homologs, homologs_dir=args.homologs_dir)
         query_df = FASTAFile(path=input_path).to_df(prodigal_output=args.prodigal_output)
         results_df, summary_df = genome.search(query_df, verbose=False, summarize=args.summarize)
 

@@ -10,7 +10,7 @@ import pandas as pd
 
 # TODO: Test to make sure that every CDS has a "codon_start" qualifier. 
 # TODO: Add tests to make sure the gene boundaries actually result in the provided sequence.
-
+# TODO: Test to make sure every sequence in the same genome uses the same translation table. 
 
 class TestGBFFFile(unittest.TestCase):
 

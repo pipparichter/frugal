@@ -5,8 +5,16 @@ from tqdm import tqdm
 import pandas as pd 
 import numpy as np 
 from src import fillna
+from Bio.Seq import Seq
+# from Bio.Data import CodonTable
+import Bio.Seq
 
 # TODO: I should automatically detect the feature labels instead of specifying beforehand.
+# TODO: Organize the fields a little better. 
+# TODO: Still getting a not divisible by 3 warning when translating pseudogenes, I think because things are running off the end of a contig. 
+
+# If a gene as at the edge of a contig, it may be marked partial, but can will still be translated. The only CDS features which are not translated
+# are those marked as pseudo, which have a frameshift, internal stop, etc. There are also non-CDS features marked as pseudo, which may not be translated.
 
 class GBFFFile():
     fields = ['feature', 'contig_id', 'strand', 'start', 'stop', 'partial', 'product', 'note', 'protein_id', 'seq', 'pseudo', 'locus_tag', 'inference', 'experiment']
@@ -16,10 +24,13 @@ class GBFFFile():
         dtypes[field] = dtypes.get(field, str) 
 
     
-    noncoding_features = ['tRNA', 'ncRNA', 'rRNA', 'misc_RNA', 'tmRNA']
+    rna_features = ['tRNA', 'ncRNA', 'rRNA', 'misc_RNA', 'tmRNA']
     coding_features = ['CDS']
-    nucleotide_features = ['stem_loop', 'misc_structure']
-    features = noncoding_features + coding_features + nucleotide_features + ['gene', 'repeat_region', 'misc_feature', 'mobile_element', 'regulatory', 'misc_binding', 'operon', 'unsure']
+    # structural_features = ['stem_loop', 'misc_structure']
+    other_features = ['repeat_region', 'mobile_element', 'regulatory', 'operon']
+    unknown_features = ['misc_feature', 'unsure']
+
+    features = rna_features + coding_features + other_features + unknown_features + ['gene']
 
     qualifier_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"') # Two capturing groups so that re.findall gets a list of tuples. 
     translation_table_pattern = re.compile(r'/transl_table=([0-9]+)')
@@ -152,7 +163,7 @@ class GBFFFile():
         return contig_id, seq, df 
 
 
-    def __init__(self, path:str, add_evidence:bool=True):
+    def __init__(self, path:str, _add_evidence:bool=True):
         
         self.path, self.df, self.contigs = path, list(), dict() 
 
@@ -171,7 +182,8 @@ class GBFFFile():
 
         # It's important to reset the index after concatenating so every feature has a unique label for the subsequent evidence merging. 
         self.df = pd.concat(self.df).reset_index(drop=True)
-        self.add_evidence()
+        self._add_evidence()
+        self._translate_pseudo()
 
     def to_df(self):
         df = self.df.copy()[GBFFFile.fields] 
@@ -250,92 +262,47 @@ class GBFFFile():
         df_.index.name = df.index.name
         return df_
 
-    def add_evidence(self):
+    def _add_evidence(self):
         evidence_df = GBFFFile.get_evidence(self.df, drop_duplicates=True)
         evidence_df.columns = ['evidence_' + col for col in evidence_df.columns]
         df = self.df.merge(evidence_df, left_index=True, right_index=True, how='left')
         df[evidence_df.columns] = fillna(df[evidence_df.columns].copy(), rules={str:'none'}, check=True) # Fill the things which became NaN in the merge.
         self.df = df
 
+    # I don't actually know if this will work, as we can't know where the frameshift is... but at least get the first part?
+    # I checked, and the translate method at least works. I don't know why the homologs don't look similar. 
+    def _translate_pseudo(self):
+        for i in range(len(self.df)):
+            if self.df.loc[i, 'pseudo'] and (self.df.loc[i, 'feature'] == 'CDS'):
+                assert self.df.loc[i, 'seq'] == 'none', f'GBFFFile.add_pseudo_seqs: Expected there to be no existing sequence for the pseudogene at locus {self.df.loc[i, 'locus_tag']}'
+                seq = self._translate(**self.df.loc[i, :].to_dict())
+                self.df.loc[i, 'seq'] = seq if (len(seq) > 0) else 'none' # Not sure why, but I think sometimes these get translated as empty. 
 
+    def translate(self, idx:int):
+        seq = self._translate(**self.df.loc[idx, :].to_dict()) 
+        return seq
 
+    def _translate(self, start:int=None, stop:int=None, strand:int=None, contig_id:int=None, codon_start:int=None, translation_table:int=None, **kwargs):
 
-# Qualifier       /inference=
-# Definition      a structured description of non-experimental evidence that supports
-#                 the feature identification or assignment.
+        offset = (int(codon_start) - 1)
+        start = start - 1 # Adjust the start position to be zero-indexed. Both stop and start are inclusive, so upper bound is already OK. 
+        length = stop - start
+        length = length - (length % 3) # Adjust the length to be divisible by 3. 
+        
+        # Adjust the gene boundaries according to the specified offset. 
+        if strand == 1:
+            start = start + offset
+            stop = start + length
+        elif strand == -1:
+            stop = stop - offset
+            start = stop - length
 
-# Value format    "[CATEGORY:]TYPE[ (same species)][:EVIDENCE_BASIS]"
-  
-#                 where CATEGORY is one of the following:
-#                 "COORDINATES" support for the annotated coordinates
-#                 "DESCRIPTION" support for a broad concept of function such as that
-#                 based on phenotype, genetic approach, biochemical function, pathway
-#                 information, etc.
-#                 "EXISTENCE" support for the known or inferred existence of the product
-  
-#                 where TYPE is one of the following:
-#                 "non-experimental evidence, no additional details recorded"
-#                    "similar to sequence"
-#                       "similar to AA sequence"
-#                       "similar to DNA sequence"
-#                       "similar to RNA sequence"
-#                       "similar to RNA sequence, mRNA"
-#                       "similar to RNA sequence, EST"
-#                       "similar to RNA sequence, other RNA"
-#                    "profile"
-#                       "nucleotide motif"
-#                       "protein motif"
-#                       "ab initio prediction"
-#                    "alignment"
+        nt_seq = self.contigs[contig_id] 
+        nt_seq = nt_seq[start:stop] # The stop and start are both inclusive, so need to increase the stop position by one. 
+        nt_seq = Seq(nt_seq).reverse_complement() if (strand == -1) else nt_seq # If on the opposite strand, get the reverse complement. 
+        # if( len(nt_seq) % 3 == 0) and (error == 'raise'):
+        #     raise Exception(f'GBFFFile.get_nt_seq: Expected the length of the nucleotide sequence to be divisible by three, but sequence is of length {len(nt_seq)}.')
 
-type_order = ['similar to ']
-type_order = ["similar to sequence", "similar to AA sequence", "similar to DNA sequence", "similar to RNA sequence", "similar to RNA sequence, mRNA", "similar to RNA sequence, EST", "similar to RNA sequence, other RNA"]
-  
-#                 where the optional text "(same species)" is included when the
-#                 inference comes from the same species as the entry.
-  
-#                 where the optional "EVIDENCE_BASIS" is either a reference to a
-#                 database entry (including accession and version) or an algorithm
-#                 (including version) , eg 'INSD:AACN010222672.1', 'InterPro:IPR001900',
-#                 'ProDom:PD000600', 'Genscan:2.0', etc. and is structured 
-#                 "[ALGORITHM][:EVIDENCE_DBREF[,EVIDENCE_DBREF]*[,...]]"
-# Example         /inference="COORDINATES:profile:tRNAscan:2.1"
-#                 /inference="similar to DNA sequence:INSD:AY411252.1"
-#                 /inference="similar to RNA sequence, mRNA:RefSeq:NM_000041.2"
-#                 /inference="similar to DNA sequence (same
-#                 species):INSD:AACN010222672.1"
-#                 /inference="protein motif:InterPro:IPR001900"
-#                 /inference="ab initio prediction:Genscan:2.0"
-#                 /inference="alignment:Splign:1.0"
-#                 /inference="alignment:Splign:1.26p:RefSeq:NM_000041.2,INSD:BC003557.1"
+        seq = str(Bio.Seq.translate(nt_seq, table=translation_table, stop_symbol='', to_stop=True, cds=False))
+        return seq
 
-# Comment         /inference="non-experimental evidence, no additional details 
-#                 recorded" was used to replace instances of 
-#                 /evidence=NOT_EXPERIMENTAL in December 2005; any database ID can be
-#                 used in /inference= qualifier; recommentations for choice of resource 
-#                 acronym for[EVIDENCE_BASIS] are provided in the /inference qualifier
-#                 vocabulary recommendation document (https://www.insdc.org/submitting-standards/inference-qualifiers/); 
-
-# Qualifier       /experiment=
-# Definition      a brief description of the nature of the experimental 
-#                 evidence that supports the feature identification or assignment.
-# Value format    "[CATEGORY:]text"
-#                 where CATEGORY is one of the following:
-#                 "COORDINATES" support for the annotated coordinates
-#                 "DESCRIPTION" support for a broad concept of function such as that
-#                 based on phenotype, genetic approach, biochemical function, pathway
-#                 information, etc.
-#                 "EXISTENCE" support for the known or inferred existence of the product
-#                 where text is free text (see examples)
-# Example         /experiment="5' RACE"
-#                 /experiment="Northern blot [DOI: 12.3456/FT.789.1.234-567.2010]"
-#                 /experiment="heterologous expression system of Xenopus laevis
-#                 oocytes [PMID: 12345678, 10101010, 987654]"
-#                 /experiment="COORDINATES: 5' and 3' RACE"
-# Comment         detailed experimental details should not be included, and would
-#                 normally be found in the cited publications; PMID, DOI and any 
-#                 experimental database ID is allowed to be used in /experiment
-#                 qualifier; Please also visit: https://www.insdc.org/submitting-standards/recommendations-vocabulary-insdc-experiment-qualifiers/; 
-#                 value "experimental evidence, no additional details recorded"
-#                 was used to  replace instances of /evidence=EXPERIMENTAL in
-#                 December 2005

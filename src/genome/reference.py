@@ -1,9 +1,11 @@
-from src.files.gbff import GBFFFile
+from src.files import GBFFFile, FASTAFile
 import pandas as pd 
 import numpy as np
 from tqdm import tqdm 
 from src import get_genome_id, fillna
 import warnings
+import os 
+import re
 
 # TODO: Take a closer look at this file, GCF_000009085.1_genomic.gbff, which seems to have a lot of weirdness. It seems as though 
 #   pseudogenes are being entered as misc_features.  
@@ -15,12 +17,15 @@ class ReferenceGenome():
     # feature_order += [feature for feature in GBFFFile.features if feature not in GBFFFile.coding_features + GBFFFile.noncoding_features]
     # feature_order = feature_order[::-1] # So that CDS is "biggest" in terms of importance. 
 
-    def __init__(self, path:str):
+    def __init__(self, path:str, load_homologs:bool=True, homologs_dir:str='../data/proteins/homologs/'):
 
         self.genome_id = get_genome_id(path)
         df = GBFFFile(path).to_df()
         df['genome_id'] = self.genome_id
         self.df = df
+
+        if load_homologs:
+            self.load_homologs(dir_=homologs_dir)
 
     def __str__(self):
         return self.genome_id
@@ -33,7 +38,7 @@ class ReferenceGenome():
         info = {'in_frame':False, 'in_frame_c_terminus':False, 'in_frame_n_terminus':False}
 
         # This only makes sense to check if the subject sequence is coding.
-        if subject.feature == 'CDS':
+        if subject.feature != 'CDS':
             return info
         if not (query.strand == subject.strand):
             return info 
@@ -45,7 +50,6 @@ class ReferenceGenome():
 
         # Must account for edge cases where the sequence is partial. Prodigal all edge sequences as partial, even if there is a valid start, 
         # so only use the subject sequence to check if partial. 
-    
         if query.strand == 1:
             subject_start = subject.start + (int(subject.codon_start) - 1)
             query_start = query.start
@@ -134,13 +138,25 @@ class ReferenceGenome():
 
         return fillna(summary_df, rules={bool:False, str:'none', int:0, float:0}, check=True)
 
+    def load_homologs(self, dir_:str='../data/proteins/homologs/'):
 
-# Qualifier       /codon_start=
-# Definition      indicates the offset at which the first complete codon of a
-#                 coding feature can be found, relative to the first base of that
-#                 feature.
-# Value format    1 or 2 or 3
-# Example         /codon_start=2
+        protein_id_pattern = ['UniRef([0-9]{1,})_([0-9A-Za-z]+)', '[A-Z]P_([0-9]+).([0-9]+)']
+        protein_id_pattern = re.compile(f"({'|'.join(protein_id_pattern)})")
+
+        path = os.path.join(dir_, f'{self.genome_id}_protein.faa')
+        if not os.path.exists(path):    
+            print(f'\nReferenceGenome.load_homologs: No homolog file for genome {self.genome_id} was found in {dir_}')
+            return
+        
+        homologs_df = FASTAFile(path=path).to_df(prodigal_output=False).drop_duplicates()
+        print(f'\nReferenceGenome.add_homologs: Loaded {len(homologs_df)} homologs; {self.df.pseudo.sum()} pseudogenes present in the genome.')
+        homologs_df.index.name = 'evidence_details'
+        homologs_df, _ = homologs_df.align(self.df.set_index('evidence_details'), axis=0, join='right', fill_value='none')
+        assert len(homologs_df) == len(self.df), f'ReferenceGenome.load_homologs: Expected len(homologs_df) == len(self.df), but len(homologs_df) is {len(homologs_df)} and len(self.df) is {len(self.df)}.'
+        self.df['homolog_seq'] = homologs_df.seq.values
+        self.df['homolog_id'] = ['none' if (re.match(protein_id_pattern, id_) is None) else id_ for id_ in homologs_df.index]
+
+
 
 
     # def _add_start_stop_codons(self):

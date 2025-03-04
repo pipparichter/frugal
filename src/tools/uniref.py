@@ -22,7 +22,7 @@ class UniRef():
         protein_ids = ['+OR+'.join(protein_ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
         
         df = list()
-        for protein_ids_ in protein_ids:
+        for protein_ids_ in tqdm(protein_ids, desc='UniRef.run'):
             url = UniRef.url.format(protein_ids=protein_ids)
             cmd = f'wget "{url}"'
 
@@ -35,7 +35,7 @@ class UniRef():
         df = pd.concat(df)
 
         if path is not None:
-            print(f'NCBIDatasets._get_proteins: Proteins saved to {path}')
+            print(f'NCBIDatasets._get_proteins: {len(df)} sequences saved to {path}')
             FASTAFile(df=df).write(path)
         return df 
     

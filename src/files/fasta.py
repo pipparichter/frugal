@@ -37,8 +37,8 @@ class FASTAFile():
         
         if (df is not None):
             self.seqs = df.seq.values
-            self.ids = df.index
-            self.descriptions = [''] * len(self.ids)
+            self.ids = df.index.values 
+            self.descriptions = df.description.values if ('description' in df.columns) else [''] * len(self.ids)
         
         self.seqs = [seq.replace(r'*', '') for seq in self.seqs] # Remove the terminal * character if present.
 

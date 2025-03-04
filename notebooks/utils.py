@@ -10,13 +10,14 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt 
 import warnings
 from sklearn.linear_model import LogisticRegression, LinearRegression
+from Bio.Align import PairwiseAligner
 
 plt.rcParams['font.family'] = 'Arial'
 
-is_n_truncated = lambda df : ((df.start > df.top_hit_start) & (df.strand == 1)) | ((df.stop < df.top_hit_stop) & (df.strand == -1)) 
-is_c_truncated = lambda df : ((df.stop < df.top_hit_stop) & (df.strand == 1)) | ((df.start > df.top_hit_start) & (df.strand == -1)) 
-is_n_extended = lambda df : ((df.start < df.top_hit_start) & (df.strand == 1)) | ((df.stop > df.top_hit_stop) & (df.strand == -1)) 
-is_c_extended = lambda df : ((df.stop > df.top_hit_stop) & (df.strand == 1)) | ((df.start < df.top_hit_start) & (df.strand == -1)) 
+is_n_truncated = lambda df : ((df.query_start > df.top_hit_start) & (df.query_strand == 1)) | ((df.query_stop < df.top_hit_stop) & (df.query_strand == -1)) 
+is_c_truncated = lambda df : ((df.query_stop < df.top_hit_stop) & (df.query_strand == 1)) | ((df.query_start > df.top_hit_start) & (df.query_strand == -1)) 
+is_n_extended = lambda df : ((df.query_start < df.top_hit_start) & (df.query_strand == 1)) | ((df.query_stop > df.top_hit_stop) & (df.query_strand == -1)) 
+is_c_extended = lambda df : ((df.query_stop > df.top_hit_stop) & (df.query_strand == 1)) | ((df.query_start < df.top_hit_start) & (df.query_strand == -1)) 
 
 is_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
 is_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
@@ -31,8 +32,28 @@ is_spurious = lambda df : ~is_intergenic(df) & ~is_suspect(df) & ~df.in_frame # 
 is_real = lambda df : ~is_suspect(df) & df.in_frame # Certain positive label. 
 
 
+def get_alignment_scores(df:pd.DataFrame, seq_a_col:str='top_hit_seq', seq_b_col:str='query_seq', mode:str='local'):
+    
+    aligner = PairwiseAligner(mode=mode, match_score=1, mismatch_score=0, gap_score=-1)
+    scores = list()
+    n_gaps = list()
+    seqs = list(zip(df[seq_a_col], df[seq_b_col]))
+    for seq_a, seq_b in tqdm(seqs, desc='get_alignment_scores'):
+        if (seq_a != 'none') and (seq_b != 'none'): 
+            alignment = aligner.align(seq_a, seq_b)[0] # I think this will get the best alignment?
+            score = alignment.score
+            score = max(score / len(seq_a), score / len(seq_b)) # Normalize the score by sequence length. 
+            scores.append(score)
+            # start_a, stop_a = alignment.aligned[0][0][0], alignment.aligned[0][-1][-1]
+            # start_b, stop_b = alignment.aligned[1][0][0], alignment.aligned[1][-1][-1]
+            # print(seq_a[start_a:stop_a], seq_b[start_b:stop_b])
+        else:
+            scores.append(np.nan)
+    return np.array(scores)
+
+
 def get_lengths(df:pd.DataFrame, top_hit:bool=True, units='aa'):
-    start_col, stop_col = ('top_hit_' if top_hit else '') +'start', ('top_hit_' if top_hit else '') + 'stop'
+    start_col, stop_col = ('top_hit_' if top_hit else 'query_') +'start', ('top_hit_' if top_hit else 'query_') + 'stop'
     lengths = (df[stop_col] - (df[start_col] + 1)) # The start and stop are both inclusive, so add one to the length. 
 
     if np.any((lengths % 3) != 0):
