@@ -20,7 +20,7 @@ class Sampler():
         self.labels = dataset.label
         self.n_total = len(dataset)
         self.n_classes = dataset.n_classes
-        self.seqs = dataset.seqs
+        self.seqs = dataset.seq
         self.lengths = np.array([len(seq) for seq in self.seqs])
         self.idxs = np.arange(len(dataset))
 
