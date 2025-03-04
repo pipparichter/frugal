@@ -175,14 +175,15 @@ def train():
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--balance-classes', action='store_true')
     parser.add_argument('--balance-lengths', action='store_true')
-    parser.add_argument('--weight-loss', action='store_true')
+    parser.add_argument('--fit-loss-func', action='store_true')
+    parser.add_argument('--loss-func-weights', nargs='?', type=int, default=None)
     parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
 
     args = parser.parse_args()
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
-    model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes))
+    model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes), loss_func_weights=args.loss_func_weights)
     # I think I want to split along the genome IDs here as well, possibly even sample to make sure the class distribution is even.
     dataset_train, dataset_test = split(dataset, by='genome_id') 
     model.scale(dataset_train, fit=True)
@@ -192,7 +193,7 @@ def train():
     if (args.balance_classes or args.balance_lengths):
         sampler = Sampler(dataset_train, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths, sample_size=20 * len(dataset_train))
     
-    model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, weight_loss=args.weight_loss)
+    model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, fit_loss_func=args.fit_loss_func)
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
     model.save(output_path)
     print(f'train: Saved trained model to {output_path}')
@@ -208,7 +209,7 @@ def predict():
     parser.add_argument('--load-labels', action='store_true')
     args = parser.parse_args()
 
-    output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '.predict.csv'))   
+    output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '_predict.csv'))   
 
     for model_path in args.model_path:
         model_name = os.path.basename(model_path).replace('.pkl', '')

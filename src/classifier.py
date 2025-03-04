@@ -54,11 +54,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
         self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n]).to(DEVICE)
 
     def forward(self, outputs, targets):
-        '''Compute the weighted loss between the targets and outputs. 
-
-        :param outputs: A Tensor of size (batch_size, n_classes). All values should be between 0 and 1, and sum to 1. 
-        :param targets: A Tensor of size (batch_size, n_classes), which is a one-hot encoded vector of the labels.  
-        '''
+  
         outputs = outputs.view(targets.shape) # Make sure the outputs and targets have the same shape. Use view to avoid copying. 
         loss = torch.nn.functional.cross_entropy(outputs, targets, reduction='none') # Reduction specifies the pooling to apply to the output. If 'none', no reduction will be applied. 
         weights = torch.unsqueeze(self.weights, 0).repeat(len(outputs), 1)
@@ -69,7 +65,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
 class Classifier(torch.nn.Module):
 
-    def __init__(self, dims:tuple=(1024, 512, 2)):
+    def __init__(self, dims:tuple=(1024, 512, 2), loss_func_weights:list=None):
 
         super(Classifier, self).__init__()
        
@@ -81,7 +77,7 @@ class Classifier(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(dims[1], dims[2], dtype=self.dtype))
 
-        self.loss_func = WeightedCrossEntropyLoss(n_classes=dims[2])
+        self.loss_func = WeightedCrossEntropyLoss(n_classes=dims[2], weights=loss_func_weights)
         self.scaler = StandardScaler()
         self.to(DEVICE)
 
@@ -136,7 +132,7 @@ class Classifier(torch.nn.Module):
         labels = dataset.label 
         model_labels = self.predict(dataset) if (model_labels is None) else model_labels
 
-        n = (model_labels == class_) & (labels == class_)
+        n = ((model_labels == class_) & (labels == class_)).sum()
         N = (labels == class_).sum() # Total number of relevant instances (i.e. members of the class)
         return n / N
 
@@ -146,7 +142,7 @@ class Classifier(torch.nn.Module):
         labels = dataset.label 
         model_labels = self.predict(dataset) if (model_labels is None) else model_labels
 
-        n = (model_labels == class_) & (labels == class_)
+        n = ((model_labels == class_) & (labels == class_)).sum()
         N = (model_labels == class_).sum() # Total number of retrieved instances (i.e. predicted members of the class)
         return n / N
     
@@ -162,14 +158,14 @@ class Classifier(torch.nn.Module):
         dataset.embedding = torch.FloatTensor(embedding).to(DEVICE) 
         dataset.scaled = True
 
-    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, sampler=None, weight_loss:bool=False):
+    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, sampler=None, fit_loss_func:bool=False):
 
         assert datasets.test.scaled, 'Classifier.fit: The input test Dataset has not been scaled.' 
         assert datasets.train.scaled, 'Classifier.fit: The input train Dataset has not been scaled.'
 
         self.train() # Put the model in train mode.
 
-        if weight_loss: 
+        if fit_loss_func: 
             self.loss_func.fit(datasets.train) # Set the weights of the loss function.
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)

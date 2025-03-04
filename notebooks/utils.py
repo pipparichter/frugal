@@ -51,6 +51,18 @@ def get_alignment_scores(df:pd.DataFrame, seq_a_col:str='top_hit_seq', seq_b_col
             scores.append(np.nan)
     return np.array(scores)
 
+def recall(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
+    model_labels = (df[f'model_output_{class_}'] > threshold).astype(int)
+    n = ((model_labels == class_) & (df.label == class_)).sum()
+    N = (df.label == class_).sum() # Total number of relevant instances (i.e. members of the class)
+    return n / N
+
+def precision(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
+    model_labels = (df[f'model_output_{class_}'] > threshold).astype(int)
+    n = ((model_labels == class_) & (df.label == class_)).sum()
+    N = (model_labels == class_).sum() # Total number of retrieved instances (i.e. predicted members of the class)
+    return n / N
+
 
 def get_lengths(df:pd.DataFrame, top_hit:bool=True, units='aa'):
     start_col, stop_col = ('top_hit_' if top_hit else 'query_') +'start', ('top_hit_' if top_hit else 'query_') + 'stop'
@@ -131,7 +143,7 @@ def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata
     return genome_metadata_df.set_index('genome_id')
 
 
-def load_pred_out(path:str, model_name:str=''):
+def load_predict(path:str, model_name:str=''):
 
     df = pd.read_csv(path, index_col=0)
 
