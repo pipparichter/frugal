@@ -81,13 +81,17 @@ class Classifier(torch.nn.Module):
         self.scaler = StandardScaler()
         self.to(DEVICE)
 
-        self.metrics = {'train_loss':[], 'test_accuracy':[]}
+        self.metrics = {'train_loss':[], 'test_accuracy':[-np.inf]}
         self.metrics.update({f'test_precision_{i}':[] for i in range(self.n_classes)})
         self.metrics.update({f'test_recall_{i}':[] for i in range(self.n_classes)})
 
 
-    def get_metrics(self, dataset, model_labels:np.ndarray=None):
-        self.metrics['train_loss'] += [np.mean(self.loss)]
+    def get_metrics(self, dataset, losses:list=None):
+        model_labels = self.predict(dataset, include_outputs=False) # Avoid re-computing the model labels for every metric. 
+
+        if losses is not None: # Only try computing the loss if we are past the first epoch. 
+            self.metrics['train_loss'] += [np.mean(losses)]
+
         self.metrics['test_accuracy'] += [self.accuracy(dataset, model_labels=model_labels)]
         for i in range(self.n_classes):
             self.metrics[f'test_precision_{i}'] += [self.precision(dataset, model_labels=model_labels, class_=i)]
@@ -176,21 +180,21 @@ class Classifier(torch.nn.Module):
         else:
             dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
+        self.get_metrics(datasets.test)
         pbar = tqdm(list(range(epochs))) 
         for epoch in pbar:
-            self.loss = list() # Re-initialize the epoch loss. 
+            losses = list() # Re-initialize the epoch loss. 
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
                 outputs, targets = self(batch['embedding']), batch['label_one_hot_encoded'] 
                 loss = self.loss_func(outputs, targets)
                 loss.backward() 
-                self.loss.append(loss.item()) # Store each loss for computing metrics. 
+                losses.append(loss.item()) # Store each loss for computing metrics. 
                 
                 optimizer.step()
                 optimizer.zero_grad()
             
-            model_labels = self.predict(datasets.test) # Avoid re-computing labels for each metric. 
-            metrics = self.get_metrics(datasets.test, model_labels=model_labels)
+            metrics = self.get_metrics(datasets.test, losses=losses)
 
             pbar.set_description(f'Classifier.fit: {metrics}')
             pbar.refresh()
@@ -224,25 +228,25 @@ class Classifier(torch.nn.Module):
             pickle.dump(self, f)
 
 
-    def plot(self, path:str=None):
-        '''Visualize the training curve for the fitted model.'''
-        assert self.fitted(), 'Classifier.plot: The model has not yet been fitted.'
+    # def plot(self, path:str=None):
+    #     '''Visualize the training curve for the fitted model.'''
+    #     assert self.fitted(), 'Classifier.plot: The model has not yet been fitted.'
 
-        fig, ax = plt.subplots()
-        handles = list()
-        # Plot the training loss for each epoch. 
-        handles += ax.plot(np.arange(self.epochs) + 1, self.metrics['train_loss'][1:], color='gray', label='train loss')
-        ax.set_ylabel('cross-entropy loss')
-        # Plot the accuracy on the validation set. 
-        ax = ax.twinx()
-        handles += ax.plot(np.arange(self.epochs + 1), self.metrics['test_accuracy'], color='black', label='test acc.')
-        ax.set_ylabel('balanced accuracy')
-        ax.set_xlabel('epoch')
-        handles += [ax.vlines([self.best_epoch], ymin=0, ymax=ax.get_ylim()[-1], ls='--', color='tab:blue', lw=0.7, alpha=0.7, label='best epoch')]
-        ax.legend(handles=handles)
+    #     fig, ax = plt.subplots()
+    #     handles = list()
+    #     # Plot the training loss for each epoch. 
+    #     handles += ax.plot(np.arange(self.epochs) + 1, self.metrics['train_loss'][1:], color='gray', label='train loss')
+    #     ax.set_ylabel('cross-entropy loss')
+    #     # Plot the accuracy on the validation set. 
+    #     ax = ax.twinx()
+    #     handles += ax.plot(np.arange(self.epochs + 1), self.metrics['test_accuracy'], color='black', label='test acc.')
+    #     ax.set_ylabel('balanced accuracy')
+    #     ax.set_xlabel('epoch')
+    #     handles += [ax.vlines([self.best_epoch], ymin=0, ymax=ax.get_ylim()[-1], ls='--', color='tab:blue', lw=0.7, alpha=0.7, label='best epoch')]
+    #     ax.legend(handles=handles)
 
-        if path is not None:
-            fig.savefig(path)
+    #     if path is not None:
+    #         fig.savefig(path)
         
-        plt.show()
+    #     plt.show()
 
