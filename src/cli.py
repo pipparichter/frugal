@@ -184,7 +184,7 @@ def train():
     args = parser.parse_args()
 
     # Parse any specified loss function weights, which should be a comma-separated string of integers.
-    loss_func_weights = [int(w) for w in args.loss_func_weights.split(',')] if (args.loss_func_weights is not None) else loss_func_weights
+    loss_func_weights = [int(w) for w in args.loss_func_weights.split(',')] if (args.loss_func_weights is not None) else args.loss_func_weights
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
     model = Classifier(dims=(dataset.n_features, 512, dataset.n_classes), loss_func_weights=loss_func_weights, feature_type=args.feature_type)
