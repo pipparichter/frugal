@@ -183,7 +183,7 @@ class GBFFFile():
         # It's important to reset the index after concatenating so every feature has a unique label for the subsequent evidence merging. 
         self.df = pd.concat(self.df).reset_index(drop=True)
         self._add_evidence()
-        self._translate_pseudo()
+        # self._translate_pseudo()
 
     def to_df(self):
         df = self.df.copy()[GBFFFile.fields] 
@@ -271,12 +271,13 @@ class GBFFFile():
 
     # I don't actually know if this will work, as we can't know where the frameshift is... but at least get the first part?
     # I checked, and the translate method at least works. I don't know why the homologs don't look similar. 
-    def _translate_pseudo(self):
-        for i in range(len(self.df)):
-            if self.df.loc[i, 'pseudo'] and (self.df.loc[i, 'feature'] == 'CDS'):
-                assert self.df.loc[i, 'seq'] == 'none', f'GBFFFile.add_pseudo_seqs: Expected there to be no existing sequence for the pseudogene at locus {self.df.loc[i, 'locus_tag']}'
-                seq = self._translate(**self.df.loc[i, :].to_dict())
-                self.df.loc[i, 'seq'] = seq if (len(seq) > 0) else 'none' # Not sure why, but I think sometimes these get translated as empty. 
+    # OK yeah, trying to translate the pseudogenes results in a lot of weirdness. 
+    # def _translate_pseudo(self):
+    #     for i in range(len(self.df)):
+    #         if self.df.loc[i, 'pseudo'] and (self.df.loc[i, 'feature'] == 'CDS'):
+    #             assert self.df.loc[i, 'seq'] == 'none', f'GBFFFile.add_pseudo_seqs: Expected there to be no existing sequence for the pseudogene at locus {self.df.loc[i, 'locus_tag']}'
+    #             seq = self._translate(**self.df.loc[i, :].to_dict())
+    #             self.df.loc[i, 'seq'] = seq if (len(seq) > 0) else 'none' # Not sure why, but I think sometimes these get translated as empty. 
 
     def translate(self, idx:int):
         seq = self._translate(**self.df.loc[idx, :].to_dict()) 
@@ -285,24 +286,16 @@ class GBFFFile():
     def _translate(self, start:int=None, stop:int=None, strand:int=None, contig_id:int=None, codon_start:int=None, translation_table:int=None, **kwargs):
 
         offset = (int(codon_start) - 1)
-        start = start - 1 # Adjust the start position to be zero-indexed. Both stop and start are inclusive, so upper bound is already OK. 
-        length = stop - start
-        length = length - (length % 3) # Adjust the length to be divisible by 3. 
-        
-        # Adjust the gene boundaries according to the specified offset. 
         if strand == 1:
-            start = start + offset
-            stop = start + length
+            start = start + offset 
+            nt_seq = Seq(self.contigs[contig_id][start - 1:stop])
         elif strand == -1:
-            stop = stop - offset
-            start = stop - length
+            stop = stop - offset 
+            nt_seq = Seq(self.contigs[contig_id][start - 1:stop]).reverse_complement()
 
-        nt_seq = self.contigs[contig_id] 
-        nt_seq = nt_seq[start:stop] # The stop and start are both inclusive, so need to increase the stop position by one. 
-        nt_seq = Seq(nt_seq).reverse_complement() if (strand == -1) else nt_seq # If on the opposite strand, get the reverse complement. 
-        # if( len(nt_seq) % 3 == 0) and (error == 'raise'):
-        #     raise Exception(f'GBFFFile.get_nt_seq: Expected the length of the nucleotide sequence to be divisible by three, but sequence is of length {len(nt_seq)}.')
-
+        nt_seq = nt_seq[:len(nt_seq) - (len(nt_seq) % 3)] # Truncate the sequence so it's in multiples of 3. 
         seq = str(Bio.Seq.translate(nt_seq, table=translation_table, stop_symbol='', to_stop=True, cds=False))
-        return seq
+        
+        expected_length = len(nt_seq) // 3 # Expected sequence length in amino acids. 
+        print(expected_length, len(seq))
 

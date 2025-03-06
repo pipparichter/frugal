@@ -1,6 +1,8 @@
 import pandas as pd 
 import numpy as np 
 
+# TODO: What does it mean if an InterPro hit has a null E-value? I think it might be related to the type of hit, e.g. MobiDBLite hits (consensus disorder predictions)
+#   do not have associated E-values, but I should confirm. 
 
 class InterProScanFile():
 
@@ -12,21 +14,22 @@ class InterProScanFile():
 
         self.df = pd.read_csv(path, delimiter='\t', names=InterProScanFile.tsv_fields)
     
-    def to_df(self, max_e_value:float=None, drop_duplicates:bool=False, analysis:str=None):
+    def to_df(self, max_e_value:float=None, drop_duplicates:bool=False):
         
         df = self.df.drop(columns=['go_annotation', 'pathways_annotation', 'md5']).copy()
         df['status'] = [True if (status == 'T') else False for status in df.status]
-        df['e_value'] = df.e_value.replace({'-':np.nan})
+        df['e_value'] = df.e_value.replace({'-':np.nan}) 
         df = df.astype(InterProScanFile.tsv_dtypes)
+        df = df.sort_values('e_value', ascending=True) 
 
-        if analysis is not None:
-            df = df[df.analysis == analysis]
         if max_e_value is not None:
             df = df[~df.e_value.isnull()]
             df = df[df.e_value < max_e_value]
-            df = df.sort_values('e_value', ascending=True)
-        if drop_duplicates: # Assuming a maximum E-value has been specified, this will keep the hit with the best E-value.
+        if drop_duplicates: 
+            # Because E-values have been sorted, this will keep the hit with the best E-value.
+            # NaN is treated as the highest element when sorting, so this will prioritize non-NaN hits.
             df = df.drop_duplicates('id', keep='first')
+
         return df.set_index('id')
 
     def __len__(self):

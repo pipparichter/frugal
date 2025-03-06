@@ -148,7 +148,8 @@ class ReferenceGenome():
             print(f'\nReferenceGenome.load_homologs: No homolog file for genome {self.genome_id} was found in {dir_}')
             return
         
-        homologs_df = FASTAFile(path=path).to_df(prodigal_output=False).drop_duplicates()
+        homologs_df = FASTAFile(path=path).to_df(prodigal_output=False)
+        homologs_df = homologs_df.groupby(homologs_df.index).first() # Drop any duplicates. 
         print(f'\nReferenceGenome.add_homologs: Loaded {len(homologs_df)} homologs; {self.df.pseudo.sum()} pseudogenes present in the genome.')
         homologs_df.index.name = 'evidence_details'
         homologs_df, _ = homologs_df.align(self.df.set_index('evidence_details'), axis=0, join='right', fill_value='none')

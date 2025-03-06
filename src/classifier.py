@@ -174,13 +174,11 @@ class Classifier(torch.nn.Module):
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
+        
+        dataloader = DataLoader(datasets.train, batch_size=batch_size, shuffle=True) if (sampler is None) else DataLoader(datasets.train, batch_sampler=sampler)
 
-        if (sampler is None):
-            dataloader = DataLoader(datasets.train, batch_size=batch_size, shuffle=True)
-        else:
-            dataloader = DataLoader(datasets.train, batch_sampler=sampler)
+        self.get_metrics(datasets.test) # Initialize the metrics list. 
 
-        self.get_metrics(datasets.test)
         pbar = tqdm(list(range(epochs))) 
         for epoch in pbar:
             losses = list() # Re-initialize the epoch loss. 
