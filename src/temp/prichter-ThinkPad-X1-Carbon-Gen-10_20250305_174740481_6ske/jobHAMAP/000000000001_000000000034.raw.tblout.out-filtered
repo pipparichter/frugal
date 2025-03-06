@@ -1,0 +1,7 @@
+profile hits: 3
+profile hits in run_pfsearch: 3
+sequence count in run_pfsearch: 5
+processing profile #:0 MF_00701 seqs:1 - data/hamap/2023_05/profiles/MF_00701.prf 5  
+processing profile #:1 MF_01554_A seqs:1 - data/hamap/2023_05/profiles/MF_01554_A.prf 19  
+processing profile #:2 MF_01554_B seqs:1 - data/hamap/2023_05/profiles/MF_01554_B.prf 19  
+completed running thru 3 profiles 

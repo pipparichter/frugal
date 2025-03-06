@@ -1,0 +1,19 @@
+#                                                                               --- full sequence --- -------------- this domain -------------   hmm coord   ali coord   env coord
+# target name        accession   tlen query name           accession      qlen   E-value  score  bias   #  of  c-Evalue  i-Evalue  score  bias  from    to  from    to  from    to  acc description of target
+#------------------- ---------- ----- --------------------    ---------- ----- --------- ------ ----- --- --- --------- --------- ------ ----- ----- ----- ----- ----- ----- ----- ---- ---------------------
+14                   -            195 PIRSR000412-50       PIRSR000412-50   429   5.4e-70  227.1   0.1   1   1   1.7e-71   5.9e-70  226.9   0.1   229   424     1   191     1   195 0.93 -
+22                   -             80 PIRSR004576-50       PIRSR004576-50   246   1.4e-08   25.3   1.0   1   1     1e-09   3.4e-08   24.0   1.0   178   210    47    79     3    80 0.91 -
+19                   -            153 PIRSR016408-1        PIRSR016408-1   479   1.1e-11   35.2   0.0   1   1   4.3e-13   1.4e-11   34.7   0.0   148   270    25   145    20   151 0.82 -
+19                   -            153 PIRSR016408-2        PIRSR016408-2   486   3.3e-12   36.7   0.0   1   1   1.3e-13   4.4e-12   36.3   0.0   154   278    27   145    20   151 0.91 -
+19                   -            153 PIRSR016408-3        PIRSR016408-3   486   4.5e-12   36.3   0.0   1   1   1.8e-13     6e-12   35.9   0.0   153   278    26   145    20   151 0.91 -
+7                    -            139 PIRSR026583-50       PIRSR026583-50   661     2e-06   17.3   2.4   1   1   6.7e-08   2.3e-06   17.2   2.4   175   301     8   138     2   139 0.84 -
+#
+# Program:         hmmsearch
+# Version:         3.3 (Nov 2019)
+# Pipeline mode:   SEARCH
+# Query file:      data/pirsr/2023_05/sr_hmm_all
+# Target file:     /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobPIRSR/000000000001_000000000034.fasta
+# Option settings: bin/hmmer/hmmer3/3.3/hmmsearch -o /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobPIRSR/000000000001_000000000034.raw.out -A /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobPIRSR/000000000001_000000000034.raw.align.out --domtblout /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobPIRSR/000000000001_000000000034.raw.domtblout.out --acc -E 0.01 --cpu 1 data/pirsr/2023_05/sr_hmm_all /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobPIRSR/000000000001_000000000034.fasta 
+# Current dir:     /home/prichter/interproscan/interproscan-5.73-104.0
+# Date:            Wed Mar  5 17:48:16 2025
+# [ok]

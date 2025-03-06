@@ -19,30 +19,7 @@ is_c_truncated = lambda df : ((df.query_stop < df.top_hit_stop) & (df.query_stra
 is_n_extended = lambda df : ((df.query_start < df.top_hit_start) & (df.query_strand == 1)) | ((df.query_stop > df.top_hit_stop) & (df.query_strand == -1)) 
 is_c_extended = lambda df : ((df.query_stop > df.top_hit_stop) & (df.query_strand == 1)) | ((df.query_start < df.top_hit_start) & (df.query_strand == -1)) 
 
-is_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
-is_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
-is_suspect = lambda df : is_hypothetical(df) & is_ab_initio(df) # This will be False for intergenic sequences. 
 
-MAX_OVERLAP = 30
-
-is_intergenic = lambda df : (df.overlap_length < MAX_OVERLAP) & ~df.in_frame # Does not overlap with anything. 
-is_suspect_match = lambda df : is_suspect(df) & df.in_frame # A match is found, but the matched sequence is an ab inition prediction. 
-is_suspect_conflict = lambda df : ~is_intergenic(df) & is_suspect(df) & ~df.in_frame # Is in conflict with a suspect sequence. 
-is_conflict = lambda df : ~is_intergenic(df) & ~is_suspect(df) & ~df.in_frame # Seems to be in conflict with a real sequence. 
-is_match = lambda df : ~is_suspect(df) & df.in_frame # Seems to align with a real sequence; the sequence can be pseudo.  
-
-
-def get_alignment_scores(df:pd.DataFrame, seq_a_col:str='top_hit_seq', seq_b_col:str='query_seq', mode:str='local'):
-    
-    aligner = PairwiseAligner(mode=mode, match_score=1, mismatch_score=0, gap_score=0)
-    scores = list()
-    seqs = list(zip(df[seq_a_col], df[seq_b_col]))
-    for seq_a, seq_b in tqdm(seqs, desc='get_alignment_scores'):
-        alignment = aligner.align(seq_a, seq_b)[0] # I think this will get the best alignment?
-        score = alignment.score
-        score = max(score / len(seq_a), score / len(seq_b)) # Normalize the score by sequence length. 
-        scores.append(score)
-    return np.array(scores)
 
 def recall(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
     model_labels = (df[f'model_output_{class_}'] > threshold).astype(int)
@@ -132,7 +109,7 @@ def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata
     col_names['assembly_accession'] = 'genome_id'
 
     genome_metadata_df = genome_metadata_df.rename(columns=col_names)
-    genome_metadata_df = fillna(genome_metadata_df, rules={str:'none'}, check=False)
+    genome_metadata_df = fillna(genome_metadata_df, rules={str:'none'}, errors='ignore')
     return genome_metadata_df.set_index('genome_id')
 
 
@@ -154,18 +131,20 @@ def load_predict(path:str, model_name:str=''):
     return df
 
 
-def load_ref(genome_ids:list=None):
+def load_labels(genome_ids:list=None, labels_dir='../data/labels'):
+    paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids] if (genome_ids is not None) else glob.glob(os.path.join(labels_dir, '*'))
+    labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in paths])
 
-    paths = [f'../data/ref/{genome_id}_summary.csv' for genome_id in genome_ids] if (genome_ids is not None) else glob.glob('../data/ref/*_summary.csv')
+    assert labels_df.index.duplicated().sum() == 0, 'load_labels: There are duplicate entries in the labels DataFrame.'
+    return labels_df
 
-    ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype={'top_hit_partial':str, 'query_partial':str}) for path in paths])
-    ref_df['suspect_match'] = is_suspect_match(ref_df)
-    ref_df['suspect_conflict'] = is_suspect_conflict(ref_df)
-    ref_df['intergenic'] = is_intergenic(ref_df)
-    ref_df['real'] = is_real(ref_df)
-    ref_df['spurious'] = is_spurious(ref_df)
 
-    categories = ['real', 'spurious', 'intergenic', 'suspect_match', 'suspect_conflict']
-    assert (ref_df[categories].sum(axis=1) != 1).sum() == 0, 'load_ref: Each ref output entry should have exactly one assigned category.'
-
+def load_ref(genome_ids:list=None, ref_dir:str='../data/ref', add_labels:bool=True):
+    paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids] if (genome_ids is not None) else glob.glob(os.path.join(ref_dir, '*_summary.csv'))
+    ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype={'top_hit_partial':str, 'query_partial':str}) for path in paths], ignore_index=False)
+    assert ref_df.index.nunique() == len(ref_df), 'load_ref: There are duplicate entries in the ref output DataFrame.'
+    if add_labels:
+        labels_df = load_labels(genome_ids)
+        assert len(labels_df) == len(ref_df), 'load_ref: Expected the labels and reference output DataFrames to be the same size.'
+        ref_df = ref_df.merge(labels_df, right_index=True, left_index=True, validate='one_to_one', how='left')
     return ref_df

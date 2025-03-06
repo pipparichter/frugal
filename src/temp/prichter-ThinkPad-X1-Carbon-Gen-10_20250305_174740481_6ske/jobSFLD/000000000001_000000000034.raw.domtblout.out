@@ -1,0 +1,13 @@
+#                                                                            --- full sequence --- -------------- this domain -------------   hmm coord   ali coord   env coord
+# target name        accession   tlen query name           accession   qlen   E-value  score  bias   #  of  c-Evalue  i-Evalue  score  bias  from    to  from    to  from    to  acc description of target
+#------------------- ---------- ----- -------------------- ---------- ----- --------- ------ ----- --- --- --------- --------- ------ ----- ----- ----- ----- ----- ----- ----- ---- ---------------------
+#
+# Program:         hmmsearch
+# Version:         3.3 (Nov 2019)
+# Pipeline mode:   SEARCH
+# Query file:      data/sfld/4/sfld.hmm
+# Target file:     /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobSFLD/000000000001_000000000034.fasta
+# Option settings: bin/hmmer/hmmer3/3.3/hmmsearch -o /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobSFLD/000000000001_000000000034.raw.out -A /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobSFLD/000000000001_000000000034.raw.align.out --domtblout /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobSFLD/000000000001_000000000034.raw.domtblout.out --acc --cut_ga -Z 378 --cpu 1 data/sfld/4/sfld.hmm /home/prichter/Documents/tripy/src/temp/prichter-ThinkPad-X1-Carbon-Gen-10_20250305_174740481_6ske//jobSFLD/000000000001_000000000034.fasta 
+# Current dir:     /home/prichter/interproscan/interproscan-5.73-104.0
+# Date:            Wed Mar  5 17:48:13 2025
+# [ok]

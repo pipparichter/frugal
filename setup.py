@@ -14,7 +14,7 @@ setuptools.setup(
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
     packages=['src', 'src.files', 'src.tools', 'src.embed', 'src.embed.embedders', 'src.genome'], 
-    entry_points={'console_scripts':['library=src.cli:library', 'ref=src.cli:ref', 'embed=src.cli:embed', 'train=src.cli:train', 'predict=src.cli:predict']},
+    entry_points={'console_scripts':['library=src.cli:library', 'label=src.cli:label', 'ref=src.cli:ref', 'embed=src.cli:embed', 'train=src.cli:train', 'predict=src.cli:predict']},
     install_requires=get_requirements())
 
 

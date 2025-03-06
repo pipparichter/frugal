@@ -11,6 +11,7 @@ from src.genome import ReferenceGenome
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
+from src.tools import Labeler
 import re
 import random
 import glob
@@ -95,7 +96,7 @@ def ref():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', nargs='+', type=str)
     parser.add_argument('--output-dir', default='./data/ref/', type=str)
-    parser.add_argument('--reference-dir', default='./data/proteins/ncbi', type=str)
+    parser.add_argument('--gbffs-dir', default='./data/ncbi/gbffs', type=str)
     parser.add_argument('--homologs-dir', default='./data/proteins/homologs', type=str)
     parser.add_argument('--load-homologs', action='store_true')
     parser.add_argument('--prodigal-output', action='store_true')
@@ -105,9 +106,9 @@ def ref():
 
     input_paths = args.input_path # glob.glob(args.input_path) # Supports the user being able to specify a pattern.
     genome_ids = [get_genome_id(path, errors='raise') for path in input_paths]
-    ref_paths = [glob.glob(os.path.join(args.reference_dir, genome_id + '*'))[0] for genome_id in genome_ids]
+    gbff_paths = [glob.glob(os.path.join(args.gbffs_dir, genome_id + '*'))[0] for genome_id in genome_ids]
     
-    pbar = tqdm(zip(genome_ids, input_paths, ref_paths), total=len(genome_ids))
+    pbar = tqdm(zip(genome_ids, input_paths, gbff_paths), total=len(genome_ids))
     for genome_id, input_path, ref_path in pbar:
         results_output_path = os.path.join(args.output_dir, f'{genome_id}_results.csv')
         summary_output_path = os.path.join(args.output_dir, f'{genome_id}_summary.csv')
@@ -244,3 +245,36 @@ def predict():
             print(f'predict: Balanced accuracy on the input dataset is {model.accuracy(dataset)}')
         print(f'predict: Saved model {model_name} predictions on {args.input_path} to {output_path}')
 
+
+def label():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input-path', nargs='+', type=str)
+    parser.add_argument('--interpro-dir', type=str, default='./data/interpro')
+    parser.add_argument('--labels-dir', type=str, default='./data/labels')
+    parser.add_argument('--ref-dir', type=str, default='./data/ref')
+    parser.add_argument('--max-overlap', type=int, default=50)
+    parser.add_argument('--add-manual-labels', action='store_true')
+    parser.add_argument('--overwrite')
+    args = parser.parse_args()
+
+    genome_ids = [get_genome_id(path) for path in args.input_path]
+    output_paths = [os.path.join(args.labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids]
+    ref_paths = [os.path.join(args.ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids]
+
+    for ref_path, input_path, output_path in zip(ref_paths, args.input_paths, output_paths):
+        
+        if os.path.exists(output_path) and (not args.overwrite):
+            continue 
+        
+        if os.path.exists(output_path):
+            labeler = Labeler.load(labels_path=output_path, ref_path=ref_path, interpro_dir=args.interpro_dir)
+        else:
+            labeler = Labeler(ref_path, max_overlap=args.max_overlap)
+        
+        if labeler.has_manual_labels: # I really do not want to accidentally overwrite maual labels. 
+            continue 
+
+        labeler.run(add_manual_labels=args.add_manual_labels)
+
+        

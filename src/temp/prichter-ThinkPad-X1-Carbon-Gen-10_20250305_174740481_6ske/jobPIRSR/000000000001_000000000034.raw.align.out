@@ -1,0 +1,132 @@
+# STOCKHOLM 1.0
+#=GF ID PIRSR000412-50
+#=GF AC PIRSR000412-50
+#=GF AU hmmsearch (HMMER 3.3)
+
+#=GS 14/1-191 DE [subseq from] 14
+
+14/1-191         --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#=GR 14/1-191 PP ........................................................................................................................................................................................................
+#=GC PP_cons     ........................................................................................................................................................................................................
+#=GC RF          xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+14/1-191         ----------------------------TTTTHKTLRGPRGGMIMTN-DEDIAKKINSAIFPGLQGGPLVHVIAAKAVAFKEILDPSWKEYAKQVKANAKKLGEVLVQRGYDIVSGGTDNHLVLVSFLNKDFSGKDADAALQNAGITVNKNTVPGETrSPFVTSGVRIGSPALTARGMKEKEFEFIANKIADILDDIN--
+#=GR 14/1-191 PP ............................89****************9.59********************************************************************************************************9862689************************************8..
+#=GC PP_cons     ............................89****************9.59********************************************************************************************************986.689************************************8..
+#=GC RF          xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+14/1-191         ---NTELQEQIKLELKDLASNFVIY-----
+#=GR 14/1-191 PP ...4555666777777777777665.....
+#=GC PP_cons     ...4555666777777777777665.....
+#=GC RF          xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//
+# STOCKHOLM 1.0
+#=GF ID PIRSR004576-50
+#=GF AC PIRSR004576-50
+#=GF AU hmmsearch (HMMER 3.3)
+
+#=GS 22/47-79 DE [subseq from] 22
+
+22/47-79         ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------KIVFHTLRHTFASHLAINGTPIF
+#=GR 22/47-79 PP .................................................................................................................................................................................6888*******************
+#=GC PP_cons     .................................................................................................................................................................................6888*******************
+#=GC RF          xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+22/47-79         TIQKLMNHKR------------------------------------
+#=GR 22/47-79 PP ********96....................................
+#=GC PP_cons     ********96....................................
+#=GC RF          xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//
+# STOCKHOLM 1.0
+#=GF ID PIRSR016408-1
+#=GF AC PIRSR016408-1
+#=GF AU hmmsearch (HMMER 3.3)
+
+#=GS 19/25-145 DE [subseq from] 19
+
+19/25-145         ---------------------------------------------------------------------------------------------------------------------------------------------------DSKNRYIAYIVKSFSHLK--LENKKFVFDCGNGVAGVVLREILDKLNIKYKIL
+#=GR 19/25-145 PP ...................................................................................................................................................56889************8..99******************************9
+#=GC PP_cons      ...................................................................................................................................................56889************8..99******************************9
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+19/25-145         FEEPDGNFpNHHPDPSDEHTLEDIKKElaTGEFDFGFAYDGDADRIALLSPKYN---FKGDILAIFFSKFIKN-------------------------------------------------------------------------------------------------------------------------------
+#=GR 19/25-145 PP 999988774776655444444444444004455566899*********999999...56***********985...............................................................................................................................
+#=GC PP_cons      99998877.776655444444444444..4455566899*********999999...56***********985...............................................................................................................................
+#=GC RF           xxxxxxxx.xxxxxxxxxxxxxxxxxx..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+19/25-145         ----------------------------------------------------------------------------------
+#=GR 19/25-145 PP ..................................................................................
+#=GC PP_cons      ..................................................................................
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//
+# STOCKHOLM 1.0
+#=GF ID PIRSR016408-2
+#=GF AC PIRSR016408-2
+#=GF AU hmmsearch (HMMER 3.3)
+
+#=GS 19/27-145 DE [subseq from] 19
+
+19/27-145         ---------------------------------------------------------------------------------------------------------------------------------------------------------KNRYIAYIVKSFSHLK--LENKKFVFDCGNGVAGVVLREILDKLNIK
+#=GR 19/27-145 PP .........................................................................................................................................................789************8..99***************************
+#=GC PP_cons      .........................................................................................................................................................789************8..99***************************
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+19/27-145         YKILFEEPD-GNFPNHHPDPSDEHTLEDIKKELATGEFDFGFAYDGDADRIALLSPKYN---FKGDILAIFFSKFIKN--------------------------------------------------------------------------------------------------------------------------
+#=GR 19/27-145 PP *****9955.5588999999889999999999999999999***********9999999...67***********986..........................................................................................................................
+#=GC PP_cons      *****9955.5588999999889999999999999999999***********9999999...67***********986..........................................................................................................................
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+19/27-145         --------------------------------------------------------------------------------------
+#=GR 19/27-145 PP ......................................................................................
+#=GC PP_cons      ......................................................................................
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//
+# STOCKHOLM 1.0
+#=GF ID PIRSR016408-3
+#=GF AC PIRSR016408-3
+#=GF AU hmmsearch (HMMER 3.3)
+
+#=GS 19/26-145 DE [subseq from] 19
+
+19/26-145         --------------------------------------------------------------------------------------------------------------------------------------------------------SKNRYIAYIVKSFSHLK--LENKKFVFDCGNGVAGVVLREILDKLNIK
+#=GR 19/26-145 PP ........................................................................................................................................................4789************8..99***************************
+#=GC PP_cons      ........................................................................................................................................................4789************8..99***************************
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+19/26-145         YKILFEE-PDGNFPNHHPDPSDEHTLEDIKKELATGEFDFGFAYDGDADRIALLSPKYN---FKGDILAIFFSKFIKN--------------------------------------------------------------------------------------------------------------------------
+#=GR 19/26-145 PP *****99.555699**9999999999999999999999999************999999...56***********985..........................................................................................................................
+#=GC PP_cons      *****99.555699**9999999999999999999999999************999999...56***********985..........................................................................................................................
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+19/26-145         --------------------------------------------------------------------------------------
+#=GR 19/26-145 PP ......................................................................................
+#=GC PP_cons      ......................................................................................
+#=GC RF           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//
+# STOCKHOLM 1.0
+#=GF ID PIRSR026583-50
+#=GF AC PIRSR026583-50
+#=GF AU hmmsearch (HMMER 3.3)
+
+#=GS 7/8-138 DE [subseq from] 7
+
+7/8-138         ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------KNDISLVFIDIDNFKDLNDKYGHEVG
+#=GR 7/8-138 PP ..............................................................................................................................................................................55678899******************
+#=GC PP_cons    ..............................................................................................................................................................................55678899******************
+#=GC RF         xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+7/8-138         DKVLKRVAEILKSEIRKTDL-LARWGGEEFIITLVDSNLESsrKITEKLRVLIQADiKLKKIVSQEISASFGLTllEESDSLEKLIARADEAMYKAKDNGKNQVCI----------------------------------------------------------------------------------------------
+#=GR 7/8-138 PP ************99999886.678999************86225889*****887723344456789999998833677899*********************988..............................................................................................
+#=GC PP_cons    ************99999886.678999************86..5889*****8877.33444567899999988..677899*********************988..............................................................................................
+#=GC RF         xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx..xxxxxxxxxxxxx.xxxxxxxxxxxxxxxxx..xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+7/8-138         --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#=GR 7/8-138 PP ........................................................................................................................................................................................................
+#=GC PP_cons    ........................................................................................................................................................................................................
+#=GC RF         xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+7/8-138         ------------------------------------------------------------------
+#=GR 7/8-138 PP ..................................................................
+#=GC PP_cons    ..................................................................
+#=GC RF         xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//

@@ -33,25 +33,25 @@ def has_mixed_dtypes(df:pd.DataFrame):
     return (n_dtypes > 1).sum() > 0
 
 
-def get_dtypes(df:pd.DataFrame):
+def get_dtypes(df:pd.DataFrame, errors:str='warn'):
     dtypes = dict()
     for col in df.columns:
         dtype = df[col].dropna().apply(type).values
-        if len(dtype) == 0:
+        if (len(dtype) == 0) and (erros == 'warn'):
             warnings.warn(f'get_dtypes: Column "{col}" only contains NaNs. Inferring datatype as strings.')
             dtype = [str]
         dtypes[col] = dtype[0]
     return dtypes
 
 
-def fillna(df:pd.DataFrame, rules:dict={bool:False, str:'none', int:0}, check:bool=True):
+def fillna(df:pd.DataFrame, rules:dict={bool:False, str:'none', int:0}, errors='raise'):
     with pd.option_context('future.no_silent_downcasting', True): # Opt-in to future pandas behavior, which will raise a warning if it tries to downcast.
-        for col, dtype in get_dtypes(df).items():
+        for col, dtype in get_dtypes(df, errors=errors).items():
             value = rules.get(dtype, None)
             if value is not None:
                 df[col] = df[col].fillna(rules[dtype]).astype(dtype)
                 # print(f'fillna: Replaced NaNs in column {col} with "{rules[dtype]}."')
-            if check:
+            if errors == 'raise':
                 assert df[col].isnull().sum() == 0, f'fillna: There are still NaNs in column {col}.'
     return df 
 
