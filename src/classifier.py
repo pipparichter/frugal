@@ -65,12 +65,13 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
 class Classifier(torch.nn.Module):
 
-    def __init__(self, dims:tuple=(1024, 512, 2), loss_func_weights:list=None):
+    def __init__(self, dims:tuple=(1024, 512, 2), loss_func_weights:list=None, feature_type:str=None):
 
         super(Classifier, self).__init__()
        
         self.dtype = torch.float32
         self.n_classes = dims[-1]
+        self.feature_type = feature_type
 
         self.model = torch.nn.Sequential(
             torch.nn.Linear(dims[0], dims[1], dtype=self.dtype),
@@ -209,8 +210,6 @@ class Classifier(torch.nn.Module):
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
-        self.weight_loss = weight_loss
-        self.feature_type = datasets.train.feature_type 
         self.sampler = sampler 
 
 
