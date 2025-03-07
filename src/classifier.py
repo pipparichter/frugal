@@ -42,7 +42,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
         
         self.weights = torch.FloatTensor(weights).to(DEVICE)
         self.to(DEVICE) # Not actually sure if this is necessary. 
-
+        print(weights)
         self.user_specified_weights = (weights is not None)
 
     def fit(self, dataset):
@@ -52,6 +52,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
         n_per_class = [(dataset.label == i).sum() for i in range(dataset.n_classes)]
         self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n_per_class]).to(DEVICE)
+        print('using weights', self.weights)
 
     def forward(self, outputs, targets):
   
