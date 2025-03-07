@@ -1,5 +1,0 @@
-
-
-
-class Genome():
-    pass 
