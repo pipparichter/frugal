@@ -123,7 +123,7 @@ class Labeler():
         print(f'Labeler._label_match: {mask.sum()} out of {len(df)} sequences have exact boundary matches.')
         for row in df[mask].itertuples():
             reason = f'exact match with {row.top_hit_protein_id}' 
-            self._add_labeled(row.Index, label='real', category='match', reason=reason)
+            self._add_labeled(row.Index, label='real', category='match', pseudo=False, reason=reason)
 
         df = df[~mask].copy()
         df['score'] = np.round(get_alignment_scores(df), 2)
@@ -131,11 +131,11 @@ class Labeler():
         print(f'Labeler._label_match: {mask.sum()} out of {len(df)} sequences meet the minimum alignment score threshold of {min_score}.')
         for row in df[mask].itertuples():
             reason = f'alignment score {row.score} with {row.top_hit_protein_id}' 
-            self._add_labeled(row.Index, label='real', category='match', reason=reason)
+            self._add_labeled(row.Index, label='real', pseudo=False, category='match', reason=reason)
 
         for row in df[~mask].itertuples():
             reason = f'alignment with {row.top_hit_protein_id} (score={row.score}) did not meet threshold {min_score}' 
-            self._add_unlabeled(row.Index, category='match', reason=reason)
+            self._add_unlabeled(row.Index, category='match', label='none', pseudo=False, reason=reason)
 
     def _label_interpro(self, df:pd.DataFrame, pseudo:bool=False, category:str=None):
 

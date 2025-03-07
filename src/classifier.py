@@ -16,7 +16,8 @@ import matplotlib.pyplot as plt
 import warnings 
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
-# TODO: Why bother scaling the loss function weights by the number of classes?
+# TODO: Why bother scaling the loss function weights by the number of classes? I think it's just a minor thing, so that regardless of the number of
+#   classes, if the dataset is balanced, the inverse frequencies are 1 regardless of the number of classes .
 # TODO: Refresh my memory on cross-entropy loss. 
 # TODO: Find out what the epsilon parameter of the optimizer does. Apparently it's just a small constant added for numerical stability, so there's no division by zero errors. 
 #   I think to fully understand why it's necessary, I'll need to read the Adam paper https://arxiv.org/abs/1412.6980 
@@ -79,7 +80,7 @@ class Classifier(torch.nn.Module):
             layers.append(torch.nn.ReLU()) # Don't want the last activation function in model, softmax is included in the loss function. 
         self.model = torch.nn.Sequential(*layers[:-1]) # Initialize the sequential model. 
 
-        self.loss_func = WeightedCrossEntropyLoss(n_classes=dims[2], weights=loss_func_weights)
+        self.loss_func = WeightedCrossEntropyLoss(n_classes=self.n_classes, weights=loss_func_weights)
         self.scaler = StandardScaler()
         self.to(DEVICE)
 
