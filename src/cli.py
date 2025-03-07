@@ -183,6 +183,8 @@ def train():
     parser.add_argument('--batch-size', default=16, type=int)
 
     args = parser.parse_args()
+    
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
 
     # Parse any specified loss function weights, which should be a comma-separated string of integers.
     loss_func_weights = [int(w) for w in args.loss_func_weights.split(',')] if (args.loss_func_weights is not None) else args.loss_func_weights
@@ -191,7 +193,6 @@ def train():
     assert dims[0] == dataset.n_features, f'train: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
     assert dims[-1] == dataset.n_classes, f'train: Last model dimension {dims[-1]} does not match the number of classes {dataset.n_classes}.'
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
     model = Classifier(dims=dims, loss_func_weights=loss_func_weights, feature_type=args.feature_type)
     # I think I want to split along the genome IDs here as well, possibly even sample to make sure the class distribution is even.
     dataset_train, dataset_test = split(dataset, by='genome_id') 
