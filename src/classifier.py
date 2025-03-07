@@ -65,7 +65,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
 class Classifier(torch.nn.Module):
 
-    def __init__(self, dims:tuple=(1024, 512, 256, 2), loss_func_weights:list=None, feature_type:str=None):
+    def __init__(self, dims:tuple=(1024, 512, 256, 128, 2), loss_func_weights:list=None, feature_type:str=None):
 
         super(Classifier, self).__init__()
        

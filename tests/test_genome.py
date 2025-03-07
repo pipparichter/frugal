@@ -43,8 +43,7 @@ class TestReferenceGenome(unittest.TestCase):
     def test_overlap_is_less_than_query_length(self):
         pass 
 
-    def test_valid_hit_overlap_divisible_by_three_unless_partial(self):
-        pass 
+    def test_
 
 if __name__ == '__main__':
 
