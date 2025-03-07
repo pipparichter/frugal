@@ -51,7 +51,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
             warnings.warn('WeightedCrossEntropyLoss.fit: Fitting the loss function is overriding user-specified weights.')
 
         n_per_class = [(dataset.label == i).sum() for i in range(dataset.n_classes)]
-        self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n]).to(DEVICE)
+        self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n_per_class]).to(DEVICE)
 
     def forward(self, outputs, targets):
   
