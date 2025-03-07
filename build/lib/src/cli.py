@@ -239,6 +239,7 @@ def predict():
             conditions = [(df.model_label == 1) & (df.label == 0), (df.model_label  == 1) & (df.label == 1), (df.model_label == 0) & (df.label == 1), (df.model_label  == 0) & (df.label == 0)]
             choices = ['fp', 'tp', 'fn', 'tn']
             df['model_confusion_matrix'] = np.select(conditions, choices, default='none')
+
             fp, tp, fn, tn = [condition.sum() for condition in conditions]
             print(f'predict: Balanced accuracy {0.5 * (tp / (tp + fn) + (tn / (tn + fp))):.3f}')
             print(f'predict: Recall {tn / (fp + tn):.3f}, {tp / (tp + fn):.3f}')
@@ -257,29 +258,24 @@ def predict():
         print(f'predict: Saved model {model_name} predictions on {args.input_path} to {output_path}')
 
 
-def stats():
+def info():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset-path', type=str, default=None)
     parser.add_argument('--model-path', type=str, default=None)
     args = parser.parse_args()
 
     if args.model_path is not None:
-        model_name = os.path.basename(args.model_path).replace('.pkl', '')
-        model = Classifier.load(args.model_path)
+        model_name = os.path.basename(model_path).replace('.pkl', '')
+        model = Classifier.load(model_path)
 
-        print('stats:', model_name)
-        print('stats:')
-        print('stats: Model dimensions', ' > '.join([str(dims) for dims in model.get_dims()]))
-        print(f'stats: Trained for {model.epochs} epochs with batch size {model.batch_size} and learning rate {model.lr}.')
-        print(f'stats: Used cross-entropy loss with weights', [w.item() for w in model.loss_func.weights])
-        # print(f'stats: Using weights from epoch {model.best_epoch}, selected using metric {model.metric}.')
+        print('info: Model name', model_name)
+        print('info: Model dimensions', ' > '.join([str(dims) for dims in model.get_dims()]))
+        print(f'info: Trained for {model.epochs} epochs with batch size {model.batch_size} and learning rate {model.lr}.')
+        print(f'info: Used cross-entropy loss with weights', model.loss_func.weights)
+        # print(f'info: Using weights from epoch {model.best_epoch}, selected using metric {model.metric}.')
         if model.sampler is not None:
-            print(f'stats: Balanced classes', model.sampler.balance_classes)
-            print(f'stats: Balanced lengths', model.sampler.balance_lengths)
-        metrics = ['test_precision_0', 'test_recall_0', 'test_precision_1', 'test_recall_1', 'test_accuracy']
-        print(f'stats: Metrics')
-        for metric in metrics:
-            print(f'stats:\t{metric} = {model.metrics[metric][model.best_epoch]:.3f}')
+            print(f'info: Balanced classes', model.sampler.balance_classes)
+            print(f'info: Balanced lengths', model.sampler.balance_lengths)
 
 
 def label():
