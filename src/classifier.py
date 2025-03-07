@@ -164,7 +164,7 @@ class Classifier(torch.nn.Module):
         dataset.embedding = torch.FloatTensor(embedding).to(DEVICE) 
         dataset.scaled = True
 
-    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, sampler=None, fit_loss_func:bool=False):
+    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, sampler=None, fit_loss_func:bool=False, metric:str='test_precision_0'):
 
         assert datasets.test.scaled, 'Classifier.fit: The input test Dataset has not been scaled.' 
         assert datasets.train.scaled, 'Classifier.fit: The input train Dataset has not been scaled.'
@@ -199,7 +199,7 @@ class Classifier(torch.nn.Module):
             pbar.set_description(f'Classifier.fit: {metrics}')
             pbar.refresh()
 
-            if self.metrics['test_accuracy'][-1] > max(self.metrics['test_accuracy'][:-1]):
+            if self.metrics[metric][-1] > max(self.metrics[metric][:-1]):
                 best_epoch, best_model_weights = epoch, copy.deepcopy(self.state_dict())
 
         pbar.close()
