@@ -37,13 +37,12 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
         super(WeightedCrossEntropyLoss, self).__init__()
 
+        self.user_specified_weights = (weights is not None)
         weights = [1] * n_classes if (weights is None) else weights
         assert len(weights) == n_classes, f'WeightedCrossEntropyLoss.__init__: Specified weights must be equal to the number of classes, {n_classes}.'
         
         self.weights = torch.FloatTensor(weights).to(DEVICE)
         self.to(DEVICE) # Not actually sure if this is necessary. 
-        print(weights)
-        self.user_specified_weights = (weights is not None)
 
     def fit(self, dataset):
         '''Compute the weights to use based on the inverse frequencies of each class. '''
@@ -52,7 +51,6 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
         n_per_class = [(dataset.label == i).sum() for i in range(dataset.n_classes)]
         self.weights = torch.FloatTensor([(len(dataset) / (n_i * dataset.n_classes)) for n_i in n_per_class]).to(DEVICE)
-        print('using weights', self.weights)
 
     def forward(self, outputs, targets):
   
@@ -66,7 +64,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
 class Classifier(torch.nn.Module):
 
-    def __init__(self, dims:tuple=(1024, 512, 2), loss_func_weights:list=None, feature_type:str=None):
+    def __init__(self, dims:tuple=(1024, 512, 256, 2), loss_func_weights:list=None, feature_type:str=None):
 
         super(Classifier, self).__init__()
        
@@ -74,10 +72,12 @@ class Classifier(torch.nn.Module):
         self.n_classes = dims[-1]
         self.feature_type = feature_type
 
-        self.model = torch.nn.Sequential(
-            torch.nn.Linear(dims[0], dims[1], dtype=self.dtype),
-            torch.nn.ReLU(),
-            torch.nn.Linear(dims[1], dims[2], dtype=self.dtype))
+        layers = list()
+        dims = [(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+        for input_dim, output_dim in dims:
+            layers.append(torch.nn.Linear(input_dim, output_dim, dtype=self.dtype))
+            layers.append(torch.nn.ReLU()) # Don't want the last activation function in model, softmax is included in the loss function. 
+        self.model = torch.nn.Sequential(*layers[:-1]) # Initialize the sequential model. 
 
         self.loss_func = WeightedCrossEntropyLoss(n_classes=dims[2], weights=loss_func_weights)
         self.scaler = StandardScaler()

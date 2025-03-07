@@ -8,9 +8,7 @@ from src import has_mixed_dtypes
 import numpy as np 
 import pandas as pd
 
-# TODO: Test to make sure that every CDS has a "codon_start" qualifier. 
-# TODO: Add tests to make sure the gene boundaries actually result in the provided sequence.
-# TODO: Test to make sure every sequence in the same genome uses the same translation table. 
+
 
 class TestGBFFFile(unittest.TestCase):
 
@@ -88,7 +86,13 @@ class TestGBFFFile(unittest.TestCase):
     def test_all_cds_have_product(self, file):
         df = file.df[file.df.feature == 'CDS']
         self.assertTrue(np.all(df.product != 'none'))
-     
+
+    # Everything that's a coding region, including pseudogenes, should have a specified codon start site.
+    @parameterized.expand(files)
+    def test_all_cds_have_codon_start(self, file):
+        df = file.df[file.df.feature == 'CDS']
+        self.assertTrue(np.all(df.codon_start != 'none'))
+
     @parameterized.expand(files)
     def test_no_psuedo_cds_have_seq(self, file):
         df = file.df[(file.df.feature == 'CDS') & file.df.pseudo]

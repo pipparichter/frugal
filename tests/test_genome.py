@@ -5,20 +5,20 @@ import glob
 from src import has_mixed_dtypes
 from parameterized import parameterized
 
-# TODO: Add tests to make sure the gene boundaries actually result in the provided sequence.
-# TODO: Test that things that are in-frame have high sequence identity when translated. 
-# TODO: Test that all pseudogenes without a homologous sequence used some non-AA seq based evidence. 
 
 class TestReferenceGenome(unittest.TestCase):
 
     summary_paths = sorted(glob.glob('./data/ref/*_summary.csv'))
     results_paths = sorted(glob.glob('./data/ref/*_results.csv'))
-    query_paths = sorted(glob.glob('./data/'))
+    query_paths = sorted(glob.glob('./data/proteins/prodigal/*')) # FASTA files used as queries to the reference. 
 
-    # The summary DataFrame should always have the same length as the query DataFrame. 
+    # The summary DataFrame should always have entries as the query FASTA file. 
     @parameterized.expand(zip(results_paths, summary_paths))
-    def test_summary_and_query_have_same_size(self, summary_path, results_path):
-        pass 
+    def test_summary_and_query_ids_match(self, summary_path, results_path):
+        query_ids = np.array(FASTAFile(path=query_path).ids)
+        summary_ids = pd.read_csv(summary_path, index=0).index.values
+        self.assertTrue(len(summary_ids) == len(query_ids), 'The number of IDs in the query and summary files are not the same.')
+        self.assertTrue(np.all(query_ids == summary_ids), 'The IDs in the query and summary file are not the same.')
     
     # Searching a reference genome against itself should result in all matches.
     def test_self_search_returns_all_matches(self):
