@@ -223,16 +223,30 @@ def predict():
         dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=attrs)
 
         model.scale(dataset, fit=False)
-        labels, outputs = model.predict(dataset, include_outputs=True)
+        model_labels, outputs = model.predict(dataset, include_outputs=True)
 
         df = dict()
-        df[f'{model_name}_label'] = labels
+        df['model_label'] = labels
         df['id'] = dataset.index 
         for i in range(outputs.shape[-1]): # Iterate over the model predictions for each class, which correspond to a "probability."
-            df[f'{model_name}_output_{i}'] = outputs[:, i]
+            df[f'model_output_{i}'] = outputs[:, i]
         for attr in dataset.attrs: # Add all dataset attributes to the DataFrame. 
             df[attr] = getattr(dataset, attr)
         df = pd.DataFrame(df).set_index('id')
+
+        df.to_csv(output_path)
+        if args.load_labels: # If the dataset is labeled, compute and report the balanced accuracy. 
+            conditions = [(df.model_label == 1) & (df.label == 0), (df.model_label  == 1) & (df.label == 1), (df.model_label == 0) & (df.label == 1), (df.model_label  == 0) & (df.label == 0)]
+            choices = ['fp', 'tp', 'fn', 'tn']
+            df['model_confusion_matrix'] = np.select(conditions, choices, default='none')
+
+            fp, tp, fn, tn = [condition.sum() for condition in conditions]
+            print(f'predict: Balanced accuracy {0.5 * (tp / (tp + fn) + (tn / (tn + fp))):.3f}')
+            print(f'predict: Recall {tn / (fp + tn):.3f}, {tp / (tp + fn):.3f}')
+            print(f'predict: Precision {tn / (fn + tn):.3f}, {tp / (tp + fp):.3f}')
+
+        # Rename the generic model columns to the actual model name. 
+        df = df.rename(columns={col:col.replace('model', model_name)})
 
         if os.path.exists(output_path):
             df_ = pd.read_csv(output_path, index_col=0) # Drop any overlapping columns. 
@@ -241,9 +255,27 @@ def predict():
             df = df.merge(df_, left_index=True, right_index=True, how='left')
         
         df.to_csv(output_path)
-        if args.load_labels: # If the dataset is labeled, compute and report the balanced accuracy. 
-            print(f'predict: Balanced accuracy on the input dataset is {model.accuracy(dataset)}')
         print(f'predict: Saved model {model_name} predictions on {args.input_path} to {output_path}')
+
+
+def info():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset-path', type=str, default=None)
+    parser.add_argument('--model-path', type=str, default=None)
+    args = parser.parse_args()
+
+    if args.model_path is not None:
+        model_name = os.path.basename(model_path).replace('.pkl', '')
+        model = Classifier.load(model_path)
+
+        print('info: Model name', model_name)
+        print('info: Model dimensions', ' > '.join([str(dims) for dims in model.get_dims()]))
+        print(f'info: Trained for {model.epochs} epochs with batch size {model.batch_size} and learning rate {model.lr}.')
+        print(f'info: Used cross-entropy loss with weights', model.loss_func.weights)
+        # print(f'info: Using weights from epoch {model.best_epoch}, selected using metric {model.metric}.')
+        if model.sampler is not None:
+            print(f'info: Balanced classes', model.sampler.balance_classes)
+            print(f'info: Balanced lengths', model.sampler.balance_lengths)
 
 
 def label():

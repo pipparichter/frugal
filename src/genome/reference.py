@@ -136,7 +136,7 @@ class ReferenceGenome():
             summary_df = pd.concat([summary_df, pd.DataFrame(index=index, columns=summary_df.columns)])
             summary_df = summary_df.loc[query_df.index] # Make sure the DataFrames are in the same order for convenience.
 
-        return fillna(summary_df, rules={bool:False, str:'none', int:0, float:0}, check=True)
+        return fillna(summary_df, rules={bool:False, str:'none', int:0, float:0}, errors='raise')
 
     def load_homologs(self, dir_:str='../data/proteins/homologs/'):
 

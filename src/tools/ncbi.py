@@ -77,10 +77,11 @@ class NCBIDatasets():
         df = df.set_index('Assembly Accession') 
         df.to_csv(path, sep='\t')
     
-    def _get_genome(self, genome_ids:list, include:list=['gbff', 'genome'], dirs={'genome':'../data/genomes', 'gbff':'../data/proteins/ncbi'}):
+    def _get_genome(self, genome_ids:list, include:list=['gbff', 'genome'], dirs={'genome':'../data/ncbi/genomes', 'gbff':'../data/ncbi/gbffs'}):
 
         pbar = tqdm(genome_ids)
         for genome_id in pbar:
+            pbar.set_description(f'NCBIDatasets._get_genome: Downloading data for {genome_id}.')
             src_paths = [os.path.join(NCBIDatasets.src_dir, genome_id, NCBIDatasets.src_file_names[i]) for i in include]
             dst_paths = [os.path.join(dirs[i], NCBIDatasets.dst_file_names[i].format(genome_id=genome_id)) for i in include]
 
@@ -88,7 +89,6 @@ class NCBIDatasets():
                 continue
 
             cmd = f"datasets download genome accession {genome_id} --filename ncbi.zip --include {','.join(include)} --no-progressbar"
-            pbar.set_description(f'NCBIDatasets._get_genome: Downloading data for {genome_id}.')
             try:
                 subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
                 # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
@@ -96,7 +96,7 @@ class NCBIDatasets():
                 # Unpack the downloaded NCBI data package. 
                 for src_path, dst_path in zip(src_paths, dst_paths):
                     subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except:
+            except Exception as err:
                 print(f'NCBIDatasets._get_genome: Failed to download data for {genome_id}.')
 
     def _get_proteins(self, protein_ids:list, include=['protein'], path:str=None, chunk_size:int=20):

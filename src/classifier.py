@@ -88,6 +88,16 @@ class Classifier(torch.nn.Module):
         self.metrics.update({f'test_precision_{i}':[] for i in range(self.n_classes)})
         self.metrics.update({f'test_recall_{i}':[] for i in range(self.n_classes)})
 
+    def get_dims(self) -> list:
+        '''Get the input and output dimensions of each linear layer.'''
+        dims = list()
+        for param in self.parameters():
+            shape = param.shape
+            if len(shape) == 2: # Activation parameters only have one dimension. 
+                output_dim, input_dim = shape 
+                dims.append((input_dim, output_dim))
+        return dims 
+
 
     def get_metrics(self, dataset, losses:list=None):
         model_labels = self.predict(dataset, include_outputs=False) # Avoid re-computing the model labels for every metric. 
@@ -213,7 +223,7 @@ class Classifier(torch.nn.Module):
         self.batch_size = batch_size
         self.lr = lr
         self.sampler = sampler 
-
+        self.metric = metric 
 
     @classmethod
     def load(cls, path:str):

@@ -121,11 +121,6 @@ def load_predict(path:str, model_name:str=''):
     df = df[cols].copy()
     df = df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
 
-    confusion_matrix = np.where((df.model_label == 1) & (df.label == 0), 'false positive', '')
-    confusion_matrix = np.where((df.model_label  == 1) & (df.label == 1), 'true positive', confusion_matrix)
-    confusion_matrix = np.where((df.model_label == 0) & (df.label == 1), 'false negative', confusion_matrix)
-    confusion_matrix = np.where((df.model_label  == 0) & (df.label == 0), 'true negative', confusion_matrix)
-    df['confusion_matrix'] = confusion_matrix
     df['model_name'] = model_name
 
     return df
@@ -141,7 +136,9 @@ def load_labels(genome_ids:list=None, labels_dir='../data/labels'):
 
 def load_ref(genome_ids:list=None, ref_dir:str='../data/ref', add_labels:bool=True):
     paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids] if (genome_ids is not None) else glob.glob(os.path.join(ref_dir, '*_summary.csv'))
-    ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype={'top_hit_partial':str, 'query_partial':str}) for path in paths], ignore_index=False)
+    # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
+    dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
+    ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=dtypes).assign(genome_id=get_genome_id(path)) for path in paths], ignore_index=False)
     assert ref_df.index.nunique() == len(ref_df), 'load_ref: There are duplicate entries in the ref output DataFrame.'
     if add_labels:
         labels_df = load_labels(genome_ids)

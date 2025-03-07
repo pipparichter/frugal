@@ -254,7 +254,7 @@ class GBFFFile():
                     row_.update(GBFFFile.parse_experiment(experiment))
                     df_.append(row_)
 
-        df_ = fillna(pd.DataFrame(df_), rules={str:'none'}, check=True)
+        df_ = fillna(pd.DataFrame(df_), rules={str:'none'}, errors='raise')
         df_['type'] = pd.Categorical(df_['type'], categories=GBFFFile.evidence_types, ordered=True)
         df_ = df_.sort_values(by=['type'])
         df_ = df_.drop_duplicates(subset=['index'], keep='first') if drop_duplicates else df_
@@ -266,7 +266,7 @@ class GBFFFile():
         evidence_df = GBFFFile.get_evidence(self.df, drop_duplicates=True)
         evidence_df.columns = ['evidence_' + col for col in evidence_df.columns]
         df = self.df.merge(evidence_df, left_index=True, right_index=True, how='left')
-        df[evidence_df.columns] = fillna(df[evidence_df.columns].copy(), rules={str:'none'}, check=True) # Fill the things which became NaN in the merge.
+        df[evidence_df.columns] = fillna(df[evidence_df.columns].copy(), rules={str:'none'}, errors='raise') # Fill the things which became NaN in the merge.
         self.df = df
 
     # I don't actually know if this will work, as we can't know where the frameshift is... but at least get the first part?

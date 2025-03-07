@@ -21,21 +21,19 @@ class TestReferenceGenome(unittest.TestCase):
         self.assertTrue(np.all(query_ids == summary_ids), 'The IDs in the query and summary file are not the same.')
     
     # Searching a reference genome against itself should result in all matches.
-    def test_self_search_returns_all_matches(self):
+    def test_self_search_against_same_genome_returns_all_matches(self):
+        pass 
+
+    def test_all_hits_have_a_top_hit_genome_id(self): # Adding because of a bug I encountered.
         pass 
     
     # I don't think there are any edge cases where this would not be true.
     def test_all_hits_with_aligned_start_codons_are_in_frame(self, df:pd.DataFrame):
         pass 
-
-    def test_n_valid_hits_no_larger_than_n_hits(self):
-        pass 
-
-    def test_n_valid_hits_no_larger_than_n_hits_same_strand(self):
-        pass
-
-    def test_n_valid_hits_is_no_greater_than_one(self):
-        pass  
+    # for path in paths:
+    #     df = pd.read_csv(path)
+    #     df = df[df.n_hits > 0]
+    #     assert df.top_hit_genome_id.nunique() == 1, df.top_hit_genome_id.unique()
 
     def test_overlap_length_is_not_negative(self):
         pass 
@@ -43,7 +41,7 @@ class TestReferenceGenome(unittest.TestCase):
     def test_overlap_is_less_than_query_length(self):
         pass 
 
-    def test_
+
 
 if __name__ == '__main__':
 
