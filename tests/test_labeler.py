@@ -13,6 +13,13 @@ class TestLabeler(unittest.TestCase):
     def test_no_null_entries(self):
         pass 
 
+    def test_all_conflict_have_at_least_one_hit(self):
+        pass 
+    
+    # Based on how I defined "matches," there should be no minimum overlap requirement.
+    def test_no_intergenic_are_in_frame(self):
+        pass 
+
 
 
 

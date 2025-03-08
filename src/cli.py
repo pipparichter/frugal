@@ -278,7 +278,7 @@ def stats():
         print('stats: Model dimensions', ' > '.join([str(dims) for dims in model.get_dims()]))
         print(f'stats: Trained for {model.epochs} epochs with batch size {model.batch_size} and learning rate {model.lr}.')
         print(f'stats: Used cross-entropy loss with weights', [w.item() for w in model.loss_func.weights])
-        # print(f'stats: Using weights from epoch {model.best_epoch}, selected using metric {model.metric}.')
+        print(f'stats: Using weights from epoch {model.best_epoch}, selected using metric {model.metric}.')
         if model.sampler is not None:
             print(f'stats: Balanced classes', model.sampler.balance_classes)
             print(f'stats: Balanced lengths', model.sampler.balance_lengths)
