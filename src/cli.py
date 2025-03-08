@@ -189,7 +189,7 @@ def train():
     # Parse any specified loss function weights, which should be a comma-separated string of integers.
     loss_func_weights = [int(w) for w in args.loss_func_weights.split(',')] if (args.loss_func_weights is not None) else args.loss_func_weights
     
-    dims = [int(d) for d in args.dims.split(',')] if (args.loss_func_weights is not None) else [dataset.n_features, 512, dataset.n_classes]
+    dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
     assert dims[0] == dataset.n_features, f'train: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
     assert dims[-1] == dataset.n_classes, f'train: Last model dimension {dims[-1]} does not match the number of classes {dataset.n_classes}.'
 
