@@ -215,7 +215,7 @@ def predict():
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--model-path', nargs='+', type=str, default=None)
     parser.add_argument('--output-dir', default='./data/predict', type=str)
-    parser.add_argument('--models-dir', default='./models', type=str)
+    # parser.add_argument('--models-dir', default='./models', type=str)
     parser.add_argument('--load-labels', action='store_true')
     args = parser.parse_args()
 
@@ -232,7 +232,7 @@ def predict():
         model_labels, outputs = model.predict(dataset, include_outputs=True)
 
         df = dict()
-        df['model_label'] = labels
+        df['model_label'] = model_labels
         df['id'] = dataset.index 
         for i in range(outputs.shape[-1]): # Iterate over the model predictions for each class, which correspond to a "probability."
             df[f'model_output_{i}'] = outputs[:, i]
