@@ -251,7 +251,7 @@ def predict():
             print(f'predict: Precision {tn / (fn + tn):.3f}, {tp / (tp + fp):.3f}')
 
         # Rename the generic model columns to the actual model name. 
-        df = df.rename(columns={col:col.replace('model', model_name)})
+        df = df.rename(columns={col:col.replace('model', model_name) for col in df.columns})
 
         if os.path.exists(output_path):
             df_ = pd.read_csv(output_path, index_col=0) # Drop any overlapping columns. 
