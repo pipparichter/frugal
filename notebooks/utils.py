@@ -113,16 +113,13 @@ def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata
     return genome_metadata_df.set_index('genome_id')
 
 
-def load_predict(path:str, model_name:str=''):
-
+def load_predict(path:str, model_name:str=None):
     df = pd.read_csv(path, index_col=0)
-
-    cols = [col for col in df.columns if ((model_name in col) or (col == 'label'))]
-    df = df[cols].copy()
-    df = df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
-
-    df['model_name'] = model_name
-
+    if model_name is not None:
+        cols = [col for col in df.columns if ((model_name in col) or (col == 'label'))]
+        df = df[cols].copy()
+        df = df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
+        df['model_name'] = model_name
     return df
 
 
