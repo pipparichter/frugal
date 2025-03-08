@@ -240,7 +240,6 @@ def predict():
             df[attr] = getattr(dataset, attr)
         df = pd.DataFrame(df).set_index('id')
 
-        df.to_csv(output_path)
         if args.load_labels: # If the dataset is labeled, compute and report the balanced accuracy. 
             conditions = [(df.model_label == 1) & (df.label == 0), (df.model_label  == 1) & (df.label == 1), (df.model_label == 0) & (df.label == 1), (df.model_label  == 0) & (df.label == 0)]
             choices = ['fp', 'tp', 'fn', 'tn']
@@ -252,11 +251,9 @@ def predict():
 
         # Rename the generic model columns to the actual model name. 
         df = df.rename(columns={col:col.replace('model', model_name) for col in df.columns})
-        print(df.columns)
 
         if os.path.exists(output_path):
             df_ = pd.read_csv(output_path, index_col=0) # Drop any overlapping columns. 
-            print(df_.columns)
             df_ = df_.drop(columns=df.columns, errors='ignore')
             assert np.all(df_.index == df.index), f'predict: Failed to add new predictions to existing predictions file at {output_path}, indices do not match.'
             df = df.merge(df_, left_index=True, right_index=True, how='left')
