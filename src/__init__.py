@@ -37,7 +37,7 @@ def get_dtypes(df:pd.DataFrame, errors:str='warn'):
     dtypes = dict()
     for col in df.columns:
         dtype = df[col].dropna().apply(type).values
-        if (len(dtype) == 0) and (erros == 'warn'):
+        if (len(dtype) == 0) and (errors == 'warn'):
             warnings.warn(f'get_dtypes: Column "{col}" only contains NaNs. Inferring datatype as strings.')
             dtype = [str]
         dtypes[col] = dtype[0]
