@@ -34,8 +34,8 @@ class Labeler():
         self.genome_id = get_genome_id(path)
 
         self.is_match = lambda df : (df.in_frame & ~df.top_hit_pseudo) | (df.same_strand & df.top_hit_pseudo) 
-        self.is_intergenic = lambda df : (df.overlap_length < max_overlap) & ~is_match(df) # Does not overlap with anything. 
-        self.is_conflict = lambda df : ~is_intergenic(df) & ~is_match(df) # Seems to be in conflict with a real sequence. 
+        self.is_intergenic = lambda df : (df.overlap_length < max_overlap) & ~self.is_match(df) # Does not overlap with anything. 
+        self.is_conflict = lambda df : ~self.is_intergenic(df) & ~self.is_match(df) # Seems to be in conflict with a real sequence. 
 
         dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
         self.df = pd.read_csv(path, dtype=dtypes, index_col=0) # Load in the reference output. 
@@ -164,13 +164,14 @@ class Labeler():
     def _label_conflict(self, df:pd.DataFrame):
         self._label_interpro(df, category='conflict')
 
-    def _label_auto(self, df:pd.DataFrame):
-
-        mask = is_suspect(df)
-        print(f'Labeler.__init__: {mask.sum()} out of {len(self.df)} sequences have suspect top hits and are being removed.')
-        for row in self.df[mask].itertuples():
-            self._add_unlabeled(row.Index, category='none', pseudo=row.top_hit_pseudo, reason='suspect top hit')
-        df = df[~mask].copy()
+    def _label_auto(self, df:pd.DataFrame, remove_suspect:bool=True):
+        
+        if remove_suspect:
+            mask = is_suspect(df)
+            print(f'Labeler.__init__: {mask.sum()} out of {len(self.df)} sequences have suspect top hits and are being removed.')
+            for row in self.df[mask].itertuples():
+                self._add_unlabeled(row.Index, category='none', pseudo=row.top_hit_pseudo, reason='suspect top hit')
+            df = df[~mask].copy()
 
         self.df['match'] = self.is_match(self.df)
         self.df['intergenic'] = self.is_intergenic(self.df)
@@ -216,9 +217,9 @@ class Labeler():
                 self._add_labeled(row.Index, category=category, auto=False, pseudo=row.top_hit_pseudo, reason=f'{reason}', label=label)
                 del self.unlabeled[row.Index]
 
-    def run(self, add_auto_labels:bool=True, add_manual_labels:bool=True):
+    def run(self, add_auto_labels:bool=True, add_manual_labels:bool=True, remove_suspect:bool=True):
         if add_auto_labels: 
-            self._label_auto(self.df)
+            self._label_auto(self.df, remove_suspect=remove_suspect)
         if add_manual_labels:
             print('Labeler.run: Entering manual mode.')
             self._label_manual(self.df[self.df.index.isin(self.needs_manual_validation)])

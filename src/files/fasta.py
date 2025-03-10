@@ -21,7 +21,7 @@ def parser_default(description:str):
 
 
 class FASTAFile():
-    prodigal_dtypes = {'start':int, 'stop':int, 'strand':int, 'gc_content':float}
+    prodigal_dtypes = {'start':int, 'stop':int, 'strand':int, 'gc_content':float, 'rbs_motif':str, 'rbs_spacer':str}
 
     def __init__(self, path:str=None, df:pd.DataFrame=None):
         '''Initialize a FASTAFile object.'''
