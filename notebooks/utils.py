@@ -5,7 +5,7 @@ from src import GTDB_DTYPES
 import os 
 import glob
 from src import *  
-from src.files import GBFFFile, FASTAFile
+from src.files import GBFFFile, FASTAFile, InterProScanFile, BLASTJsonFile
 from tqdm import tqdm 
 import matplotlib.pyplot as plt 
 import warnings
@@ -113,33 +113,64 @@ def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata
     return genome_metadata_df.set_index('genome_id')
 
 
-def load_predict(path:str, model_name:str=None):
-    df = pd.read_csv(path, index_col=0)
-    if model_name is not None:
-        cols = [col for col in df.columns if ((model_name in col) or (col == 'label'))]
-        df = df[cols].copy()
-        df = df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
-        df['model_name'] = model_name
-    return df
+class Results():
+    '''Class for managing loading and merging of results.'''
+    ref_dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
+
+    def __init__(self, genome_ids:list, load_ref:bool=True, load_labels:bool=True, **kwargs):
+        self.genome_ids = genome_ids
+        self.df = None
+        if load_ref:
+            self.load_ref(**kwargs)
+        if load_labels:
+            self.load_labels(**kwargs)
+
+    def add(self, df:pd.DataFrame):
+        if self.df is None:
+            df = df[df.genome_id.isin(self.genome_ids)] # Expecting whatever this is to have a genome ID column. 
+            self.df = df.copy()
+        else:
+            df = df.drop(columns=self.df.columns, errors='ignore')
+            self.df = self.df.merge(df, left_index=True, right_index=True, how='left', validate='one_to_one')
+
+    def load_predict(self, path:str, model_name:str=None):
+        pred_df = pd.read_csv(path, index_col=0)
+        if model_name is not None:
+            cols = [col for col in pred_df.columns if ((model_name in col) or (col == 'label'))]
+            pred_df = pred_df[cols].copy()
+            pred_df = pred_df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
+            pred_df['model_name'] = model_name
+        self.add(pred_df)
+
+    def load_interpro(self, path:str='../data/model_organism_spurious_interpro.tsv'):
+        interpro_df = InterProScanFile(path).to_df(drop_duplicates=True, add_prefix=True)
+        self.add(interpro_df)
+        
+    def load_blast(self, path:str='../data/model_organism_spurious_blast.json'):
+        blast_df = BLASTJsonFile(path).to_df(drop_duplicates=True, add_prefix=True)
+        self.add(blast_df)
+
+    def load_ref(self, ref_dir:str='../data/ref', **kwargs):
+        paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in self.genome_ids]
+        # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
+        ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=Results.ref_dtypes).assign(genome_id=get_genome_id(path)) for path in paths], ignore_index=False)
+        self.add(ref_df)
+
+    def load_labels(self, labels_dir:str='../data/labels', **kwargs):
+        paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in self.genome_ids] 
+        labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in paths])
+        self.add(labels_df)
+
+    def to_df(self, **filters):
+        df = self.df.copy()
+        for col, value in filters.items():
+            df = df[df[col] == value].copy()
+        return df
+
+    def to_fasta(self, path:str, seq_col:str='query_col', **filters):
+        df = self.to_df(**filters)
+        df = df.rename(columns={seq_col:'seq'})
+        FASTAFile(df=df).write(path)
 
 
-def load_labels(genome_ids:list=None, labels_dir='../data/labels'):
-    paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids] if (genome_ids is not None) else glob.glob(os.path.join(labels_dir, '*'))
-    labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in paths])
-
-    assert labels_df.index.duplicated().sum() == 0, 'load_labels: There are duplicate entries in the labels DataFrame.'
-    return labels_df
-
-
-def load_ref(genome_ids:list=None, ref_dir:str='../data/ref', add_labels:bool=True):
-    paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids] if (genome_ids is not None) else glob.glob(os.path.join(ref_dir, '*_summary.csv'))
-    # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
-    dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
-    ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=dtypes).assign(genome_id=get_genome_id(path)) for path in paths], ignore_index=False)
-    assert ref_df.index.nunique() == len(ref_df), 'load_ref: There are duplicate entries in the ref output DataFrame.'
-    if add_labels:
-        labels_df = load_labels(genome_ids)
-        assert len(labels_df) == len(ref_df), 'load_ref: Expected the labels and reference output DataFrames to be the same size.'
-        ref_df = ref_df.merge(labels_df, right_index=True, left_index=True, validate='one_to_one', how='left')
-    return ref_df
 

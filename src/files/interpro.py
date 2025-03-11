@@ -6,31 +6,40 @@ import numpy as np
 
 class InterProScanFile():
 
-    tsv_fields = ['id', 'md5', 'length', 'analysis', 'signature', 'signature_description', 'start', 'stop', 'e_value', 'status', 'date', 'annotation', 'description', 'go_annotation', 'pathways_annotation']
-    tsv_dtypes = {'e_value':float, 'status':bool, 'start':int, 'stop':int, 'length':int}
+    fields = ['id', 'md5', 'length', 'analysis', 'signature', 'signature_description', 'start', 'stop', 'e_value', 'status', 'date', 'annotation', 'description', 'go_annotation', 'pathways_annotation']
+    minimal_fields = ['analysis', 'signature_description', 'e_value', 'annotation', 'description']
+    
+    dtypes = {'e_value':float, 'status':bool, 'start':int, 'stop':int, 'length':int}
     analyses = ['Pfam', 'NCBIfam' 'TIGRFAM', 'Funfam', 'SFLD', 'PANTHER', 'Hamap', 'ProSiteProfiles', 'SMART', 'CDD', 'PRINTS', 'PIRSIR', 'ProSitePatterns', 'Antifam', 'MobiDBLite', 'Gene3D']
+
+    prefix = 'interpro'
     
     def __init__(self, path:str, format_:str='tsv'):
 
-        self.df = pd.read_csv(path, delimiter='\t', names=InterProScanFile.tsv_fields)
+        self.df = pd.read_csv(path, delimiter='\t', names=InterProScanFile.fields)
+        self.df = self.df.set_index('id')
     
-    def to_df(self, max_e_value:float=None, drop_duplicates:bool=False):
+    def to_df(self, max_e_value:float=None, drop_duplicates:bool=False, use_minimal_fields:bool=True, add_prefix:bool=True):
         
         df = self.df.drop(columns=['go_annotation', 'pathways_annotation', 'md5']).copy()
         df['status'] = [True if (status == 'T') else False for status in df.status]
-        df['e_value'] = df.e_value.replace({'-':np.nan}) 
-        df = df.astype(InterProScanFile.tsv_dtypes)
+        df['e_value'] = df.e_value.replace({'-':np.nan})
+        df = df.replace({'-':'none'}) 
+        df = df.astype(InterProScanFile.dtypes)
         df = df.sort_values('e_value', ascending=True) 
 
         if max_e_value is not None:
-            df = df[~df.e_value.isnull()]
-            df = df[df.e_value < max_e_value]
-        if drop_duplicates: 
+            df = df[df.e_value < max_e_value].copy()
+        if drop_duplicates:
             # Because E-values have been sorted, this will keep the hit with the best E-value.
             # NaN is treated as the highest element when sorting, so this will prioritize non-NaN hits.
-            df = df.drop_duplicates('id', keep='first')
+            df = df[~df.index.duplicated(keep='first')]
+        if use_minimal_fields:
+            df = df[InterProScanFile.minimal_fields].copy()
+        if add_prefix:
+            df = df.rename(columns={col:f'{InterProScanFile.prefix}_{col}' for col in df.columns})
 
-        return df.set_index('id')
+        return df
 
     def __len__(self):
         return len(self.df)
