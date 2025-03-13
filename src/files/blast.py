@@ -37,6 +37,7 @@ class BLASTJsonFile():
         # Sorting a boolean array in ascending order will put the True values at the end. 
         mask = df.subject_description.str.lower().str.contains('hypothetical')
         mask = mask | df.subject_description.str.lower().str.contains('uncharacterised')
+        mask = mask | df.subject_description.str.lower().str.contains('uncharacterized')
         return mask 
 
     def __init__(self, path:str):

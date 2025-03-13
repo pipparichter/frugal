@@ -130,8 +130,13 @@ class Results():
             df = df[df.genome_id.isin(self.genome_ids)] # Expecting whatever this is to have a genome ID column. 
             self.df = df.copy()
         else:
-            df = df.drop(columns=self.df.columns, errors='ignore')
-            self.df = self.df.merge(df, left_index=True, right_index=True, how='left', validate='one_to_one')
+            # More complicated merging strategy to allow sequential loading of separate BLAST files without overwriting.
+            shared_cols = np.intersect1d(self.df.columns.values, df.columns.values)
+            df_ = self.df[shared_cols].copy().replace('none', np.nan)
+            df_ = df_.combine_first(df) # This will prioritize existing data. 
+            self.df = self.df.drop(columns=shared_cols)
+            self.df = self.df.merge(df_, left_index=True, right_index=True, how='left', validate='one_to_one')
+            self.df = fillna(self.df, rules={str:'none'}, errors='ignore')
 
     def load_predict(self, path:str, model_name:str=None):
         pred_df = pd.read_csv(path, index_col=0)
@@ -167,7 +172,7 @@ class Results():
             df = df[df[col] == value].copy()
         return df
 
-    def to_fasta(self, path:str, seq_col:str='query_col', **filters):
+    def to_fasta(self, path:str, seq_col:str='query_seq', **filters):
         df = self.to_df(**filters)
         df = df.rename(columns={seq_col:'seq'})
         FASTAFile(df=df).write(path)
