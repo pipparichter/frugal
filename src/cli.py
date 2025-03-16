@@ -128,20 +128,20 @@ def ref():
     print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v1"
+# 
 def train():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--model-name', type=str)
-    parser.add_argument('--output-dir', default='./models', type=str)
+    parser.add_argument('sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train_v201.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v201"--output-dir', default='./models', type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--balance-classes', action='store_true')
     parser.add_argument('--balance-lengths', action='store_true')
     parser.add_argument('--fit-loss-func', action='store_true')
     parser.add_argument('--loss-func-weights', type=str, default=None)
-    parser.add_argument('--dims', type=str, default=None)
-    parser.add_argument('--epochs', default=50, type=int)
+    parser.add_argument('--dims', type=str, default='1280,512,256,2')
+    parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
 
     args = parser.parse_args()
