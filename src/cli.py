@@ -11,7 +11,7 @@ from src.genome import ReferenceGenome
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
-from src.tools import Labeler
+from src.labeler import Labeler
 import re
 import random
 import glob
@@ -176,7 +176,7 @@ def predict():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--model-path', nargs='+', type=str, default=None)
-    parser.add_argument('--output-dir', default='./data/predict', type=str)
+    parser.add_argument('--output-dir', default='./data/', type=str)
     # parser.add_argument('--models-dir', default='./models', type=str)
     parser.add_argument('--load-labels', action='store_true')
     args = parser.parse_args()
