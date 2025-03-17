@@ -1,0 +1,8 @@
+[console_scripts]
+embed = src.cli:embed
+label = src.cli:label
+library = src.cli:library
+predict = src.cli:predict
+ref = src.cli:ref
+stats = src.cli:stats
+train = src.cli:train

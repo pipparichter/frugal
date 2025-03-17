@@ -7,7 +7,7 @@ from src.dataset import Dataset, split, Datasets
 from src.sampler import Sampler
 from src.classifier import Classifier
 import argparse
-from src.genome import ReferenceGenome
+from src.genome import Reference
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
@@ -117,7 +117,7 @@ def ref():
         if os.path.exists(results_output_path) and (not args.overwrite):
             continue
 
-        genome = ReferenceGenome(ref_path, load_homologs=args.load_homologs, homologs_dir=args.homologs_dir)
+        genome = Reference(ref_path, load_homologs=args.load_homologs, homologs_dir=args.homologs_dir)
         query_df = FASTAFile(path=input_path).to_df(prodigal_output=args.prodigal_output)
         results_df, summary_df = genome.search(query_df, verbose=False, summarize=args.summarize)
 
@@ -128,7 +128,7 @@ def ref():
     print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
-# 
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train_v201.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v201"
 def train():
 
     parser = argparse.ArgumentParser()

@@ -12,7 +12,6 @@ import copy
 import pickle
 from sklearn.metrics import balanced_accuracy_score
 import io
-import matplotlib.pyplot as plt
 import warnings 
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
@@ -237,25 +236,4 @@ class Classifier(torch.nn.Module):
             pickle.dump(self, f)
 
 
-    # def plot(self, path:str=None):
-    #     '''Visualize the training curve for the fitted model.'''
-    #     assert self.fitted(), 'Classifier.plot: The model has not yet been fitted.'
-
-    #     fig, ax = plt.subplots()
-    #     handles = list()
-    #     # Plot the training loss for each epoch. 
-    #     handles += ax.plot(np.arange(self.epochs) + 1, self.metrics['train_loss'][1:], color='gray', label='train loss')
-    #     ax.set_ylabel('cross-entropy loss')
-    #     # Plot the accuracy on the validation set. 
-    #     ax = ax.twinx()
-    #     handles += ax.plot(np.arange(self.epochs + 1), self.metrics['test_accuracy'], color='black', label='test acc.')
-    #     ax.set_ylabel('balanced accuracy')
-    #     ax.set_xlabel('epoch')
-    #     handles += [ax.vlines([self.best_epoch], ymin=0, ymax=ax.get_ylim()[-1], ls='--', color='tab:blue', lw=0.7, alpha=0.7, label='best epoch')]
-    #     ax.legend(handles=handles)
-
-    #     if path is not None:
-    #         fig.savefig(path)
-        
-    #     plt.show()
 

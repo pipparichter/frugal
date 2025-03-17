@@ -11,11 +11,7 @@ import re
 #   pseudogenes are being entered as misc_features.  
 
 
-class ReferenceGenome():
-
-    # feature_order = GBFFFile.coding_features + GBFFFile.noncoding_features 
-    # feature_order += [feature for feature in GBFFFile.features if feature not in GBFFFile.coding_features + GBFFFile.noncoding_features]
-    # feature_order = feature_order[::-1] # So that CDS is "biggest" in terms of importance. 
+class Reference():
 
     def __init__(self, path:str, load_homologs:bool=True, homologs_dir:str='../data/proteins/homologs/'):
 
@@ -92,7 +88,7 @@ class ReferenceGenome():
             hit['subject_overlap_fraction'] = hit['overlap_length'] / hit['subject_length'] # Add a one to account for the fact that bounds are inclusive.
             hit['query_overlap_fraction'] = hit['overlap_length'] / hit['query_length']# Add a one to account for the fact that bounds are inclusive.
             hit['exact_match'] = (query.start == subject.start) and (query.stop == subject.stop)
-            hit.update(ReferenceGenome.is_in_frame(query, subject))
+            hit.update(Reference.is_in_frame(query, subject))
             hits_info_df.append(hit)
         hits_info_df = pd.DataFrame(hits_info_df)
         
@@ -103,13 +99,13 @@ class ReferenceGenome():
 
     def search(self, query_df:pd.DataFrame, verbose:bool=True, summarize:bool=True):
         results_df = list()
-        for query in tqdm(list(query_df.itertuples()), desc='ReferenceGenome.search', disable=(not verbose)):
+        for query in tqdm(list(query_df.itertuples()), desc='Reference.search', disable=(not verbose)):
             hits_df = self._get_hits(query) # Get the hit with the biggest overlap, with a preference for "valid" hits.
             if hits_df is not None:
                 results_df.append(hits_df)
 
         results_df = pd.concat(results_df).reset_index(drop=True)
-        summary_df = ReferenceGenome.summarize(query_df, results_df) if summarize else None
+        summary_df = Reference.summarize(query_df, results_df) if summarize else None
         return results_df, summary_df
 
     @staticmethod
@@ -145,15 +141,15 @@ class ReferenceGenome():
 
         path = os.path.join(dir_, f'{self.genome_id}_protein.faa')
         if not os.path.exists(path):    
-            print(f'\nReferenceGenome.load_homologs: No homolog file for genome {self.genome_id} was found in {dir_}')
+            print(f'\nReference.load_homologs: No homolog file for genome {self.genome_id} was found in {dir_}')
             return
         
         homologs_df = FASTAFile(path=path).to_df(prodigal_output=False)
         homologs_df = homologs_df.groupby(homologs_df.index).first() # Drop any duplicates. 
-        print(f'\nReferenceGenome.add_homologs: Loaded {len(homologs_df)} homologs; {self.df.pseudo.sum()} pseudogenes present in the genome.')
+        print(f'\nReference.add_homologs: Loaded {len(homologs_df)} homologs; {self.df.pseudo.sum()} pseudogenes present in the genome.')
         homologs_df.index.name = 'evidence_details'
         homologs_df, _ = homologs_df.align(self.df.set_index('evidence_details'), axis=0, join='right', fill_value='none')
-        assert len(homologs_df) == len(self.df), f'ReferenceGenome.load_homologs: Expected len(homologs_df) == len(self.df), but len(homologs_df) is {len(homologs_df)} and len(self.df) is {len(self.df)}.'
+        assert len(homologs_df) == len(self.df), f'Reference.load_homologs: Expected len(homologs_df) == len(self.df), but len(homologs_df) is {len(homologs_df)} and len(self.df) is {len(self.df)}.'
         self.df['homolog_seq'] = homologs_df.seq.values
         self.df['homolog_id'] = ['none' if (re.match(protein_id_pattern, id_) is None) else id_ for id_ in homologs_df.index]
 
