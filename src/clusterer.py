@@ -19,13 +19,13 @@ class Clusterer():
         embeddings = dataset.embedding.to(torch.float16) # Use half precision to reduce memory. 
         n_dists = (dataset.label == 0).sum() * (dataset.label == 1).sum()
         memory = 2 * n_dists * 1e-9
-        print(f'Clusterer._fit_radius: Computing {n_dists} distances, requiring {memory:.2f} GB.')
+        print(f'Clusterer._fit_radius: Computing {n_dists} distances, requiring {memory:.3f} GB.')
 
         dists = torch.cdist(embeddings[dataset.label == 0], embeddings[dataset.label == 1], p=2) # Compute distances between real and spurious points. 
         radius = min(dists.ravel()).item() # The minimum distance between a real and spurious point. 
         
         print(f'Clusterer._fit_radius: Clustering using neighborhood radius {radius}.')
-        self.radius
+        self.radius = radius
     
     @staticmethod
     def _check_homogenous(dataset, cluster_labels:np.ndarray):
@@ -43,7 +43,7 @@ class Clusterer():
         index = dataset.index
 
         if self.radius is None:
-            self.radius = self._fit_radius(dataset) 
+            self._fit_radius(dataset) 
 
         nearest_neighbors = NearestNeighbors(metric='minkowski', p=2, radius=self.radius)
         nearest_neighbors.fit(embeddings)

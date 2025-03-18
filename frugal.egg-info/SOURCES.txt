@@ -8,8 +8,10 @@ frugal.egg-info/top_level.txt
 src/__init__.py
 src/classifier.py
 src/cli.py
+src/clusterer.py
 src/dataset.py
 src/labeler.py
+src/reference.py
 src/sampler.py
 src/embed/__init__.py
 src/embed/library.py
@@ -22,9 +24,6 @@ src/files/fasta.py
 src/files/gbff.py
 src/files/interpro.py
 src/files/xml.py
-src/genome/__init__.py
-src/genome/base.py
-src/genome/reference.py
 src/tools/__init__.py
 src/tools/mmseqs.py
 src/tools/ncbi.py

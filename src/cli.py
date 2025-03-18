@@ -43,7 +43,7 @@ def cluster():
     clusterer.fit(dataset, check_homogenous=args.check_homogenous)
     clusterer.write(output_path)
 
-    print(f'cluster: {len(dataset)} input sequences sorted into {self.n_clusters} clusters.')
+    print(f'cluster: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
     print(f'cluster: {clusterer.n_singleton_clusters} clusters only contain one sequence.')
     print(f'cluster: Sequence clusters saved to {output_path}')
 

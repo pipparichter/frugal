@@ -1,4 +1,5 @@
 [console_scripts]
+cluster = src.cli:cluster
 embed = src.cli:embed
 label = src.cli:label
 library = src.cli:library
