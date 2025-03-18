@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 import torch
-import src 
-
+from src import get_genome_id
+import os
 from torch.nn.functional import one_hot
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from collections import namedtuple
@@ -45,6 +45,7 @@ class Dataset(torch.utils.data.Dataset):
 
         # I think that prepending an underscore to the attribute name makes the attribute inaccessible from outside the class. 
         if ('label' in self.attrs):
+            print(np.unique(self.label))
             self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
             self._label = torch.from_numpy(self.label).type(torch.LongTensor)
             self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
@@ -112,10 +113,7 @@ def split(dataset:Dataset, test_size:float=0.2, by:str='genome_id'):
     return dataset.subset(idxs_train), dataset.subset(idxs_test)
 
 
-
-def build(name:str, genome_ids:list, output_dir:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', spurious_ids:list=None, version:str=None, max_length:int=2000):
-
-    suffix = f'_{version}' if (version is not None) else ''
+def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', max_length:int=2000, labeled:bool=True):
 
     print(f'build: Loading data from {len(genome_ids)} genomes.')
 
@@ -131,40 +129,74 @@ def build(name:str, genome_ids:list, output_dir:str='../data', ref_dir:str='../d
     df = df.rename(columns={'query_seq':'seq'}) # Need to do this for file writing, etc. to work correctly, 
     df = df.drop(columns=['top_hit_homolog_id', 'top_hit_homolog_seq', 'pseudo'])
 
-    lengths = df.seq.apply(len)
-    print(f'Removing {(lengths >= max_length).sum()} sequences exceeding the maximum length of {max_length}')
-    df = df[lengths < max_length]
+    mask = df.seq.apply(len) < max_length
+    print(f'build: Removing {(~mask).sum()} sequences exceeding the maximum length of {max_length}')
+    df = df[mask].copy()
 
-    if spurious_ids is not None:
-        df.loc[spurious_ids, 'label'] = 'spurious' # Update the labels according to the new output. 
-
-    all_df = df.copy()
-
-    df = df[df.label != 'none'].copy() # Filter out all of the hypothetical proteins with only ab initio evidence. 
-    df['label'] = [0 if (label == 'spurious') else 1 for label in df.label] # Convert labels to integers. 
-    print(f'build: Loaded {len(df)} sequences, {(df.label == 0).sum()} labeled spurious and {(df.label == 1).sum()} labeled real.')
-
-    real_df, spurious_df = df[df.label == 1].copy(), df[df.label == 0].copy()
-    n_real = len(real_df)
-    # Cluster only the real sequences at 50 percent similarity in hopes of better balancing the classes. 
-    mmseqs = MMseqs()
-    real_df = mmseqs.cluster(real_df, job_name=name, sequence_identity=0.50, reps_only=True, overwrite=False)
-    print(f'build: Clustering at 50 percent similarity removed {n_real - len(real_df)} sequences.')
-    mmseqs.cleanup()
-
-    df = pd.concat([spurious_df, real_df], ignore_index=False)
-
-    gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-    train_idxs, test_idxs = list(gss.split(df, groups=df.genome_id))[0]
-    train_df, test_df = df.iloc[train_idxs], df.iloc[test_idxs]
-    print(f'build: {(train_df.label == 0).sum()} negative instances and {(train_df.label == 1).sum()} positive instances in the training dataset.')
-    print(f'build: {(test_df.label == 0).sum()} negative instances and {(test_df.label == 1).sum()} positive instances in the testing dataset.')
-
-    all_df['in_test_dataset'] = all_df.index.isin(test_df.index)
-    all_df['in_train_dataset'] = all_df.index.isin(train_df.index)
+    if labeled:
+        mask = (df.label != 'none')
+        print(f'build: Removing {(~mask).sum()} which have not been assigned a label.')
+        df = df[mask].copy()
+        df['label'] = df.label.map({'spurious':0, 'real':1}) # Convert the remaining labels to integers. 
     
-    train_df.to_csv(os.path.join(output_dir, f'{name}_dataset_train{suffix}.csv'))
-    test_df.to_csv(os.path.join(output_dir, f'{name}_dataset_test{suffix}.csv'))
-    all_df.to_csv(os.path.join(output_dir, f'{name}_dataset_{suffix}.csv'))
+    df.to_csv(output_path)
+        
 
-    return train_df, test_df, all_df 
+        
+
+
+# def build(name:str, genome_ids:list, output_dir:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', spurious_ids:list=None, version:str=None, max_length:int=2000):
+
+#     suffix = f'_{version}' if (version is not None) else ''
+
+#     print(f'build: Loading data from {len(genome_ids)} genomes.')
+
+#     # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
+#     ref_paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids]
+#     ref_dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
+#     ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=ref_dtypes).assign(genome_id=get_genome_id(path)) for path in ref_paths])
+    
+#     labels_paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids] 
+#     labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in labels_paths])
+
+#     df = ref_df.merge(labels_df, left_index=True, right_index=True, validate='one_to_one')
+#     df = df.rename(columns={'query_seq':'seq'}) # Need to do this for file writing, etc. to work correctly, 
+#     df = df.drop(columns=['top_hit_homolog_id', 'top_hit_homolog_seq', 'pseudo'])
+
+#     lengths = df.seq.apply(len)
+#     print(f'Removing {(lengths >= max_length).sum()} sequences exceeding the maximum length of {max_length}')
+#     df = df[lengths < max_length]
+
+#     if spurious_ids is not None:
+#         df.loc[spurious_ids, 'label'] = 'spurious' # Update the labels according to the new output. 
+
+#     all_df = df.copy()
+
+#     df = df[df.label != 'none'].copy() # Filter out all of the hypothetical proteins with only ab initio evidence. 
+#     df['label'] = [0 if (label == 'spurious') else 1 for label in df.label] # Convert labels to integers. 
+#     print(f'build: Loaded {len(df)} sequences, {(df.label == 0).sum()} labeled spurious and {(df.label == 1).sum()} labeled real.')
+
+#     real_df, spurious_df = df[df.label == 1].copy(), df[df.label == 0].copy()
+#     n_real = len(real_df)
+#     # Cluster only the real sequences at 50 percent similarity in hopes of better balancing the classes. 
+#     mmseqs = MMseqs()
+#     real_df = mmseqs.cluster(real_df, job_name=name, sequence_identity=0.50, reps_only=True, overwrite=False)
+#     print(f'build: Clustering at 50 percent similarity removed {n_real - len(real_df)} sequences.')
+#     mmseqs.cleanup()
+
+#     df = pd.concat([spurious_df, real_df], ignore_index=False)
+
+#     gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+#     train_idxs, test_idxs = list(gss.split(df, groups=df.genome_id))[0]
+#     train_df, test_df = df.iloc[train_idxs], df.iloc[test_idxs]
+#     print(f'build: {(train_df.label == 0).sum()} negative instances and {(train_df.label == 1).sum()} positive instances in the training dataset.')
+#     print(f'build: {(test_df.label == 0).sum()} negative instances and {(test_df.label == 1).sum()} positive instances in the testing dataset.')
+
+#     all_df['in_test_dataset'] = all_df.index.isin(test_df.index)
+#     all_df['in_train_dataset'] = all_df.index.isin(train_df.index)
+    
+#     train_df.to_csv(os.path.join(output_dir, f'{name}_dataset_train{suffix}.csv'))
+#     test_df.to_csv(os.path.join(output_dir, f'{name}_dataset_test{suffix}.csv'))
+#     all_df.to_csv(os.path.join(output_dir, f'{name}_dataset_{suffix}.csv'))
+
+#     return train_df, test_df, all_df 
