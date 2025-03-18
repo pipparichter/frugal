@@ -45,7 +45,6 @@ class Dataset(torch.utils.data.Dataset):
 
         # I think that prepending an underscore to the attribute name makes the attribute inaccessible from outside the class. 
         if ('label' in self.attrs):
-            print(np.unique(self.label))
             self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
             self._label = torch.from_numpy(self.label).type(torch.LongTensor)
             self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
@@ -58,8 +57,8 @@ class Dataset(torch.utils.data.Dataset):
         embedding_df = pd.read_hdf(path, key=feature_type)
         metadata_df = pd.read_hdf(path, key='metadata')
 
-        if 'label' in metadata_df.columns: # In case the labels are still strings. 
-            metadata_df['label'] = metadata_df.label.map(Dataset.label_map)
+        # if 'label' in metadata_df.columns: # In case the labels are still strings. 
+        #     metadata_df['label'] = metadata_df.label.map(Dataset.label_map)
 
         assert len(embedding_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
         assert np.all(embedding_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
