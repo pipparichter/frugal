@@ -6,7 +6,7 @@ def get_requirements(path:str=os.path.join(os.path.dirname(os.path.realpath(__fi
         requirements = f.read().splitlines()
     return requirements
 
-commands = ['stats=src.cli:stats', 'library=src.cli:library', 'label=src.cli:label', 'ref=src.cli:ref', 'embed=src.cli:embed', 'train=src.cli:train', 'predict=src.cli:predict']
+commands = ['cluster=src.cli:cluster', 'stats=src.cli:stats', 'library=src.cli:library', 'label=src.cli:label', 'ref=src.cli:ref', 'embed=src.cli:embed', 'train=src.cli:train', 'predict=src.cli:predict']
 
 setuptools.setup(
     name='frugal',
