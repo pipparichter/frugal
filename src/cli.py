@@ -7,11 +7,12 @@ from src.dataset import Dataset, split, Datasets
 from src.sampler import Sampler
 from src.classifier import Classifier
 import argparse
-from src.genome import Reference
+from src.reference import Reference
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
 from src.labeler import Labeler
+from src.clusterer import Clusterer
 import re
 import random
 import glob
@@ -21,7 +22,31 @@ from src import get_genome_id, fillna
 from sklearn.model_selection import GroupShuffleSplit
 from multiprocessing import Pool
 from transformers import logging
+
+
 logging.set_verbosity_error() # Turn off the warning about uninitialized weights. 
+
+
+def cluster():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input-path', type=str)
+    parser.add_argument('--output-path', default=None, type=str)
+    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--check-homogenous', action='store_true')
+    args = parser.parse_args()
+
+    output_path = args.input_path.replace('.h5', '_cluster.csv') if (args.output_path is None) else args.output_path
+
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
+    clusterer = Clusterer()
+    clusterer.fit(dataset, check_homogenous=args.check_homogenous)
+    clusterer.write(output_path)
+
+    print(f'cluster: {len(dataset)} input sequences sorted into {self.n_clusters} clusters.')
+    print(f'cluster: {clusterer.n_singleton_clusters} clusters only contain one sequence.')
+    print(f'cluster: Sequence clusters saved to {output_path}')
+
 
 
 def library():

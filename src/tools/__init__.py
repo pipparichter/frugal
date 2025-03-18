@@ -1,6 +1,6 @@
 from src.tools.prodigal import Prodigal, Pyrodigal
 from src.tools.ncbi import NCBIDatasets
-from src.tools.mmseqs import MMseqs
+from src.tools.mmseqs import MMSeqs
 from src.tools.uniref import UniRef
 from src.files import GBFFFile, FASTAFile
 from src import get_genome_id

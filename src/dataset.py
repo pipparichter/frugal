@@ -29,6 +29,7 @@ Datasets = namedtuple('Datasets', ['train', 'test'])
 # ValueError: given numpy array strides not a multiple of the element byte size. Copy the numpy array to reallocate the memory.
 
 class Dataset(torch.utils.data.Dataset):
+    label_map = {'spurious':0, 'real':1}
 
     def __init__(self, embedding:np.ndarray, index:np.ndarray=None, scaled:bool=False, feature_type:str=None, **kwargs):
 
@@ -55,7 +56,10 @@ class Dataset(torch.utils.data.Dataset):
     def from_hdf(cls, path:str, feature_type:str=None, attrs:list=['genome_id', 'seq', 'label']):
         embedding_df = pd.read_hdf(path, key=feature_type)
         metadata_df = pd.read_hdf(path, key='metadata')
-        
+
+        if 'label' in metadata_df.columns: # In case the labels are still strings. 
+            metadata_df['label'] = metadata_df.label.map(Dataset.label_map)
+
         assert len(embedding_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
         assert np.all(embedding_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
 
@@ -84,7 +88,18 @@ class Dataset(torch.utils.data.Dataset):
 
 
 
-def split(dataset:Dataset, test_size:float=0.2, by:bool='genome_id'):
+def update(path:str, key:str, df:pd.DataFrame):
+
+    store = pd.HDFStore(path)
+    existing_df = store.get(key) # Get the data currently stored in the DataFrame. 
+    assert len(df) == len(existing_df), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
+    assert np.all(df.index == existing_df.index), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
+    
+    store.put(key, df, format='table')
+    store.close()
+
+
+def split(dataset:Dataset, test_size:float=0.2, by:str='genome_id'):
 
     idxs = np.arange(len(dataset))
 

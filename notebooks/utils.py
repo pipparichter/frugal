@@ -125,7 +125,7 @@ class Results():
         if load_labels:
             self.load_labels(**kwargs)
 
-    def add(self, df:pd.DataFrame):
+    def _merge(self, df:pd.DataFrame):
         if self.df is None:
             df = df[df.genome_id.isin(self.genome_ids)] # Expecting whatever this is to have a genome ID column. 
             self.df = df.copy()
@@ -140,31 +140,33 @@ class Results():
 
     def load_predict(self, path:str, model_name:str=None):
         pred_df = pd.read_csv(path, index_col=0)
+        ids = pred_df.index # IDs to keep after merging. 
         if model_name is not None:
             cols = [col for col in pred_df.columns if ((model_name in col) or (col == 'label'))]
             pred_df = pred_df[cols].copy()
             pred_df = pred_df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
             pred_df['model_name'] = model_name
-        self.add(pred_df)
+        self._merge(pred_df)
+        self.df = self.df.loc[ids] # Drop the IDs without predictions. 
 
     def load_interpro(self, path:str='../data/model_organism_spurious_interpro.tsv'):
         interpro_df = InterProScanFile(path).to_df(drop_duplicates=True, add_prefix=True)
-        self.add(interpro_df)
+        self._merge(interpro_df)
         
     def load_blast(self, path:str='../data/model_organism_spurious_blast.json'):
         blast_df = BLASTJsonFile(path).to_df(drop_duplicates=True, add_prefix=True)
-        self.add(blast_df)
+        self._merge(blast_df)
 
     def load_ref(self, ref_dir:str='../data/ref', **kwargs):
         paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in self.genome_ids]
         # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
         ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=Results.ref_dtypes).assign(genome_id=get_genome_id(path)) for path in paths], ignore_index=False)
-        self.add(ref_df)
+        self._merge(ref_df)
 
     def load_labels(self, labels_dir:str='../data/labels', **kwargs):
         paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in self.genome_ids] 
         labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in paths])
-        self.add(labels_df)
+        self._merge(labels_df)
 
     def to_df(self, **filters):
         df = self.df.copy()
@@ -176,6 +178,16 @@ class Results():
         df = self.to_df(**filters)
         df = df.rename(columns={seq_col:'seq'})
         FASTAFile(df=df).write(path)
+
+    @classmethod
+    def concat(cls, r1, r2):
+        genome_ids = list(r1.genome_ids) + list(r2.genome_ids)
+        df = pd.concat([r1.df, r2.df])
+        
+        results = cls(genome_ids, load_labels=False, load_ref=False)
+        results.df = df 
+        return results
+
 
 
 
