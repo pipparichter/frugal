@@ -7,6 +7,8 @@ from torch.nn.functional import one_hot
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from collections import namedtuple
 import copy
+import tables 
+from tqdm import tqdm
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -51,14 +53,30 @@ class Dataset(torch.utils.data.Dataset):
 
     def __len__(self) -> int:
         return len(self.embedding)
+    
+    @staticmethod 
+    def _get_n_rows_hdf(path:str, key:str=None) -> int:
+        f = tables.open_file(path, 'r')
+        n_rows = f.get_node(f'/{key}').table.nrows
+        f.close()
+        return n_rows
+
+    @staticmethod 
+    def _read_hdf(path:str, chunk_size:int=None, key:str='esm_650m_gap') -> pd.DataFrame:
+        if chunk_size is not None: # If chunk size is specified, load in chunks with a progress bar. 
+            n_rows = Dataset._get_n_rows_hdf(path, key=key)
+            n_chunks = n_rows // chunk_size + 1
+            pbar = tqdm(pd.read_hdf(path, key=key, chunksize=chunk_size), total=n_chunks, desc=f'load_hdf: Reading HDF file from {path}')
+            df = [chunk for chunk in pbar]
+            df = pd.concat(df)
+        else:
+            df = pd.read_hdf(path, key=key)
+        return df
 
     @classmethod
     def from_hdf(cls, path:str, feature_type:str=None, attrs:list=['genome_id', 'seq', 'label']):
-        embedding_df = pd.read_hdf(path, key=feature_type)
-        metadata_df = pd.read_hdf(path, key='metadata')
-
-        # if 'label' in metadata_df.columns: # In case the labels are still strings. 
-        #     metadata_df['label'] = metadata_df.label.map(Dataset.label_map)
+        embedding_df = Dataset._read_hdf(path, key=feature_type, chunk_size=100)
+        metadata_df = Dataset._read_hdf(path, key='metadata')
 
         assert len(embedding_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
         assert np.all(embedding_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
