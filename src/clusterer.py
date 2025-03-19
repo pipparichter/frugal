@@ -3,14 +3,15 @@ import numpy as np
 from sklearn.cluster import DBSCAN # , OPTICS
 from sklearn.neighbors import NearestNeighbors
 import torch 
+from scipy.spatial import distance_matrix
 
 
 class Clusterer():
 
-    def __init__(self, radius:float=None):
+    def __init__(self, radius:float=None, min_samples:int=3):
         
-        self.dbscan = DBSCAN(metric='precomputed', min_samples=2) 
-        self.radius = None
+        self.dbscan = DBSCAN(metric='precomputed', min_samples=min_samples) 
+        self.radius = radius 
         self.clusters = None
         self.n_singleton_clusters = None
         self.cluster_map = None
@@ -37,7 +38,20 @@ class Clusterer():
         for cluster_label, cluster_df in df.groupby('cluster_label'):
             assert cluster_df.label.nunique() == 1, f'Clusterer._check_homogenous: Cluster {cluster_label} is not homogenous.'
 
-    def fit(self, dataset, check_homogenous:bool=True):
+    def _get_diameters(self, dataset):
+        df = pd.DataFrame(dataset.embedding, index=dataset.index)
+        df['cluster_label'] = df.index.map(self.cluster_map)
+
+        self.diameters = dict()
+        for cluster_label, cluster_df in df.groupby('cluster_label'):
+            if len(cluster_df) == 1:
+                self.diameters[cluster_label] = 0
+                continue
+
+            dists = distance_matrix(cluster_df.values, cluster_df.values, p=2)
+            self.diameters[cluster_label] = dists.max().item()
+
+    def fit(self, dataset, check_homogenous:bool=True, get_diameters:bool=True):
 
         embeddings = dataset.embedding.to(torch.float16) # Use half precision to reduce memory. 
         index = dataset.index
@@ -57,14 +71,16 @@ class Clusterer():
         max_cluster_label = max(cluster_labels)
         n_outliers = (cluster_labels < 0).sum()
         cluster_labels[cluster_labels < 0] = np.arange(max_cluster_label + 1, max_cluster_label + n_outliers + 1) # Assign cluster labels to the outliers. 
-        
-        if check_homogenous:
-            Clusterer._check_homogenous(dataset, cluster_labels)
 
         self.n_clusters = len(np.unique(cluster_labels))
         self.cluster_map = dict(list(zip(index, cluster_labels)))
         self.clusters = {i:list(index[cluster_labels == i]) for i in range(self.n_clusters)}
         self.n_singleton_clusters = n_outliers
+
+        if check_homogenous:
+            Clusterer._check_homogenous(dataset, cluster_labels)
+        if get_diameters:
+            self._get_diameters(dataset)
 
     def write(self, path:str):
         df = pd.DataFrame.from_dict(self.cluster_map, orient='index', columns=['cluster_label'])
