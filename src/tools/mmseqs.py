@@ -16,9 +16,9 @@ class MMSeqs():
     cluster_fields = ['cluster_rep', 'id']
 
     modules = ['cluster', 'align']
-    prefix = 'MMSeqs'
+    prefix = 'mmseqs'
 
-    def __init__(self, dir_:str='../data/MMSeqs'):
+    def __init__(self, dir_:str='../data/mmseqs'):
 
         # Need a directory to store temporary files. If one does not already exist, create it in the working directory.
         self.tmp_dir = os.path.join(dir_, 'tmp') 
@@ -56,7 +56,7 @@ class MMSeqs():
         return database_dir
 
     def _make_database(self, df:pd.DataFrame, job_name:str=None, overwrite:bool=False):
-        '''Create an MMSeqs database from a FASTA file, using the sequences in the input DataFrame.'''
+        '''Create an mmseqs database from a FASTA file, using the sequences in the input DataFrame.'''
         database_name = f'{job_name}_database'
         database_dir = self._make_database_dir(database_name)
         database_path = os.path.join(database_dir, database_name)
@@ -66,7 +66,7 @@ class MMSeqs():
         if (not os.path.exists(database_path)) or overwrite:
             print(f'MMSeqs._make_database: Creating database {database_name} in {database_dir}')
             FASTAFile(df=df).write(input_path)
-            subprocess.run(f'MMSeqs createdb {input_path} {database_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(f'mmseqs createdb {input_path} {database_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
 
         return database_path 
 
@@ -79,7 +79,7 @@ class MMSeqs():
         input_database_path = self._make_database(df, job_name=job_name)
 
         if (not os.path.exists(output_database_path)) or overwrite:
-            cmd = f'MMSeqs prefilter {input_database_path} {input_database_path} {output_database_path}'
+            cmd = f'mmseqs prefilter {input_database_path} {input_database_path} {output_database_path}'
             if sensitivity is not None:
                 cmd += f' -s {sensitivity}'
             subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
@@ -99,13 +99,13 @@ class MMSeqs():
         
         if (not os.path.exists(output_database_path)) or overwrite:
             print(f'MMSeqs.align: Running alignment on query database {os.path.basename(input_database_path)}.')
-            cmd = f'MMSeqs align {input_database_path} {input_database_path} {prefilter_database_path} {output_database_path}'
+            cmd = f'mmseqs align {input_database_path} {input_database_path} {prefilter_database_path} {output_database_path}'
             cmd += f' -e {max_e_value}'
             subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
         
         # Convert the MMSeqs database output to a TSV file. 
         output_path = os.path.join(output_dir, f'{job_name}_align.tsv')
-        subprocess.run(f'MMSeqs convertalis {input_database_path} {input_database_path} {output_database_path} {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(f'mmseqs convertalis {input_database_path} {input_database_path} {output_database_path} {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
         return output_path
 
     def cluster(self, df:pd.DataFrame, job_name:str=None, output_dir:str=None, sequence_identity:float=0.2, overwrite:bool=False, **kwargs):
@@ -116,7 +116,7 @@ class MMSeqs():
 
         if (not os.path.exists(output_path + '_cluster.tsv')) or overwrite:
             FASTAFile(df=df).write(input_path)
-            subprocess.run(f'MMSeqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}', shell=True, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(f'mmseqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}', shell=True, check=True, stdout=subprocess.DEVNULL)
 
         return output_path + '_cluster.tsv'
 

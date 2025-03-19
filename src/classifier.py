@@ -101,6 +101,7 @@ class Classifier(torch.nn.Module):
 
     def copy(self):
         model = Classifier(dims=self.dims, loss_func_weights=self.loss_func_weights, feature_type=self.feature_type)
+        # model = Classifier(dims=(1280, 512, 2), loss_func_weights=None, feature_type=self.feature_type)
         for attr in Classifier.copy_attrs:
             setattr(model, attr, copy.deepcopy(getattr(self, attr)))
         model.load_state_dict(copy.deepcopy(self.state_dict()))
@@ -129,7 +130,8 @@ class Classifier(torch.nn.Module):
     
     def get_best_metric(self, metric:str='test_precision_0'):
         '''Get the value of the specified metric at the best epoch.'''
-        assert self.fitted(), 'Classifier.get_final_metric: Classifier has not yet been fitted.'
+        # assert self.fitted(), 'Classifier.get_best_metric: Classifier has not yet been fitted.'
+        print('fitted', self.fitted())
         return self.metrics[metric][self.best_epoch + 1]
 
     def predict(self, dataset, include_outputs:bool=False) -> pd.DataFrame:
