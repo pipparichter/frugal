@@ -13,6 +13,7 @@ import pickle
 from sklearn.metrics import balanced_accuracy_score
 import io
 import warnings 
+from src.sampler import Sampler
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes? I think it's just a minor thing, so that regardless of the number of
@@ -64,6 +65,8 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
 class Classifier(torch.nn.Module):
 
+    copy_attrs = ['loss_func', 'scaler', 'epochs', 'metric', 'metrics', 'best_epoch', 'epochs', 'batch_size', 'lr'] # Attributes to port over when copying. 
+
     def __init__(self, dims:tuple=(1024, 512, 256, 128, 2), loss_func_weights:list=None, feature_type:str=None):
 
         super(Classifier, self).__init__()
@@ -71,6 +74,8 @@ class Classifier(torch.nn.Module):
         self.dtype = torch.float32
         self.n_classes = dims[-1]
         self.feature_type = feature_type
+        self.dims = dims 
+        self.loss_func_weights = loss_func_weights
 
         layers = list()
         dims = [(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
@@ -87,16 +92,19 @@ class Classifier(torch.nn.Module):
         self.metrics.update({f'test_precision_{i}':[] for i in range(self.n_classes)})
         self.metrics.update({f'test_recall_{i}':[] for i in range(self.n_classes)})
 
-    def get_dims(self) -> list:
-        '''Get the input and output dimensions of each linear layer.'''
-        dims = list()
-        for param in self.parameters():
-            shape = param.shape
-            if len(shape) == 2: # Activation parameters only have one dimension. 
-                output_dim, input_dim = shape 
-                dims.append((input_dim, output_dim))
-        return dims 
+        # To be populated during model fitting. 
+        self.best_epoch = None
+        self.epochs = None
+        self.batch_size = None
+        self.lr = None
+        self.metric = None 
 
+    def copy(self):
+        model = Classifier(dims=self.dims, loss_func_weights=self.loss_func_weights, feature_type=self.feature_type)
+        for attr in Classifier.copy_attrs:
+            setattr(model, attr, copy.deepcopy(getattr(self, attr)))
+        model.load_state_dict(copy.deepcopy(self.state_dict()))
+        return model
 
     def get_metrics(self, dataset, losses:list=None):
         model_labels = self.predict(dataset, include_outputs=False) # Avoid re-computing the model labels for every metric. 
@@ -113,12 +121,16 @@ class Classifier(torch.nn.Module):
         metrics = [f'{metric}={np.round(self.metrics[metric][-1], 3)}' for metric in metrics]
         return ', '.join(metrics)
 
-
     def forward(self, inputs:torch.FloatTensor):
         return self.model(inputs) 
 
     def fitted(self):
-        return hasattr(self, 'epochs')
+        return (self.epochs is not None)
+    
+    def get_best_metric(self):
+        '''Get the value of the metric which was used to select the best model weights at the best epoch.'''
+        assert self.fitted(), 'Classifier.get_final_metric: Classifier has not yet been fitted.'
+        return self.metrics[self.metric][self.best_epoch]
 
     def predict(self, dataset, include_outputs:bool=False) -> pd.DataFrame:
  
@@ -174,7 +186,7 @@ class Classifier(torch.nn.Module):
         dataset.embedding = torch.FloatTensor(embedding).to(DEVICE) 
         dataset.scaled = True
 
-    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, sampler=None, fit_loss_func:bool=False, metric:str='test_precision_0'):
+    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False, metric:str='test_precision_0'):
 
         assert datasets.test.scaled, 'Classifier.fit: The input test Dataset has not been scaled.' 
         assert datasets.train.scaled, 'Classifier.fit: The input train Dataset has not been scaled.'
@@ -187,7 +199,9 @@ class Classifier(torch.nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
         
-        dataloader = DataLoader(datasets.train, batch_size=batch_size, shuffle=True) if (sampler is None) else DataLoader(datasets.train, batch_sampler=sampler)
+        # Consistently finding that a balanced-class sampler performs the best. 
+        sampler = Sampler(datasets.train, batch_size=batch_size, balance_classes=True, sample_size=20 * len(datasets.train))
+        dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
         self.get_metrics(datasets.test) # Initialize the metrics list. 
 
@@ -213,7 +227,6 @@ class Classifier(torch.nn.Module):
                 best_epoch, best_model_weights = epoch, copy.deepcopy(self.state_dict())
 
         pbar.close()
-        print(f'Classifier.fit: Loading best model weights from epoch {best_epoch}.')
         self.load_state_dict(best_model_weights) # Load the best model weights. 
 
         # Save training parameters in the model. 
@@ -221,7 +234,6 @@ class Classifier(torch.nn.Module):
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
-        self.sampler = sampler 
         self.metric = metric 
 
     @classmethod
@@ -236,4 +248,12 @@ class Classifier(torch.nn.Module):
             pickle.dump(self, f)
 
 
-
+    # def get_dims(self) -> list:
+    #     '''Get the input and output dimensions of each linear layer.'''
+    #     dims = list()
+    #     for param in self.parameters():
+    #         shape = param.shape
+    #         if len(shape) == 2: # Activation parameters only have one dimension. 
+    #             output_dim, input_dim = shape 
+    #             dims.append((input_dim, output_dim))
+    #     return dims 

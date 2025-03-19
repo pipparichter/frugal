@@ -4,11 +4,12 @@ import torch
 from src import get_genome_id
 import os
 from torch.nn.functional import one_hot
-from sklearn.model_selection import train_test_split, GroupShuffleSplit
+from sklearn.model_selection import train_test_split, GroupShuffleSplit, StratifiedShuffleSplit
 from collections import namedtuple
 import copy
 import tables 
 from tqdm import tqdm
+import json
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -105,29 +106,45 @@ class Dataset(torch.utils.data.Dataset):
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
 
 
+class Splitter():
 
-def update(path:str, key:str, df:pd.DataFrame):
+    def __init__(self, dataset:Dataset, n_splits:int=5, test_size:float=0.2, train_size:float=0.8):
 
-    store = pd.HDFStore(path)
-    existing_df = store.get(key) # Get the data currently stored in the DataFrame. 
-    assert len(df) == len(existing_df), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
-    assert np.all(df.index == existing_df.index), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
+        self.stratified_shuffle_split = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, train_size=train_size, random_state=42)
+        idxs = np.arange(len(dataset))
+        self.splits = list(self.stratified_shuffle_split.split(idxs, dataset.label))
+
+        self.i = 0
+        self.n_splits = n_splits 
+        self.train_size = train_size 
+        self.test_size = test_size
+        self.dataset = dataset 
+
+    def __len__(self):
+        return self.n_splits
+
+    def __iter__(self):
+        return self 
     
-    store.put(key, df, format='table')
-    store.close()
+    def __next__(self):
+        if self.i >= self.n_splits:
+            raise StopIteration
+        
+        train_idxs, test_idxs = self.splits[self.i]
+        # datasets = Datasets(self.dataset.subset(train_idxs), self.dataset.subset(test_idxs))
 
-
-def split(dataset:Dataset, test_size:float=0.2, by:str='genome_id'):
-
-    idxs = np.arange(len(dataset))
-
-    if by is not None:
-        gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=42)
-        idxs_train, idxs_test = list(gss.split(idxs, groups=getattr(dataset, by)))[0]
-    else:
-        idxs_train, idxs_test = train_test_split(idxs, test_size=test_size)
+        self.i += 1 # Increment the counter. 
+        return self.dataset.subset(train_idxs), self.dataset.subset(test_idxs) 
     
-    return dataset.subset(idxs_train), dataset.subset(idxs_test)
+    def write(self, path:str):  
+        content = dict()
+        for i, (train_idxs, test_idxs) in enumerate(self.splits):
+            content[i] = {'train_idxs':list(train_idxs), 'test_idxs':list(test_idxs)}
+
+        with open(path, 'w') as f:
+            json.dump(content, f)
+
+
 
 
 def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', max_length:int=2000, labeled:bool=True):
@@ -159,6 +176,16 @@ def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref',
     df.to_csv(output_path)
         
 
+
+# def update(path:str, key:str, df:pd.DataFrame):
+
+#     store = pd.HDFStore(path)
+#     existing_df = store.get(key) # Get the data currently stored in the DataFrame. 
+#     assert len(df) == len(existing_df), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
+#     assert np.all(df.index == existing_df.index), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
+    
+#     store.put(key, df, format='table')
+#     store.close()
         
 
 

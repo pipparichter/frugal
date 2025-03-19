@@ -3,7 +3,7 @@ seed(42) # Make sure everything is random-seeded for reproducibility.
 
 import numpy as np 
 import pandas as pd 
-from src.dataset import Dataset, split, Datasets
+from src.dataset import Dataset, Splitter, Datasets
 from src.sampler import Sampler
 from src.classifier import Classifier
 import argparse
@@ -156,46 +156,48 @@ def ref():
 
 
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train_v201.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v201"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train_v201.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v201"
 def train():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--model-name', type=str)
-    parser.add_argument('sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train_v201.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v201"--output-dir', default='./models', type=str)
+    parser.add_argument('--output-dir', default='./models', type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser.add_argument('--balance-classes', action='store_true')
-    parser.add_argument('--balance-lengths', action='store_true')
-    parser.add_argument('--fit-loss-func', action='store_true')
-    parser.add_argument('--loss-func-weights', type=str, default=None)
     parser.add_argument('--dims', type=str, default='1280,512,256,2')
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
+    parser.add_argument('--n-splits', default=1, type=int)
+    # parser.add_argument('--balance-classes', action='store_true')
+    # parser.add_argument('--balance-lengths', action='store_true')
+    # parser.add_argument('--fit-loss-func', action='store_true')
+    # parser.add_argument('--loss-func-weights', type=str, default=None)
 
     args = parser.parse_args()
     
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
 
-    # Parse any specified loss function weights, which should be a comma-separated string of integers.
-    loss_func_weights = [int(w) for w in args.loss_func_weights.split(',')] if (args.loss_func_weights is not None) else args.loss_func_weights
-    
     dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
     assert dims[0] == dataset.n_features, f'train: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
     assert dims[-1] == dataset.n_classes, f'train: Last model dimension {dims[-1]} does not match the number of classes {dataset.n_classes}.'
 
-    model = Classifier(dims=dims, loss_func_weights=loss_func_weights, feature_type=args.feature_type)
-    # I think I want to split along the genome IDs here as well, possibly even sample to make sure the class distribution is even.
-    dataset_train, dataset_test = split(dataset, by='genome_id') 
-    model.scale(dataset_train, fit=True)
-    model.scale(dataset_test, fit=False)
+    splitter = Splitter(dataset, n_splits=args.n_splits)
+    best_model, best_metric = None, -np.inf
 
-    sampler = None
-    if (args.balance_classes or args.balance_lengths):
-        sampler = Sampler(dataset_train, batch_size=args.batch_size, balance_classes=args.balance_classes, balance_lengths=args.balance_lengths, sample_size=20 * len(dataset_train))
-    
-    model.fit(Datasets(dataset_train, dataset_test), batch_size=args.batch_size, sampler=sampler, epochs=args.epochs, fit_loss_func=args.fit_loss_func)
+    for train_dataset, test_dataset in splitter:
+        model = Classifier(dims=dims, feature_type=args.feature_type)
+        model.scale(train_dataset, fit=True)
+        model.scale(test_dataset, fit=False)
+
+        model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
+        if model.get_best_metric() > best_metric:
+            best_model = model.copy()
+            best_metric = model.get_best_metric()
+            print(f'train: New best model found with {best_model.metric}={best_metric:.2f}, trained for {best_model.best_epoch} epochs.')
+
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
-    model.save(output_path)
-    print(f'train: Saved trained model to {output_path}')
+    best_model.save(output_path)
+    print(f'train: Saved best model to {output_path}')
 
 
 def predict():
