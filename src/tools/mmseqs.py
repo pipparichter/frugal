@@ -131,11 +131,10 @@ class MMSeqs():
         return df
 
     @staticmethod
-    def load_align(path:str, add_prefix:bool=True, **kwargs):
+    def load_align(path:str, add_prefix:bool=False, **kwargs):
         df = pd.read_csv(path, delimiter='\t', names=MMSeqs.align_fields, header=None)
         df = df.set_index('query_id')
 
-        df = df.set_index('id')
         if add_prefix:
             df.columns = [f'{MMSeqs.prefix}_{col}' for col in df.columns]
         return df

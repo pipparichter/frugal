@@ -130,9 +130,9 @@ class Classifier(torch.nn.Module):
     
     def get_best_metric(self, metric:str='test_precision_0'):
         '''Get the value of the specified metric at the best epoch.'''
-        # assert self.fitted(), 'Classifier.get_best_metric: Classifier has not yet been fitted.'
-        print('fitted', self.fitted())
-        return self.metrics[metric][self.best_epoch + 1]
+        metrics = self.metrics[metric]
+        assert len(metrics) > 0, f'Classifier.get_best_metric: There are no stored values for metric {metric}.'
+        return metrics[self.best_epoch]
 
     def predict(self, dataset, include_outputs:bool=False) -> pd.DataFrame:
  
@@ -228,7 +228,7 @@ class Classifier(torch.nn.Module):
             pbar.refresh()
 
             if self.metrics[metric][-1] > max(self.metrics[metric][:-1]):
-                self.best_epoch = epoch
+                self.best_epoch = epoch + 1
                 best_metric = self.get_best_metric(metric=metric)
                 best_model_weights = copy.deepcopy(self.state_dict())
                 print(f'Classifier.fit: New best model weights found after epoch {epoch}, with {metric}={best_metric:.2f}.')
