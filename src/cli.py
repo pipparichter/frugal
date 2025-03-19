@@ -155,8 +155,7 @@ def ref():
     print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train_v201.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v201"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_train_v201.h5 --balance-classes --model-name campylobacterota_esm_650m_gap_v201"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_.h5 --model-name campylobacterota_esm_650m_gap_subset_v201"
 def train():
 
     parser = argparse.ArgumentParser()
@@ -190,9 +189,9 @@ def train():
         model.scale(test_dataset, fit=False)
 
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
-        if model.get_best_metric() > best_metric:
+        if model.get_best_metric(metric=model.metric) > best_metric:
             best_model = model.copy()
-            best_metric = model.get_best_metric()
+            best_metric = model.get_best_metric(metric=model.metric)
             print(f'train: New best model found with {best_model.metric}={best_metric:.2f}, trained for {best_model.best_epoch} epochs.')
 
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')

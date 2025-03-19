@@ -93,7 +93,7 @@ class Classifier(torch.nn.Module):
         self.metrics.update({f'test_recall_{i}':[] for i in range(self.n_classes)})
 
         # To be populated during model fitting. 
-        self.best_epoch = None
+        self.best_epoch = 0
         self.epochs = None
         self.batch_size = None
         self.lr = None
@@ -127,10 +127,10 @@ class Classifier(torch.nn.Module):
     def fitted(self):
         return (self.epochs is not None)
     
-    def get_best_metric(self):
-        '''Get the value of the metric which was used to select the best model weights at the best epoch.'''
+    def get_best_metric(self, metric:str='test_precision_0'):
+        '''Get the value of the specified metric at the best epoch.'''
         assert self.fitted(), 'Classifier.get_final_metric: Classifier has not yet been fitted.'
-        return self.metrics[self.metric][self.best_epoch]
+        return self.metrics[metric][self.best_epoch + 1]
 
     def predict(self, dataset, include_outputs:bool=False) -> pd.DataFrame:
  
@@ -197,6 +197,7 @@ class Classifier(torch.nn.Module):
             self.loss_func.fit(datasets.train) # Set the weights of the loss function.
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
         
         # Consistently finding that a balanced-class sampler performs the best. 
@@ -204,6 +205,7 @@ class Classifier(torch.nn.Module):
         dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
         self.get_metrics(datasets.test) # Initialize the metrics list. 
+        best_model_weights = None
 
         pbar = tqdm(list(range(epochs))) 
         for epoch in pbar:
@@ -224,13 +226,15 @@ class Classifier(torch.nn.Module):
             pbar.refresh()
 
             if self.metrics[metric][-1] > max(self.metrics[metric][:-1]):
-                best_epoch, best_model_weights = epoch, copy.deepcopy(self.state_dict())
+                self.best_epoch = epoch
+                best_metric = self.get_best_metric(metric=metric)
+                best_model_weights = copy.deepcopy(self.state_dict())
+                print(f'Classifier.fit: New best model weights found after epoch {epoch}, with {metric}={best_metric:.2f}.')
 
         pbar.close()
         self.load_state_dict(best_model_weights) # Load the best model weights. 
 
         # Save training parameters in the model. 
-        self.best_epoch = best_epoch
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
