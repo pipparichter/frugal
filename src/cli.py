@@ -33,8 +33,8 @@ def cluster():
     parser.add_argument('--output-path', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--radius', default=0.5, type=float)
-    parser.add_argument('--min-samples', default=50, type=int)
+    parser.add_argument('--radius', default=0.1, type=float)
+    parser.add_argument('--min-samples', default=15, type=int)
     parser.add_argument('--check-homogenous', action='store_true')
     args = parser.parse_args()
 

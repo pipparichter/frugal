@@ -11,10 +11,12 @@ class Clusterer():
     def __init__(self, radius:float=None, min_samples:int=3):
         
         self.dbscan = DBSCAN(metric='precomputed', min_samples=min_samples) 
+        # self.nearest_neighbors = None
         self.radius = radius 
         self.clusters = None
         self.n_singleton_clusters = None
         self.cluster_map = None
+        self.diameters = None
 
     def _fit_radius(self, dataset):
         embeddings = dataset.embedding.to(torch.float16) # Use half precision to reduce memory. 
@@ -85,5 +87,8 @@ class Clusterer():
     def write(self, path:str):
         df = pd.DataFrame.from_dict(self.cluster_map, orient='index', columns=['cluster_label'])
         df.index.name = 'id'
+        if self.diameters is not None:
+            df['cluster_diameter'] = df.cluster_label.map(self.diameters)
+
         df.to_csv(path)
 
