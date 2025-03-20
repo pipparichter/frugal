@@ -164,7 +164,7 @@ class Classifier(torch.nn.Module):
 
         n = ((model_labels == class_) & (labels == class_)).sum()
         N = (labels == class_).sum() # Total number of relevant instances (i.e. members of the class)
-        return n / N
+        return n / N if (N > 0) else 0
 
     def precision(self, dataset, class_:int=0, model_labels:np.ndarray=None):
         '''Compute the precision for a particular class on the input dataset, i.e. the ability of the model
@@ -174,7 +174,7 @@ class Classifier(torch.nn.Module):
 
         n = ((model_labels == class_) & (labels == class_)).sum()
         N = (model_labels == class_).sum() # Total number of retrieved instances (i.e. predicted members of the class)
-        return n / N
+        return n / N if (N > 0) else 0
     
     def scale(self, dataset, fit:bool=True):
         # Repeatedly scaling a Dataset causes problems, though I am not sure why. I would have thought that
