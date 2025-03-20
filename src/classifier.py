@@ -226,7 +226,7 @@ class Classifier(torch.nn.Module):
             pbar.set_description(f'Classifier.fit: {metrics}')
             pbar.refresh()
 
-            if (self.metrics[metric][-1] > max(self.metrics[metric][:-1])) and (epoch > 0):
+            if (self.metrics[metric][-1] > max(self.metrics[metric][:-1])) and (epoch > 10):
                 self.best_epoch = epoch + 1
                 best_metric = self.get_best_metric(metric=metric)
                 best_model_weights = copy.deepcopy(self.state_dict())
