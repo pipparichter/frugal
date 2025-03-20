@@ -200,7 +200,7 @@ class Classifier(torch.nn.Module):
         # test_precision_0_equal = self.get_best_metric('test_precision_0') == model.get_best_metric('test_precision_0')
         # test_recall_0_improved = self.get_best_metric('test_recall_0') > model.get_best_metric('test_recall_0')
         # return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) 
-        return self.get_best('test_accuracy') > self.get_best_metric('test_accuracy')
+        return self.get_best_metric('test_accuracy') > model.get_best_metric('test_accuracy')
 
     def _improved(self, epoch:int, min_epoch:int=10):
         # test_precision_0_improved = self.get_latest_metric('test_precision_0') > self.get_best_metric('test_precision_0')
