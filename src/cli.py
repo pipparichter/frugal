@@ -164,7 +164,7 @@ def train():
     parser.add_argument('--output-dir', default='./models', type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--dims', type=str, default='1280,1024,512,256,128,2')
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=300, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--n-splits', default=1, type=int)
     # parser.add_argument('--balance-classes', action='store_true')
