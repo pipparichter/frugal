@@ -200,14 +200,13 @@ class Classifier(torch.nn.Module):
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         
-        best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
         
         # Consistently finding that a balanced-class sampler performs the best. 
         sampler = Sampler(datasets.train, batch_size=batch_size, balance_classes=True, sample_size=20 * len(datasets.train))
         dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
         self.get_metrics(datasets.test) # Initialize the metrics list. 
-        best_model_weights = None
+        best_model_weights = copy.deepcopy(self.state_dict())
 
         pbar = tqdm(list(range(epochs))) 
         for epoch in pbar:
