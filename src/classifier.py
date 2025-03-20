@@ -233,7 +233,7 @@ class Classifier(torch.nn.Module):
                 best_model_weights = copy.deepcopy(self.state_dict())
                 print(f'Classifier.fit: New best model weights found after epoch {epoch}, with {metric}={best_metric:.2f}.', flush=True)
 
-        pbar.close()
+        # pbar.close()
         self.load_state_dict(best_model_weights) # Load the best model weights. 
 
         # Save training parameters in the model. 
