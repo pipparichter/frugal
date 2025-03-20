@@ -224,7 +224,7 @@ class Classifier(torch.nn.Module):
         sampler = Sampler(datasets.train, batch_size=batch_size, balance_classes=True, sample_size=20 * len(datasets.train))
         dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
-        self.get_metrics(datasets.test) # Initialize the metrics list. 
+        self._update_metrics(datasets.test) # Initialize the metrics list. 
         best_model_weights = copy.deepcopy(self.state_dict())
 
         # pbar = tqdm(list(range(epochs))) 
