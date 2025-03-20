@@ -145,6 +145,12 @@ class Splitter():
             json.dump(content, f)
 
 
+def score(dataset:Dataset):
+    assert hasattr(dataset, 'label')
+
+    embeddings = {i:dataset.embedding.to(torch.float16)[dataset.label == i] for i in range(dataset.n_classes)}
+    indices = {i:dataset.index[dataset.label == i] for i in range(dataset.n_classes)}
+    embeddings = None
 
 
 def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', max_length:int=2000, labeled:bool=True):

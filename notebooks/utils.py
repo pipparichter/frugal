@@ -14,12 +14,6 @@ from Bio.Align import PairwiseAligner
 
 plt.rcParams['font.family'] = 'Arial'
 
-is_n_truncated = lambda df : ((df.query_start > df.top_hit_start) & (df.query_strand == 1)) | ((df.query_stop < df.top_hit_stop) & (df.query_strand == -1)) 
-is_c_truncated = lambda df : ((df.query_stop < df.top_hit_stop) & (df.query_strand == 1)) | ((df.query_start > df.top_hit_start) & (df.query_strand == -1)) 
-is_n_extended = lambda df : ((df.query_start < df.top_hit_start) & (df.query_strand == 1)) | ((df.query_stop > df.top_hit_stop) & (df.query_strand == -1)) 
-is_c_extended = lambda df : ((df.query_stop > df.top_hit_stop) & (df.query_strand == 1)) | ((df.query_start < df.top_hit_start) & (df.query_strand == -1)) 
-
-
 
 def recall(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
     model_labels = (df[f'model_output_{class_}'] > threshold).astype(int)
