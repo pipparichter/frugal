@@ -183,7 +183,7 @@ def train():
     splitter = Splitter(dataset, n_splits=args.n_splits)
     best_model, best_metric = None, -np.inf
     best_split = None
-    for i, train_dataset, test_dataset in enumerate(splitter):
+    for i, (train_dataset, test_dataset) in enumerate(splitter):
         model = Classifier(dims=dims, feature_type=args.feature_type)
         model.scale(train_dataset, fit=True)
         model.scale(test_dataset, fit=False)
