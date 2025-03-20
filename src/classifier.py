@@ -221,9 +221,8 @@ class Classifier(torch.nn.Module):
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         
-        
         # Consistently finding that a balanced-class sampler performs the best. 
-        sampler = Sampler(datasets.train, batch_size=batch_size, balance_classes=True, sample_size=None)
+        sampler = Sampler(datasets.train, batch_size=batch_size, balance_classes=True, sample_size=10 * len(datasets.train))
         dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
         self._update_metrics(datasets.test) # Initialize the metrics list. 
