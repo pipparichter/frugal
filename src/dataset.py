@@ -136,11 +136,11 @@ class Splitter():
         self.i += 1 # Increment the counter. 
         return self.dataset.subset(train_idxs), self.dataset.subset(test_idxs) 
     
-    def write(self, path:str):  
+    def save(self, path:str, best_split:int=None):  
         content = dict()
         for i, (train_idxs, test_idxs) in enumerate(self.splits):
             content[i] = {'train_idxs':list(train_idxs), 'test_idxs':list(test_idxs)}
-
+        content['best_split'] = best_split
         with open(path, 'w') as f:
             json.dump(content, f)
 

@@ -182,8 +182,8 @@ def train():
 
     splitter = Splitter(dataset, n_splits=args.n_splits)
     best_model, best_metric = None, -np.inf
-
-    for train_dataset, test_dataset in splitter:
+    best_split = None
+    for i, train_dataset, test_dataset in enumerate(splitter):
         model = Classifier(dims=dims, feature_type=args.feature_type)
         model.scale(train_dataset, fit=True)
         model.scale(test_dataset, fit=False)
@@ -191,11 +191,15 @@ def train():
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
         if model.get_best_metric(metric=model.metric) > best_metric:
             best_model = model.copy()
+            best_split = i
             best_metric = model.get_best_metric(metric=model.metric)
             print(f'train: New best model found with {best_model.metric}={best_metric:.2f}, trained for {best_model.best_epoch} epochs.')
 
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
+
     best_model.save(output_path)
+    splitter.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
+
     print(f'train: Saved best model to {output_path}')
 
 
