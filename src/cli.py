@@ -189,7 +189,11 @@ def train():
         model.scale(test_dataset, fit=False)
 
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
-        if (model is None) or (model > best_model):
+        if (model is None):
+            best_model = model.copy()
+            best_split = i
+            print(f'train: New best model found.')
+        elif (model > best_model):
             best_model = model.copy()
             best_split = i
             print(f'train: New best model found.')
