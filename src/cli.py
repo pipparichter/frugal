@@ -189,10 +189,10 @@ def train():
         model.scale(test_dataset, fit=False)
 
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
-        if model > best_model:
+        if (model is None) or (model > best_model):
             best_model = model.copy()
             best_split = i
-            print(f'train: New best model found with {best_model.metric}={best_metric:.2f}, trained for {best_model.best_epoch} epochs.')
+            print(f'train: New best model found.')
         print()
 
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
