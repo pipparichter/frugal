@@ -21,6 +21,7 @@ from src.sampler import Sampler
 # TODO: Refresh my memory on cross-entropy loss. 
 # TODO: Find out what the epsilon parameter of the optimizer does. Apparently it's just a small constant added for numerical stability, so there's no division by zero errors. 
 #   I think to fully understand why it's necessary, I'll need to read the Adam paper https://arxiv.org/abs/1412.6980 
+# TODO: Either figure out a different metric, or require both accuracy and precision to meet a certain threshold. 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -208,8 +209,8 @@ class Classifier(torch.nn.Module):
         self.get_metrics(datasets.test) # Initialize the metrics list. 
         best_model_weights = copy.deepcopy(self.state_dict())
 
-        pbar = tqdm(list(range(epochs))) 
-        for epoch in pbar:
+        # pbar = tqdm(list(range(epochs))) 
+        for epoch in range(epochs):
             losses = list() # Re-initialize the epoch loss. 
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 

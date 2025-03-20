@@ -138,9 +138,12 @@ class Splitter():
     
     def save(self, path:str, best_split:int=None):  
         content = dict()
+        # Make sure everything is in the form of normal integers so it's JSON-serializable (not Numpy datatypes).
         for i, (train_idxs, test_idxs) in enumerate(self.splits):
+            train_idxs = [int(idx) for idx in train_idxs]
+            test_idxs = [int(idx) for idx in test_idxs]
             content[i] = {'train_idxs':list(train_idxs), 'test_idxs':list(test_idxs)}
-        content['best_split'] = best_split
+        content['best_split'] = int(best_split)
         with open(path, 'w') as f:
             json.dump(content, f)
 
