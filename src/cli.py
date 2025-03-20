@@ -181,7 +181,7 @@ def train():
     assert dims[-1] == dataset.n_classes, f'train: Last model dimension {dims[-1]} does not match the number of classes {dataset.n_classes}.'
 
     splitter = Splitter(dataset, n_splits=args.n_splits)
-    best_model, best_metric = None, -np.inf
+    best_model = None
     best_split = None
     for i, (train_dataset, test_dataset) in enumerate(splitter):
         model = Classifier(dims=dims, feature_type=args.feature_type)
@@ -189,11 +189,11 @@ def train():
         model.scale(test_dataset, fit=False)
 
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
-        if model.get_best_metric(metric=model.metric) > best_metric:
+        if model > best_model:
             best_model = model.copy()
             best_split = i
-            best_metric = model.get_best_metric(metric=model.metric)
             print(f'train: New best model found with {best_model.metric}={best_metric:.2f}, trained for {best_model.best_epoch} epochs.')
+        print()
 
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
 

@@ -108,7 +108,7 @@ class Classifier(torch.nn.Module):
         model.load_state_dict(copy.deepcopy(self.state_dict()))
         return model
 
-    def get_metrics(self, dataset, losses:list=None):
+    def _update_metrics(self, dataset, losses:list=None):
         model_labels = self.predict(dataset, include_outputs=False) # Avoid re-computing the model labels for every metric. 
 
         if losses is not None: # Only try computing the loss if we are past the first epoch. 
@@ -120,7 +120,7 @@ class Classifier(torch.nn.Module):
             self.metrics[f'test_recall_{i}'] += [self.recall(dataset, model_labels=model_labels, class_=i)]
 
         metrics = ['test_accuracy', 'test_precision_0', 'test_recall_0'] # Metrics to show in the progress bar.
-        metrics = [f'{metric}={np.round(self.metrics[metric][-1], 3)}' for metric in metrics]
+        metrics = [f'{metric}={self.metrics[metric][-1]:.3f}' for metric in metrics]
         return ', '.join(metrics)
 
     def forward(self, inputs:torch.FloatTensor):
@@ -134,6 +134,12 @@ class Classifier(torch.nn.Module):
         metrics = self.metrics[metric]
         assert len(metrics) > 0, f'Classifier.get_best_metric: There are no stored values for metric {metric}.'
         return metrics[self.best_epoch]
+    
+    def get_latest_metric(self, metric:str='test_precision_0'):
+        '''Get the value of the specified metric at the most recent epoch.'''
+        metrics = self.metrics[metric]
+        assert len(metrics) > 0, f'Classifier.get_best_metric: There are no stored values for metric {metric}.'
+        return metrics[-1]
 
     def predict(self, dataset, include_outputs:bool=False) -> pd.DataFrame:
  
@@ -189,7 +195,19 @@ class Classifier(torch.nn.Module):
         dataset.embedding = torch.FloatTensor(embedding).to(DEVICE) 
         dataset.scaled = True
 
-    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False, metric:str='test_precision_0'):
+    def __gt__(self, model):
+        test_precision_0_improved = self.get_best_metric('test_precision_0') > model.get_best_metric('test_precision_0')
+        test_precision_0_equal = self.get_best_metric('test_precision_0') == model.get_best_metric('test_precision_0')
+        test_recall_0_improved = self.get_best_metric('test_recall_0') > model.get_best_metric('test_recall_0')
+        return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) 
+
+    def _improved(self, epoch:int, min_epoch:int=10):
+        test_precision_0_improved = self.get_latest_metric('test_precision_0') > self.get_best_metric('test_precision_0')
+        test_precision_0_equal = self.get_latest_metric('test_precision_0') == self.get_best_metric('test_precision_0')
+        test_recall_0_improved = self.get_latest_metric('test_recall_0') > self.get_best_metric('test_recall_0')
+        return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) and (epoch > min_epoch)
+
+    def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False):
 
         assert datasets.test.scaled, 'Classifier.fit: The input test Dataset has not been scaled.' 
         assert datasets.train.scaled, 'Classifier.fit: The input train Dataset has not been scaled.'
@@ -222,16 +240,16 @@ class Classifier(torch.nn.Module):
                 optimizer.step()
                 optimizer.zero_grad()
             
-            metrics = self.get_metrics(datasets.test, losses=losses)
+            metrics = self._update_metrics(datasets.test, losses=losses)
 
             # pbar.set_description(f'Classifier.fit: {metrics}')
             # pbar.refresh()
 
-            if (self.metrics[metric][-1] > max(self.metrics[metric][:-1])) and (epoch > 10):
+            if self._improved(epoch=epoch):
                 self.best_epoch = epoch + 1
-                best_metric = self.get_best_metric(metric=metric)
+                # best_metric = self.get_best_metric(metric=metric)
                 best_model_weights = copy.deepcopy(self.state_dict())
-                print(f'Classifier.fit: New best model weights found after epoch {epoch}, with {metric}={best_metric:.2f}.', flush=True)
+                print(f'Classifier.fit: New best model weights found after epoch {epoch}. {metrics}', flush=True)
 
         # pbar.close()
         self.load_state_dict(best_model_weights) # Load the best model weights. 
@@ -240,7 +258,6 @@ class Classifier(torch.nn.Module):
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
-        self.metric = metric 
 
     @classmethod
     def load(cls, path:str):

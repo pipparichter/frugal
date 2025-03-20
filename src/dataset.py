@@ -91,6 +91,11 @@ class Dataset(torch.utils.data.Dataset):
     
     def shape(self):
         return self.embedding.shape
+    
+    def to_df(self) -> pd.DataFrame:
+        embedding = copy.deepcopy(self.embedding).cpu().numpy()
+        df = pd.DataFrame(embedding, index=self.index)
+        return df
 
     def __getitem__(self, idx:int) -> dict:
         item = {'embedding':self.embedding[idx], 'idx':idx} # , 'index':[self.index[idx]]}
