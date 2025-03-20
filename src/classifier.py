@@ -224,8 +224,8 @@ class Classifier(torch.nn.Module):
             
             metrics = self.get_metrics(datasets.test, losses=losses)
 
-            pbar.set_description(f'Classifier.fit: {metrics}')
-            pbar.refresh()
+            # pbar.set_description(f'Classifier.fit: {metrics}')
+            # pbar.refresh()
 
             if (self.metrics[metric][-1] > max(self.metrics[metric][:-1])) and (epoch > 10):
                 self.best_epoch = epoch + 1
