@@ -196,16 +196,18 @@ class Classifier(torch.nn.Module):
         dataset.scaled = True
 
     def __gt__(self, model):
-        test_precision_0_improved = self.get_best_metric('test_precision_0') > model.get_best_metric('test_precision_0')
-        test_precision_0_equal = self.get_best_metric('test_precision_0') == model.get_best_metric('test_precision_0')
-        test_recall_0_improved = self.get_best_metric('test_recall_0') > model.get_best_metric('test_recall_0')
-        return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) 
+        # test_precision_0_improved = self.get_best_metric('test_precision_0') > model.get_best_metric('test_precision_0')
+        # test_precision_0_equal = self.get_best_metric('test_precision_0') == model.get_best_metric('test_precision_0')
+        # test_recall_0_improved = self.get_best_metric('test_recall_0') > model.get_best_metric('test_recall_0')
+        # return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) 
+        return self.get_best('test_accuracy') > self.get_best_metric('test_accuracy')
 
     def _improved(self, epoch:int, min_epoch:int=10):
-        test_precision_0_improved = self.get_latest_metric('test_precision_0') > self.get_best_metric('test_precision_0')
-        test_precision_0_equal = self.get_latest_metric('test_precision_0') == self.get_best_metric('test_precision_0')
-        test_recall_0_improved = self.get_latest_metric('test_recall_0') > self.get_best_metric('test_recall_0')
-        return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) and (epoch > min_epoch)
+        # test_precision_0_improved = self.get_latest_metric('test_precision_0') > self.get_best_metric('test_precision_0')
+        # test_precision_0_equal = self.get_latest_metric('test_precision_0') == self.get_best_metric('test_precision_0')
+        # test_recall_0_improved = self.get_latest_metric('test_recall_0') > self.get_best_metric('test_recall_0')
+        # return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) and (epoch > min_epoch)
+        return self.get_latest_metric('test_accuracy') > self.get_best_metric('test_accuracy')
 
     def fit(self, datasets:tuple, epochs:int=10, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False):
 
@@ -250,6 +252,8 @@ class Classifier(torch.nn.Module):
                 # best_metric = self.get_best_metric(metric=metric)
                 best_model_weights = copy.deepcopy(self.state_dict())
                 print(f'Classifier.fit: New best model weights found after epoch {epoch}. {metrics}', flush=True)
+            else:
+                print(f'Classifier.fit: No improvement after epoch {epoch}. {metrics}', flush=True)
 
         # pbar.close()
         self.load_state_dict(best_model_weights) # Load the best model weights. 
