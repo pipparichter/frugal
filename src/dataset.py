@@ -74,7 +74,7 @@ class Dataset(torch.utils.data.Dataset):
         n_rows = Dataset._get_n_rows_hdf(path, key=key)
         if (chunk_size is not None) and (n_rows > 50000): # If chunk size is specified, load in chunks with a progress bar. 
             n_chunks = n_rows // chunk_size + 1
-            pbar = tqdm(pd.read_hdf(path, key=key, chunksize=chunk_size), total=n_chunks, desc=f'load_hdf: Reading HselfDF file from {path}')
+            pbar = tqdm(pd.read_hdf(path, key=key, chunksize=chunk_size), total=n_chunks, desc=f'Dataset._read_hdf: Reading HDF file from {path}')
             df = [chunk for chunk in pbar]
             df = pd.concat(df)
         else:
