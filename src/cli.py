@@ -3,7 +3,7 @@ seed(42) # Make sure everything is random-seeded for reproducibility.
 
 import numpy as np 
 import pandas as pd 
-from src.dataset import Dataset, Splitter, Datasets
+from src.dataset import Dataset, Splitter, Datasets, Pruner
 from src.sampler import Sampler
 from src.classifier import Classifier
 import argparse
@@ -12,7 +12,6 @@ from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
 from src.labeler import Labeler
-from src.clusterer import Clusterer
 import re
 import random
 import glob
@@ -27,28 +26,23 @@ from transformers import logging
 logging.set_verbosity_error() # Turn off the warning about uninitialized weights. 
 
 
-def cluster():
+def prune():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--output-path', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--radius', default=0.25, type=float)
-    parser.add_argument('--min-samples', default=15, type=int)
-    parser.add_argument('--check-homogenous', action='store_true')
+    parser.add_argument('--radius', default=0.1, type=float)
     args = parser.parse_args()
 
-    output_path = args.input_path.replace('.h5', '_cluster.csv') if (args.output_path is None) else args.output_path
+    output_path = args.input_path.replace('.h5', '_dereplicated.h5') if (args.output_path is None) else args.output_path
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
-    clusterer = Clusterer(radius=args.radius, min_samples=args.min_samples)
-    clusterer.fit(dataset, check_homogenous=args.check_homogenous)
-    clusterer.write(output_path)
-
-    print(f'cluster: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
-    print(f'cluster: {clusterer.n_singleton_clusters} clusters only contain one sequence.')
-    print(f'cluster: Sequence clusters saved to {output_path}')
-
+    pruner = Pruner(radius=args.radius)
+    pruner.fit(dataset)
+    dataset = pruner.prune(dataset)
+    print(f'prune: Writing dereplicated Dataset to {output_path}')
+    dataset.write(output_path)
 
 
 def library():
@@ -189,7 +183,7 @@ def train():
         model.scale(test_dataset, fit=False)
 
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
-        
+
         if (best_model is None) or (model > best_model):
             best_model = model.copy()
             best_split = i

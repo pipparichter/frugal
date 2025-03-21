@@ -10,6 +10,13 @@ import copy
 import tables 
 from tqdm import tqdm
 import json
+import pandas as pd 
+import numpy as np 
+# from sklearn.cluster import DBSCAN # , OPTICS
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import pairwise_distances
+
+
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -64,10 +71,10 @@ class Dataset(torch.utils.data.Dataset):
 
     @staticmethod 
     def _read_hdf(path:str, chunk_size:int=None, key:str='esm_650m_gap') -> pd.DataFrame:
-        if chunk_size is not None: # If chunk size is specified, load in chunks with a progress bar. 
-            n_rows = Dataset._get_n_rows_hdf(path, key=key)
+        n_rows = Dataset._get_n_rows_hdf(path, key=key)
+        if (chunk_size is not None) and (n_rows > 50000): # If chunk size is specified, load in chunks with a progress bar. 
             n_chunks = n_rows // chunk_size + 1
-            pbar = tqdm(pd.read_hdf(path, key=key, chunksize=chunk_size), total=n_chunks, desc=f'load_hdf: Reading HDF file from {path}')
+            pbar = tqdm(pd.read_hdf(path, key=key, chunksize=chunk_size), total=n_chunks, desc=f'load_hdf: Reading HselfDF file from {path}')
             df = [chunk for chunk in pbar]
             df = pd.concat(df)
         else:
@@ -106,9 +113,23 @@ class Dataset(torch.utils.data.Dataset):
 
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
-        index = self.index.copy()
+        index = self.index.copy()[idxs]
         kwargs = {attr:getattr(self, attr)[idxs] for attr in self.attrs}
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
+    
+    def write(self, path:str):
+        metadata_df = {attr:getattr(self, attr) for attr in self.attrs}
+        metadata_df = pd.DataFrame(metadata_df, index=self.index)
+        embedding_df = pd.DataFrame(self.embedding.cpu().numpy(), index=self.index)
+
+        assert len(embedding_df) == len(metadata_df), 'Dataset.write: The indices of the embedding and the metadata do not match.'
+        assert np.all(embedding_df.index == metadata_df.index), 'Dataset.write: The indices of the embedding and the metadata do not match.'
+
+        store = pd.HDFStore(path, mode='w')
+        store.put('metadata', metadata_df, format='table')
+        store.put(self.feature_type, embedding_df, format='table')
+        store.close()
+
 
 
 class Splitter():
@@ -153,12 +174,83 @@ class Splitter():
             json.dump(content, f)
 
 
-def score(dataset:Dataset):
-    assert hasattr(dataset, 'label')
 
-    embeddings = {i:dataset.embedding.to(torch.float16)[dataset.label == i] for i in range(dataset.n_classes)}
-    indices = {i:dataset.index[dataset.label == i] for i in range(dataset.n_classes)}
-    embeddings = None
+class Pruner():
+
+    def __init__(self, radius:float=None):
+        
+        self.radius = radius # Radius is inclusive. 
+        self.graph = None 
+        self.neighbor_idxs = None
+        self.remove_ids = None
+        self.keep_ids = None
+        self.remove_idxs = None
+        self.keep_idxs = None
+
+    def _get_row(self, i:int):
+        return np.array([self.graph[i, j] for j in self.neighbor_idxs[i]])
+    
+    def _adjust_graph_weights(self, dataset):
+
+        for i in range(len(dataset)):
+            self.graph[i, i] = np.nan # Don't want to consider distance to self. 
+
+        # Don't want to prune nodes which are radius neighbors, but have opposite labels. 
+        row_idxs = np.repeat(np.arange(self.graph.shape[0]), np.diff(self.graph.indptr)) # Extract row indices from the graph and convert out of CSR format. 
+        col_idxs = self.graph.indices # Extract column indices graph and convert. 
+        row_labels = dataset.label[row_idxs]
+        col_labels = dataset.label[col_idxs]
+        mask = (row_labels != col_labels)
+        if mask.sum() > 0:
+            print(f'Pruner._adjust_graph_weights: Removing {mask.sum()} edges where the endpoint nodes do not have the same label.')
+        for i, j in zip(row_idxs[mask], col_idxs[mask]):
+            # Set distances of opposite-labeled neighboring nodes to be NaNs.
+            self.graph[i, j] = np.nan
+            self.graph[j, i] = np.nan
+
+    def fit(self, dataset):
+
+        embeddings = dataset.embedding.to(torch.float16).numpy() # Use half precision to reduce memory. 
+
+        nearest_neighbors = NearestNeighbors(metric='minkowski', p=2, radius=self.radius)
+        nearest_neighbors.fit(embeddings)
+        
+        self.graph = nearest_neighbors.radius_neighbors_graph(X=embeddings, radius=self.radius, mode='distance', sort_results=True)
+        self.neighbor_idxs = nearest_neighbors.radius_neighbors(embeddings, return_distance=False, radius=self.radius)
+        n_neighbors = np.array([len(idxs) for idxs in self.neighbor_idxs])
+        self._adjust_graph_weights(dataset)
+
+        # dists = pairwise_distances(embeddings, metric='minkowski', p=2)
+        # expected_edges = np.sort(dists[dists <= self.radius].ravel())
+        # expected_n_neighbors = (dists <= self.radius).sum(axis=1).ravel()
+        # assert len(expected_edges) == len(edges), f'Pruner.fit: Expected {len(expected_edges)} edges, but the radius graph has {len(edges)} edges.'
+        # assert np.all(np.round(edges, 3) == np.round(edges, 3)), f'Pruner.fit: The edge weights in the radius graph do not match the expected values.'
+        # assert np.all(expected_n_neighbors == n_neighbors), f'Pruner.fit: The expected number of neighbors per node does not match the expected number of neighbors.'
+
+        idxs = np.arange(len(dataset))[np.argsort(n_neighbors)][::-1]
+        remove_idxs = []
+        for i in idxs:
+            # Want to nullify every point in the graph which has an edge to the node represented by i. 
+            values = self._get_row(i)
+            if np.any(~np.isnan(values)):
+                remove_idxs.append(i.item())
+                for j in self.neighbor_idxs[i]:
+                    self.graph[i, j] = np.nan # Use nan instead of zero so that identical sequences also get removed.
+                    self.graph[j, i] = np.nan 
+        remove_idxs = np.array(remove_idxs)
+
+        assert np.all(np.isnan(self.graph.data.ravel())), 'Pruner.fit: There are still non-NaN elements in the graph.'
+        
+        self.remove_idxs = remove_idxs
+        self.remove_ids = dataset.index[remove_idxs]
+        self.keep_ids = dataset.index[~np.isin(dataset.index, self.remove_ids)]
+        self.keep_idxs = np.array([idx for idx in range(len(dataset)) if (idx not in remove_idxs)])
+
+    def prune(self, dataset):
+        print(f'Pruner.prune: Removing {len(self.remove_ids)} sequences from the input Dataset.')
+        print(f'Pruner.prune: {len(self.keep_ids)} sequences remaining.')
+        return dataset.subset(self.keep_idxs)
+        
 
 
 def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', max_length:int=2000, labeled:bool=True):

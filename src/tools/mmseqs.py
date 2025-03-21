@@ -31,7 +31,7 @@ class MMSeqs():
         
         self.cleanup_files = []
 
-    def run(self, df:pd.DataFrame, job_name:str=None, output_dir:str=None, module:str='cluster', **kwargs) -> str:
+    def run(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data', module:str='cluster', **kwargs) -> str:
 
         funcs = {'cluster':self.cluster, 'align':self.align}
         load_funcs = {'cluster':MMSeqs.load_cluster, 'align':MMSeqs.load_align}
