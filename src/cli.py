@@ -311,42 +311,37 @@ def label():
 
 
 
-# # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 500GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed --input-path ./data/filter_dataset_train.csv"
-# def embed():
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 500GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed --input-path ./data/filter_dataset_train.csv"
+def embed():
 
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('--input-path', type=str)
-#     parser.add_argument('--output-path', default=None, type=str)
-#     parser.add_argument('--feature-type', nargs='+', default=['esm_650m_gap', 'esm_3b_gap', 'pt5_3b_gap'], type=str)
-#     parser.add_argument('--overwrite', action='store_true')
-#     parser.add_argument('--library-dir', default='../data/embeddings')
-#     args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input-path', type=str)
+    parser.add_argument('--output-path', default=None, type=str)
+    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    args = parser.parse_args()
 
-#     output_path = args.output_path if (args.output_path is not None) else args.input_path.replace('.csv', '.h5')
+    output_path = args.output_path if (args.output_path is not None) else args.input_path.replace('.csv', '.h5')
 
-#     # Sort the sequences in order of length, so that the longest sequences are first. This is so that the 
-#     # embedder works more efficiently, and if it fails, it fails early in the embedding process.
-#     df = pd.read_csv(args.input_path, index_col=0)
-#     df = df.iloc[np.argsort(df.seq.apply(len))[::-1]]
+    # Sort the sequences in order of length, so that the longest sequences are first. This is so that the 
+    # embedder works more efficiently, and if it fails, it fails early in the embedding process.
+    df = pd.read_csv(args.input_path, index_col=0)
+    df = df.iloc[np.argsort(df.seq.apply(len))[::-1]]
 
-#     store = pd.HDFStore(output_path, mode='a' if (not args.overwrite) else 'w', table=True) # Should confirm that the file already exists. 
-#     existing_keys = [key.replace('/', '') for key in store.keys()]
+    store = pd.HDFStore(output_path, mode='a', table=True) # Should confirm that the file already exists. 
+    existing_keys = [key.replace('/', '') for key in store.keys()]
 
-#     if 'metadata' in existing_keys:
-#         df_ = store.get('metadata') # Load existing metadata. 
-#         assert np.all(df.index == df_.index), 'embed: The input metadata and existing metadata do not match.'
-#     else: # Storing in table format means I can add to the file later on. 
-#         df = fillna(df, rules={str:'none', bool:False}, check=False)
-#         store.put('metadata', df, format='table', data_columns=None)
+    if 'metadata' in existing_keys:
+        df_ = store.get('metadata') # Load existing metadata. 
+        assert np.all(df.index == df_.index), 'embed: The input metadata and existing metadata do not match.'
+    else: # Storing in table format means I can add to the file later on. 
+        store.put('metadata', df, format='table', data_columns=None)
 
-#     for feature_type in args.feature_type:
-#         if (feature_type not in existing_keys) or (overwrite):
-#             print(f'embed: Generating embeddings for {feature_type}.')
-#             embedder = get_embedder(feature_type)
-#             embeddings = embedder(df.seq.values.tolist())
-#             store.put(feature_type, pd.DataFrame(embeddings, index=df.index), format='table', data_columns=None) 
-
-#     store.close()
+    print(f'embed: Generating embeddings for {args.feature_type}.')
+    embedder = get_embedder(args.feature_type)
+    embeddings = embedder(df.seq.values.tolist())
+    store.put(args.feature_type, pd.DataFrame(embeddings, index=df.index), format='table', data_columns=None) 
+    store.close()
+    print(f'embed: Embeddings saved to {output_path}.')
 
 
 
