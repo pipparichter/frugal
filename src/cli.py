@@ -187,7 +187,9 @@ def train():
         if (best_model is None) or (model > best_model):
             best_model = model.copy()
             best_split = i
-            print(f'train: New best model found.')
+            splitter.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
+            best_model.save(output_path)
+            print(f'train: New best model found. Saved to {output_path}.')
         print()
 
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')

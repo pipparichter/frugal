@@ -131,10 +131,11 @@ class Dataset(torch.utils.data.Dataset):
         store.close()
 
 
+# I wonder if I should be smarter about how I split the dataset. 
 
 class Splitter():
 
-    def __init__(self, dataset:Dataset, n_splits:int=5, test_size:float=0.2, train_size:float=0.8):
+    def __init__(self, dataset:Dataset, n_splits:int=5, test_size:float=0.1, train_size:float=0.9):
 
         self.stratified_shuffle_split = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, train_size=train_size, random_state=42)
         idxs = np.arange(len(dataset))
