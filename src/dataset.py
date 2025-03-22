@@ -212,9 +212,11 @@ class Pruner():
 
         embeddings = dataset.embedding.to(torch.float16).numpy() # Use half precision to reduce memory. 
 
+        print(f'Pruner.fit: Fitting the NearestNeighbors object with radius {self.radius}.')
         nearest_neighbors = NearestNeighbors(metric='minkowski', p=2, radius=self.radius)
         nearest_neighbors.fit(embeddings)
         
+        print(f'Pruner.fit: Building the radius neighborhs graph.')
         self.graph = nearest_neighbors.radius_neighbors_graph(X=embeddings, radius=self.radius, mode='distance', sort_results=True)
         self.neighbor_idxs = nearest_neighbors.radius_neighbors(embeddings, return_distance=False, radius=self.radius)
         n_neighbors = np.array([len(idxs) for idxs in self.neighbor_idxs])
@@ -229,7 +231,7 @@ class Pruner():
 
         idxs = np.arange(len(dataset))[np.argsort(n_neighbors)][::-1]
         remove_idxs = []
-        for i in idxs:
+        for i in tqdm(idxs, desc='Pruner.fit: Pruning radius neighbors graph.'):
             # Want to nullify every point in the graph which has an edge to the node represented by i. 
             values = self._get_row(i)
             if np.any(~np.isnan(values)):

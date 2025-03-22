@@ -87,7 +87,7 @@ class MMSeqs():
         return output_database_path
 
 
-    def align(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data/', overwrite:bool=False, sensitivity:float=None, max_e_value:float=1e-3, **kwargs):
+    def align(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data/', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10, **kwargs):
         # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
         
         input_database_path = self._make_database(df, job_name=job_name)
