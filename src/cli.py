@@ -167,7 +167,8 @@ def train():
     # parser.add_argument('--loss-func-weights', type=str, default=None)
 
     args = parser.parse_args()
-    
+    output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
+
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
 
     dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
@@ -191,8 +192,6 @@ def train():
             best_model.save(output_path)
             print(f'train: New best model found. Saved to {output_path}.')
         print()
-
-    output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
 
     best_model.save(output_path)
     splitter.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
