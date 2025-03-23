@@ -32,20 +32,28 @@ class EmbeddingLibrary():
 
     def add(self, genome_id:str, df:pd.DataFrame):
 
+        mode, header = 'w', True
         path = os.path.join(self.dir_, f'{genome_id}_embedding.csv')
-        if os.path.exists(path):
-            print(f'EmbeddingLibrary.add: File {path} already exists in the library.')
-            return 
 
-        embeddings = self.embedder(df.seq.values.tolist())
-        embeddings_df = pd.DataFrame(embeddings, index=df.index)
-        embeddings_df.to_csv(path)
+        if os.path.exists(path):
+            existing_ids = pd.read_csv(path, usecols=['id']).values.ravel()
+            df = df[~df.index.isin(existing_ids)].copy()
+            if len(df) == 0:
+                print(f'EmbeddingLibrary.add: File {path} already exists in embedding library. No new embeddings to add to the file.')
+                return 
+            print(f'EmbeddingLibrary.add: File {path} already exists in embedding library. Adding {len(df)} new embeddings to the file.')
+            mode, header = 'a', False # Switch to append mode, and don't write the header. 
+        
+        embeddings = self.embedder(df.seq.values.tolist()) # 
+        embedding_df = pd.DataFrame(embeddings, index=df.index)
+        embedding_df.index.name = 'id'
+        embedding_df.to_csv(path, mode=mode, header=header)
 
     def get(self, genome_id:str, ids:list=None):
         
         path = os.path.join(self.dir_, f'{genome_id}_embedding.csv')
-        embeddings_df = pd.read_csv(path, index_col=0)
-        return embeddings_df.loc[ids, :].copy() if (ids is not None) else embeddings_df
+        embedding_df = pd.read_csv(path, index_col=0)
+        return embedding_df.loc[ids, :].copy() if (ids is not None) else embedding_df
 
 
 def add(lib:EmbeddingLibrary, *paths:list):

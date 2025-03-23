@@ -102,6 +102,7 @@ class Dataset(torch.utils.data.Dataset):
     def to_df(self) -> pd.DataFrame:
         embedding = copy.deepcopy(self.embedding).cpu().numpy()
         df = pd.DataFrame(embedding, index=self.index)
+        df = df[~df.index.duplicated(keep='first')].copy()
         return df
 
     def __getitem__(self, idx:int) -> dict:
@@ -110,6 +111,12 @@ class Dataset(torch.utils.data.Dataset):
             item['label'] = self._label[idx]
             item['label_one_hot_encoded'] = self._label_one_hot_encoded[idx]
         return item
+
+    def set_attr(self, attr:str, values:pd.Series):
+        assert len(values) == len(self), 'Dataset.set_attr: The length of the attribute values does not match the length of the dataset.'
+        values = values.loc[self.index] # Make sure the index in the series is the same as that of the DataFrame. 
+        self.attrs.append(attr)
+        setattr(self, attr, values.values)
 
     def subset(self, idxs):
         embedding = self.embedding.cpu().numpy()[idxs, :].copy()  

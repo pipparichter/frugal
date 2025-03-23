@@ -97,7 +97,7 @@ class NCBIDatasets():
                 for src_path, dst_path in zip(src_paths, dst_paths):
                     subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as err:
-                print(f'NCBIDatasets._get_genome: Failed to download data for {genome_id}.')
+                print(f'NCBIDatasets._get_genome: Failed to download data for {genome_id}. Returned error message "{err}"')
 
     def _get_proteins(self, protein_ids:list, include=['protein'], path:str=None, chunk_size:int=20):
         # Need to break into chunks because the API doesn't support more than a handful of sequences. 
