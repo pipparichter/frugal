@@ -1,6 +1,6 @@
 import pandas as pd 
 import numpy as np 
-from src import get_entry_name
+from src import get_genome_id
 from src.embed.embedders import get_embedder
 from src.files import FASTAFile
 import os 
@@ -64,7 +64,7 @@ class EmbeddingLibrary():
 def add(lib:EmbeddingLibrary, *paths:list):
     # Expects the input directory to contain a bunch of FASTA protein files.
     for path in paths:
-        entry_name  = get_entry_name(path, errors='ignore', default=os.path.basename(path).split('.')[0])
+        entry_name  = get_genome_id(path, errors='ignore', default=os.path.basename(path).split('.')[0])
         try:
             print(f'add: Generating embeddings for {name}.')
             df = FASTAFile(path=path).to_df(prodigal_output=False) # Don't need to parse the Prodigal output, as we just want the sequences.
