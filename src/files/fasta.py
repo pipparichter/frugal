@@ -61,8 +61,8 @@ class FASTAFile():
             df = df.astype(FASTAFile.prodigal_dtypes)
         return df
 
-    def write(self, path:str) -> NoReturn:
-        f = open(path, 'w')
+    def write(self, path:str, mode:str='w') -> NoReturn:
+        f = open(path, mode=mode)
         records = []
         for id_, seq, description in zip(self.ids, self.seqs, self.descriptions):
             record = SeqRecord(Seq(seq), id=id_, description=description)

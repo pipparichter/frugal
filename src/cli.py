@@ -63,6 +63,7 @@ def library():
     parser_library.add_argument('--input-path', default=None)
     parser_library.add_argument('--output-path', default=None)
     parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
+    parser_library.add_argument('--entry-name-col', type=str, default='genome_id')
     
     args = parser.parse_args()
     
@@ -102,9 +103,9 @@ def library_get(args):
     store.put('metadata', df, format='table')
 
     embeddings_df = list()
-    for genome_id, df_ in df.groupby('genome_id'): # Read in the embeddings from the genome file. 
-        print(f'library_get: Loading {len(df_)} embeddings for genome {genome_id}.')
-        embeddings_df.append(lib.get(genome_id, ids=df_.index))
+    for entry_name, df_ in df.groupby(args.entry_name_col): # Read in the embeddings from the genome file. 
+        print(f'library_get: Loading {len(df_)} embeddings from {entry_name}_embedding.csv.')
+        embeddings_df.append(lib.get(entry_name, ids=df_.index))
     embeddings_df = pd.concat(embeddings_df)
     embeddings_df = embeddings_df.loc[df.index, :] # Make sure the embeddings are in the same order as the metadata. 
     store.put(args.feature_type, embeddings_df, format='table')

@@ -19,13 +19,13 @@ def seed(seed:int=42):
     torch.backends.cudnn.benchmark = False
 
 
-def get_genome_id(input_path:str, errors='raise') -> str:
+def get_genome_id(input_path:str, errors='raise', default:str=None) -> str:
 
     pattern = r'GCF_([0-9]+)\.([0-9]{1,})'
     genome_id = re.search(pattern, input_path)
     if (genome_id is None) and (errors == 'raise'):
         raise Exception(f'get_genome_id: Could not extract a genome ID from {input_path}.')
-    return genome_id.group(0) if (genome_id is not None) else None
+    return genome_id.group(0) if (genome_id is not None) else default
 
 
 def has_mixed_dtypes(df:pd.DataFrame):
