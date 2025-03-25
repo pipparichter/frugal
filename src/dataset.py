@@ -99,6 +99,11 @@ class Dataset(torch.utils.data.Dataset):
     def shape(self):
         return self.embedding.shape
     
+    def loc(self, index:np.ndarray):
+        index = np.where(np.isin(self.index, index))[0]
+        embeddings = self.embedding.clone().numpy()
+        return embeddings[index, :]
+
     def to_df(self) -> pd.DataFrame:
         embedding = copy.deepcopy(self.embedding).cpu().numpy()
         df = pd.DataFrame(embedding, index=self.index)
