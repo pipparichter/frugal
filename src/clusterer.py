@@ -7,6 +7,7 @@ import warnings
 import torch 
 from scipy.spatial import distance_matrix
 from sklearn.metrics import pairwise_distances
+from tqdm import tqdm
 
 # TODO: Is there any data leakage by fitting a StandardScaler before clustering? I don't think any more so
 #   than caused by clustering the training and testing dataset together. 
@@ -33,19 +34,26 @@ class Clusterer():
     def converged(self):
         return (self.kmeans.n_iter_ < self.kmeans.max_iter)
     
+    @staticmethod
+    def _get_embeddings(dataset):
+        # Use half precision to reduce memory. 
+        return dataset.embedding.clone().to(torch.float16).numpy()
+    
     def get_cluster_sizes(self):
         return np.array([(self.cluster_labels == i).sum() for i in range(self.n_clusters)])
     
-    def get_cluster_pairwise_distances(self, dataset, cluster_label):
-        embeddings = dataset.embedding.to(torch.float16) # Use half precision to reduce memory. 
-        embeddings = embeddings[self.cluster_labels == cluster_label]
+    def get_distance_to_cluster_center(self, dataset):
+        cluster_centers = self.cluster_centers[self.cluster_labels, :]
+        
+        embeddings = Clusterer._get_embeddings(dataset) # Use half precision to reduce memory. 
         embeddings = self.scaler.transform(embeddings)
 
-
-
+        dists = np.sqrt(np.sum((embeddings - cluster_centers) ** 2, axis=1))
+        return dists 
+    
     def fit(self, dataset, check_homogenous:bool=True, get_diameters:bool=True):
 
-        embeddings = dataset.embedding.to(torch.float16) # Use half precision to reduce memory. 
+        embeddings = Clusterer._get_embeddings(dataset) # Use half precision to reduce memory. 
         embeddings = self.scaler.fit_transform(embeddings)
         index = dataset.index
 
@@ -61,11 +69,16 @@ class Clusterer():
             self._check_homogenous(dataset)
 
 
-    def write(self, path:str):
-        df = pd.DataFrame.from_dict(self.cluster_map, orient='index', columns=['cluster_label'])
-        df.index.name = 'id'
-        if self.diameters is not None:
-            df['cluster_diameter'] = df.cluster_label.map(self.diameters)
+    def write(self, dataset, path:str=None):
+        df = dict()
+        df['id'] = dataset.index 
+        df['cluster_label'] = self.cluster_labels
+        df['distance_to_cluster_center'] = self.get_distance_to_cluster_center(dataset)
+        df = pd.DataFrame(df).set_index('id')
 
-        df.to_csv(path)
+        if path is not None:
+            df.to_csv(path)
+        else:
+            return df 
+
 

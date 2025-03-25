@@ -31,18 +31,6 @@ class MMSeqs():
         
         self.cleanup_files = []
 
-    def run(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data', module:str='cluster', **kwargs) -> str:
-
-        funcs = {'cluster':self.cluster, 'align':self.align}
-        load_funcs = {'cluster':MMSeqs.load_cluster, 'align':MMSeqs.load_align}
-
-        output_path = funcs[module](df, job_name=job_name, output_dir=output_dir, **kwargs)
-        output_df = load_funcs[module](output_path, **kwargs)
-        
-        self.cleanup_files += [os.path.join(output_dir, file_name.format(job_name=job_name)) for file_name in MMSeqs.cleanup_files]
-
-        return output_df
-
     def cleanup(self):
         for path in self.cleanup_files:
             if os.path.exists(path):
@@ -106,9 +94,12 @@ class MMSeqs():
         # Convert the MMSeqs database output to a TSV file. 
         output_path = os.path.join(output_dir, f'{job_name}_align.tsv')
         subprocess.run(f'mmseqs convertalis {input_database_path} {input_database_path} {output_database_path} {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
-        return output_path
+        
+        self.cleanup_files += [os.path.join(output_dir, file_name.format(job_name=job_name)) for file_name in MMSeqs.cleanup_files]
+        
+        return MMSeqs.load_align(output_path)
 
-    def cluster(self, df:pd.DataFrame, job_name:str=None, output_dir:str=None, sequence_identity:float=0.2, overwrite:bool=False, **kwargs):
+    def cluster(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data', sequence_identity:float=0.2, overwrite:bool=False, **kwargs):
 
         input_path = os.path.join(output_dir, job_name + '.faa')
         self.cleanup_files += [input_path]
@@ -118,7 +109,10 @@ class MMSeqs():
             FASTAFile(df=df).write(input_path)
             subprocess.run(f'mmseqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}', shell=True, check=True, stdout=subprocess.DEVNULL)
 
-        return output_path + '_cluster.tsv'
+        output_path = output_path + '_cluster.tsv'
+        self.cleanup_files += [os.path.join(output_dir, file_name.format(job_name=job_name)) for file_name in MMSeqs.cleanup_files]
+
+        return MMSeqs.load_cluster(output_path)
 
     @staticmethod
     def load_cluster(path:str, add_prefix:bool=True, **kwargs):

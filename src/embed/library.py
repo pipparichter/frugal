@@ -58,6 +58,7 @@ class EmbeddingLibrary():
         
         path = os.path.join(self.dir_, f'{entry_name}_embedding.csv')
         embedding_df = pd.read_csv(path, index_col=0)
+        embedding_df = embedding_df[~embedding_df.index.duplicated(keep='first')].copy() # Accidentally ended up with duplicates in antifam_embedding.csv.
         return embedding_df.loc[ids, :].copy() if (ids is not None) else embedding_df
 
 
