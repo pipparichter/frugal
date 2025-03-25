@@ -66,7 +66,7 @@ def add(lib:EmbeddingLibrary, *paths:list):
     for path in paths:
         entry_name  = get_genome_id(path, errors='ignore', default=os.path.basename(path).split('.')[0])
         try:
-            print(f'add: Generating embeddings for {name}.')
+            print(f'add: Generating embeddings for {entry_name}.')
             df = FASTAFile(path=path).to_df(prodigal_output=False) # Don't need to parse the Prodigal output, as we just want the sequences.
             df = df[df.seq.apply(len) < lib.max_length] # Filter out sequences which exceed the specified maximum length
             lib.add(entry_name, df)
