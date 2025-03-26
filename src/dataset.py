@@ -15,6 +15,7 @@ import numpy as np
 # from sklearn.cluster import DBSCAN # , OPTICS
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import pairwise_distances
+from sklearn.preprocessing import StandardScaler
 
 
 
@@ -99,13 +100,16 @@ class Dataset(torch.utils.data.Dataset):
     def shape(self):
         return self.embedding.shape
     
-    def loc(self, index:np.ndarray):
-        index = np.where(np.isin(self.index, index))[0]
-        embeddings = self.embedding.clone().numpy()
-        return embeddings[index, :]
+    # def loc(self, index:np.ndarray):
+    #     index = np.where(np.isin(self.index, index))[0]
+    #     embeddings = self.embedding.clone().numpy()
+    #     return embeddings[index, :]
+    
+    def numpy(self):
+        return copy.deepcopy(self.embedding).cpu().numpy()
 
     def to_df(self) -> pd.DataFrame:
-        embedding = copy.deepcopy(self.embedding).cpu().numpy()
+        embedding = self.numpy()
         df = pd.DataFrame(embedding, index=self.index)
         df = df[~df.index.duplicated(keep='first')].copy()
         return df
@@ -190,7 +194,7 @@ class Splitter():
 
 class Pruner():
 
-    def __init__(self, radius:float=None):
+    def __init__(self, radius:float=2):
         
         self.radius = radius # Radius is inclusive. 
         self.graph = None 
@@ -223,10 +227,11 @@ class Pruner():
 
     def fit(self, dataset):
 
-        embeddings = dataset.embedding.to(torch.float16).numpy() # Use half precision to reduce memory. 
+        embeddings = dataset.numpy() 
+        embeddings = StandardScaler().fit_transform(embeddings) # Make sure the embeddings are scaled. 
 
         print(f'Pruner.fit: Fitting the NearestNeighbors object with radius {self.radius}.')
-        nearest_neighbors = NearestNeighbors(metric='minkowski', p=2, radius=self.radius)
+        nearest_neighbors = NearestNeighbors(metric='euclidean', radius=self.radius)
         nearest_neighbors.fit(embeddings)
         
         print(f'Pruner.fit: Building the radius neighborhs graph.')
@@ -234,13 +239,6 @@ class Pruner():
         self.neighbor_idxs = nearest_neighbors.radius_neighbors(embeddings, return_distance=False, radius=self.radius)
         n_neighbors = np.array([len(idxs) for idxs in self.neighbor_idxs])
         self._adjust_graph_weights(dataset)
-
-        # dists = pairwise_distances(embeddings, metric='minkowski', p=2)
-        # expected_edges = np.sort(dists[dists <= self.radius].ravel())
-        # expected_n_neighbors = (dists <= self.radius).sum(axis=1).ravel()
-        # assert len(expected_edges) == len(edges), f'Pruner.fit: Expected {len(expected_edges)} edges, but the radius graph has {len(edges)} edges.'
-        # assert np.all(np.round(edges, 3) == np.round(edges, 3)), f'Pruner.fit: The edge weights in the radius graph do not match the expected values.'
-        # assert np.all(expected_n_neighbors == n_neighbors), f'Pruner.fit: The expected number of neighbors per node does not match the expected number of neighbors.'
 
         idxs = np.arange(len(dataset))[np.argsort(n_neighbors)][::-1]
         remove_idxs = []

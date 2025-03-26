@@ -43,7 +43,7 @@ class MMSeqs():
             os.mkdir(database_dir)
         return database_dir
 
-    def _make_database(self, df:pd.DataFrame, job_name:str=None, overwrite:bool=False):
+    def _make_database(self, df:pd.DataFrame, job_name:str=None):
         '''Create an mmseqs database from a FASTA file, using the sequences in the input DataFrame.'''
         database_name = f'{job_name}_database'
         database_dir = self._make_database_dir(database_name)
@@ -51,14 +51,13 @@ class MMSeqs():
 
         input_path = os.path.join(self.dir_, job_name + '.faa')
 
-        if (not os.path.exists(database_path)) or overwrite:
-            print(f'MMSeqs._make_database: Creating database {database_name} in {database_dir}')
-            FASTAFile(df=df).write(input_path)
-            subprocess.run(f'mmseqs createdb {input_path} {database_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
+        print(f'MMSeqs._make_database: Creating database {database_name} in {database_dir}')
+        FASTAFile(df=df).write(input_path)
+        subprocess.run(f'mmseqs createdb {input_path} {database_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
 
         return database_path 
 
-    def _prefilter(self, df:pd.DataFrame, job_name:str=None, overwrite:bool=False, sensitivity:float=None):
+    def _prefilter(self, df:pd.DataFrame, job_name:str=None, sensitivity:float=None):
 
         output_database_name = f'{job_name}_prefilter_database'
         output_database_dir = self._make_database_dir(output_database_name)
@@ -66,17 +65,20 @@ class MMSeqs():
 
         input_database_path = self._make_database(df, job_name=job_name)
 
-        if (not os.path.exists(output_database_path)) or overwrite:
-            cmd = f'mmseqs prefilter {input_database_path} {input_database_path} {output_database_path}'
-            if sensitivity is not None:
-                cmd += f' -s {sensitivity}'
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+        cmd = f'mmseqs prefilter {input_database_path} {input_database_path} {output_database_path}'
+        if sensitivity is not None:
+            cmd += f' -s {sensitivity}'
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
         
         return output_database_path
 
 
-    def align(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data/', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10, **kwargs):
+    def align(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data/', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10):
         # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
+        output_path = os.path.join(output_dir, f'{job_name}_align.tsv')
+
+        if os.path.exists(output_path) and (not overwrite):
+            return MMSeqs.load_align(output_path)
         
         input_database_path = self._make_database(df, job_name=job_name)
         prefilter_database_path = self._prefilter(df, job_name=job_name, sensitivity=sensitivity)
@@ -85,21 +87,17 @@ class MMSeqs():
         output_database_dir = self._make_database_dir(output_database_name)
         output_database_path = os.path.join(output_database_dir, output_database_name)
         
-        if (not os.path.exists(output_database_path)) or overwrite:
-            print(f'MMSeqs.align: Running alignment on query database {os.path.basename(input_database_path)}.')
-            cmd = f'mmseqs align {input_database_path} {input_database_path} {prefilter_database_path} {output_database_path}'
-            cmd += f' -e {max_e_value}'
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-        
-        # Convert the MMSeqs database output to a TSV file. 
-        output_path = os.path.join(output_dir, f'{job_name}_align.tsv')
+        print(f'MMSeqs.align: Running alignment on query database {os.path.basename(input_database_path)}.')
+        cmd = f'mmseqs align {input_database_path} {input_database_path} {prefilter_database_path} {output_database_path}'
+        cmd += f' -e {max_e_value}'
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+    
         subprocess.run(f'mmseqs convertalis {input_database_path} {input_database_path} {output_database_path} {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
-        
         self.cleanup_files += [os.path.join(output_dir, file_name.format(job_name=job_name)) for file_name in MMSeqs.cleanup_files]
         
         return MMSeqs.load_align(output_path)
 
-    def cluster(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data', sequence_identity:float=0.2, overwrite:bool=False, **kwargs):
+    def cluster(self, df:pd.DataFrame, job_name:str=None, output_dir:str='../data', sequence_identity:float=0.2, overwrite:bool=False):
 
         input_path = os.path.join(output_dir, job_name + '.faa')
         self.cleanup_files += [input_path]
