@@ -16,10 +16,10 @@ from tqdm import tqdm
 
 class Clusterer():
 
-    def __init__(self, tolerance=1e-5, n_clusters:int=1000, n_init:int=10, max_iter:int=300):
+    def __init__(self, tolerance=1e-8, n_clusters:int=1000, n_init:int=10, max_iter:int=300, verbose:bool=False):
         
         self.n_clusters = n_clusters
-        self.kmeans = BisectingKMeans(n_clusters=n_clusters, bisecting_strategy='largest_cluster', tol=tolerance, n_init=n_init, random_state=42, max_iter=max_iter) # Will use Euclidean distance. 
+        self.kmeans = BisectingKMeans(verbose=verbose, n_clusters=n_clusters, bisecting_strategy='largest_cluster', tol=tolerance, n_init=n_init, random_state=42, max_iter=max_iter) # Will use Euclidean distance. 
         self.scaler = StandardScaler() # I think scaling prior to clustering is important. Applying same assumption as with Classifier training. 
         self.cluster_map = None
         self.cluster_labels = None

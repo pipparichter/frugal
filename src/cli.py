@@ -34,17 +34,18 @@ def cluster():
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--n-clusters', default=None, type=int)
     parser.add_argument('--check-homogenous', action='store_true')
+    parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
     output_path = args.input_path.replace('.h5', '_cluster.csv') if (args.output_path is None) else args.output_path
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
-    clusterer = Clusterer(n_clusters=args.n_clusters)
+    clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose)
     clusterer.fit(dataset, check_homogenous=args.check_homogenous)
     clusterer.write(output_path, dataset=dataset)
 
     print(f'cluster: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
-    print(f'cluster: {clusterer.n_singleton_clusters} clusters only contain one sequence.')
+    # print(f'cluster: {clusterer.n_singleton_clusters} clusters only contain one sequence.')
     print(f'cluster: Sequence clusters saved to {output_path}')
 
 

@@ -266,33 +266,33 @@ class Pruner():
         
 
 
-def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', max_length:int=2000, labeled:bool=True):
+# def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', max_length:int=2000, labeled:bool=True):
 
-    print(f'build: Loading data from {len(genome_ids)} genomes.')
+#     print(f'build: Loading data from {len(genome_ids)} genomes.')
 
-    # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
-    ref_paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids]
-    ref_dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
-    ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=ref_dtypes).assign(genome_id=get_genome_id(path)) for path in ref_paths])
+#     # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
+#     ref_paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids]
+#     ref_dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
+#     ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=ref_dtypes).assign(genome_id=get_genome_id(path)) for path in ref_paths])
     
-    labels_paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids] 
-    labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in labels_paths])
+#     labels_paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids] 
+#     labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in labels_paths])
 
-    df = ref_df.merge(labels_df, left_index=True, right_index=True, validate='one_to_one')
-    df = df.rename(columns={'query_seq':'seq'}) # Need to do this for file writing, etc. to work correctly, 
-    df = df.drop(columns=['top_hit_homolog_id', 'top_hit_homolog_seq', 'pseudo'])
+#     df = ref_df.merge(labels_df, left_index=True, right_index=True, validate='one_to_one')
+#     df = df.rename(columns={'query_seq':'seq'}) # Need to do this for file writing, etc. to work correctly, 
+#     df = df.drop(columns=['top_hit_homolog_id', 'top_hit_homolog_seq', 'pseudo'])
 
-    mask = df.seq.apply(len) < max_length
-    print(f'build: Removing {(~mask).sum()} sequences exceeding the maximum length of {max_length}')
-    df = df[mask].copy()
+#     mask = df.seq.apply(len) < max_length
+#     print(f'build: Removing {(~mask).sum()} sequences exceeding the maximum length of {max_length}')
+#     df = df[mask].copy()
 
-    if labeled:
-        mask = (df.label != 'none')
-        print(f'build: Removing {(~mask).sum()} which have not been assigned a label.')
-        df = df[mask].copy()
-        df['label'] = df.label.map({'spurious':0, 'real':1}) # Convert the remaining labels to integers. 
+#     if labeled:
+#         mask = (df.label != 'none')
+#         print(f'build: Removing {(~mask).sum()} which have not been assigned a label.')
+#         df = df[mask].copy()
+#         df['label'] = df.label.map({'spurious':0, 'real':1}) # Convert the remaining labels to integers. 
     
-    df.to_csv(output_path)
+#     df.to_csv(output_path)
         
 
 
