@@ -54,7 +54,7 @@ def prune():
     parser.add_argument('--output-path', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--radius', default=0.1, type=float)
+    parser.add_argument('--radius', default=2, type=float)
     args = parser.parse_args()
 
     output_path = args.input_path.replace('.h5', '_dereplicated.h5') if (args.output_path is None) else args.output_path
