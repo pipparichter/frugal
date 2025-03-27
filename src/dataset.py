@@ -36,8 +36,8 @@ class Dataset(torch.utils.data.Dataset):
 
     def __init__(self, embedding:np.ndarray, index:np.ndarray=None, scaled:bool=False, feature_type:str=None, **kwargs):
 
-        self.embedding = torch.from_numpy(embedding).to(DEVICE)
-        self.n_features = self.embedding.shape[-1]
+        self.embedding = torch.from_numpy(embedding).to(DEVICE) if (embedding is not None) else embedding
+        self.n_features = embedding.shape[-1] if (embedding is not None) else None
         self.index = index
         self.feature_type = feature_type 
         self.scaled = scaled
@@ -52,8 +52,11 @@ class Dataset(torch.utils.data.Dataset):
             self._label = torch.from_numpy(self.label.copy()).type(torch.LongTensor)
             self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
 
+    def has_embedding(self) -> bool:
+        return (self.embedding is not None)
+
     def __len__(self) -> int:
-        return len(self.embedding)
+        return len(self.index)
     
     @staticmethod 
     def _get_n_rows_hdf(path:str, key:str=None) -> int:
@@ -75,7 +78,7 @@ class Dataset(torch.utils.data.Dataset):
         return df
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, attrs:list=['genome_id', 'seq', 'label']):
+    def from_hdf(cls, path:str, feature_type:str=None, attrs:list=['label', 'genome_id']):
         embedding_df = Dataset._read_hdf(path, key=feature_type, chunk_size=100)
         metadata_df = Dataset._read_hdf(path, key='metadata')
 
@@ -85,12 +88,28 @@ class Dataset(torch.utils.data.Dataset):
         index = embedding_df.index.values.copy() # Make sure this is a numpy array. 
         embedding = embedding_df.values.copy() # Why do I need to copy this?
 
-        kwargs = {attr:getattr(metadata_df, attr, None) for attr in attrs}
-        kwargs = {attr:np.array(value) for attr, value in kwargs.items() if (value is not None)}
+        attrs = list(metadata_df.columns) if (attrs is None) else attrs
+        kwargs = {attr:metadata_df[attr].values.copy() for attr in attrs}
         return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
     
+    
+    @classmethod
+    def from_df(cls, df:pd.DataFrame, feature_type:str=None, attrs:list=[]):
+
+        index = df.index.values 
+        embedding = df.values if (feature_type is not None) else None
+
+        kwargs = {attr:df[attr].copy() for attr in attrs}
+        return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
+
+    @classmethod
+    def from_csv(cls, path:str, feature_type:str=None, attrs:list=None):
+        df = pd.read_csv(path, index_col=0)
+        attrs = list(df.columns) if (attrs is None) else attrs
+        return Dataset.from_df(df, feature_type=feature_type, attrs=attrs)
+
     def shape(self):
-        return self.embedding.shape
+        return self.embedding.shape if self.has_embedding() else self.index.shape
     
     # def loc(self, index:np.ndarray):
     #     index = np.where(np.isin(self.index, index))[0]
@@ -98,12 +117,18 @@ class Dataset(torch.utils.data.Dataset):
     #     return embeddings[index, :]
     
     def numpy(self):
-        return copy.deepcopy(self.embedding).cpu().numpy()
+        '''Return the stored embeddings as a NumPy array. If no embeddings are stored, return None.'''
+        return copy.deepcopy(self.embedding).cpu().numpy() if self.has_embedding() else None
 
-    def to_df(self) -> pd.DataFrame:
-        embedding = self.numpy()
-        df = pd.DataFrame(embedding, index=self.index)
-        df = df[~df.index.duplicated(keep='first')].copy()
+    def to_df(self, metadata:bool=False) -> pd.DataFrame:
+        if metadata:
+            df = {attr:getattr(self, attr) for attr in self.attrs}
+            df = pd.DataFrame(df, index=self.index)
+        else:
+            embedding = self.numpy()
+            df = pd.DataFrame(embedding, index=self.index)
+            df = df[~df.index.duplicated(keep='first')].copy()
+        df.index.name = 'id'
         return df
 
     def __getitem__(self, idx:int) -> dict:
@@ -114,29 +139,34 @@ class Dataset(torch.utils.data.Dataset):
         return item
 
     def set_attr(self, attr:str, values:pd.Series):
-        assert len(values) == len(self), 'Dataset.set_attr: The length of the attribute values does not match the length of the dataset.'
+        assert len(values) == len(self), 'Dataset.set_attr: The length of the attribute values does not match the length of the Dataset.'
+        assert np.all(values.index == self.index), 'Dataset.set_attr: The index of the attribute values does not match the index of the Dataset.'
+        
         values = values.loc[self.index] # Make sure the index in the series is the same as that of the DataFrame. 
         self.attrs.append(attr)
         setattr(self, attr, values.values)
 
     def subset(self, idxs):
-        embedding = self.embedding.cpu().numpy()[idxs, :].copy()  
+        embedding = self.numpy()[idxs, :].copy() if self.has_embedding() else None
         index = self.index.copy()[idxs].copy()
         kwargs = {attr:getattr(self, attr)[idxs].copy() for attr in self.attrs}
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
     
-    def write(self, path:str):
-        metadata_df = {attr:getattr(self, attr) for attr in self.attrs}
-        metadata_df = pd.DataFrame(metadata_df, index=self.index)
-        embedding_df = pd.DataFrame(self.embedding.cpu().numpy(), index=self.index)
-
-        assert len(embedding_df) == len(metadata_df), 'Dataset.write: The indices of the embedding and the metadata do not match.'
-        assert np.all(embedding_df.index == metadata_df.index), 'Dataset.write: The indices of the embedding and the metadata do not match.'
-
-        store = pd.HDFStore(path, mode='w')
+    def to_hdf(self, path:str):
+        metadata_df = self.to_df(metadata=True)
         store.put('metadata', metadata_df, format='table')
-        store.put(self.feature_type, embedding_df, format='table')
+        
+        if self.has_embedding():
+            embedding_df = self.to_df(metadata=False)
+            assert len(embedding_df) == len(metadata_df), 'Dataset.write: The indices of the embedding and the metadata do not match.'
+            assert np.all(embedding_df.index == metadata_df.index), 'Dataset.write: The indices of the embedding and the metadata do not match.'
+            store = pd.HDFStore(path, mode='w')
+            store.put(self.feature_type, embedding_df, format='table')
         store.close()
+
+    def to_csv(self, path:str, metadata:bool=False):
+        df = self.to_df(metadata=metadata)
+        df.to_csv(path)
 
 
 class Pruner():

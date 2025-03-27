@@ -58,12 +58,13 @@ def prune():
 
     output_path = args.input_path.replace('.h5', '_dereplicated.h5') if (args.output_path is None) else args.output_path
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Load all attributes into the Dataset. 
     pruner = Pruner(radius=args.radius)
     pruner.fit(dataset)
     dataset = pruner.prune(dataset)
     print(f'prune: Writing dereplicated Dataset to {output_path}')
-    dataset.write(output_path)
+    dataset.to_hdf(output_path)
+    dataset.to_csv(output_path.replace('.csv', '.h5'), metadata=True)
 
 
 def library():
@@ -171,7 +172,7 @@ def ref():
     print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/campylobacterota_dataset_.h5 --model-name campylobacterota_esm_650m_gap_subset_v201"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/dataset_.h5 --model-name campylobacterota_esm_650m_gap_subset_v201"
 def train():
 
     parser = argparse.ArgumentParser()
@@ -193,7 +194,7 @@ def train():
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
     cluster_path = args.input_path.replace('.h5', '_cluster.csv') if (args.cluster_path is None) else args.cluster_path # Define a default cluster path. 
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'genome_id'])
 
     dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
     assert dims[0] == dataset.n_features, f'train: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
@@ -212,7 +213,7 @@ def train():
         if (best_model is None) or (model > best_model):
             best_model = model.copy()
             best_split = i
-            splitter.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
+            splits.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
             best_model.save(output_path)
             print(f'train: New best model found. Saved to {output_path}.')
         print()

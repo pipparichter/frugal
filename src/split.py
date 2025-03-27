@@ -11,7 +11,8 @@ class ClusterStratifiedShuffleSplit():
 
     def __init__(self, dataset:Dataset, cluster_path:str=None, n_splits:int=5, test_size:float=0.2, train_size:float=0.8):
         
-        self._load_clusters(cluster_path, dataset=dataset)
+        self.dataset = dataset
+        self._load_clusters(cluster_path)
 
         self.stratified_shuffle_split = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, train_size=train_size, random_state=42)
 
@@ -34,15 +35,12 @@ class ClusterStratifiedShuffleSplit():
     def _check(self):
         # Double check to make sure no singleton indices ended up in the split. 
         for train_idxs, test_idxs in self.splits:
-            print(np.intersect1d(train_idxs, self.singleton_idxs))
-            print(np.intersect1d(test_idxs, self.singleton_idxs))
             assert np.intersect1d(train_idxs, self.singleton_idxs).size == 0, 'ClusterStratifiedShuffleSplit._check: There are singleton indices in the split.'
             assert np.intersect1d(test_idxs, self.singleton_idxs).size == 0, 'ClusterStratifiedShuffleSplit._check: There are singleton indices in the split.'
 
-    @staticmethod
-    def _check_clusters(cluster_df:pd.DataFrame, dataset:Dataset=None):
-        assert len(cluster_df) == len(dataset), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
-        assert np.all(np.sort(cluster_df.index) == np.sort(dataset.index)), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
+    def _check_clusters(self, cluster_df):
+        assert len(cluster_df) == len(self.dataset), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
+        assert np.all(np.sort(cluster_df.index) == np.sort(self.dataset.index)), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
 
     @staticmethod
     def _split_non_homogenous_clusters(cluster_df:pd.DataFrame) -> pd.DataFrame:
@@ -63,12 +61,12 @@ class ClusterStratifiedShuffleSplit():
         assert np.all(cluster_df.groupby('cluster_label').apply(is_homogenous, include_groups=False)), f'ClusterStratifiedShuffleSplit._split_non_homogenous_clusters: There are still non-homogenous clusters.'
         return cluster_df
 
-    def _load_clusters(self, path:str, dataset=None):
+    def _load_clusters(self, path:str):
 
         cluster_df = pd.read_csv(path, index_col=0) # The index should be the sequence ID, and should have a cluster_label column. 
-        ClusterStratifiedShuffleSplit._check_clusters(cluster_df, dataset=dataset)
-        cluster_df = cluster_df.loc[dataset.index].copy() # Make sure the index order matches. 
-        cluster_df['label'] = dataset.label
+        self._check_clusters(cluster_df)
+        cluster_df = cluster_df.loc[self.dataset.index].copy() # Make sure the index order matches. 
+        cluster_df['label'] = self.dataset.label
 
         cluster_df = ClusterStratifiedShuffleSplit._split_non_homogenous_clusters(cluster_df)
 
@@ -80,7 +78,7 @@ class ClusterStratifiedShuffleSplit():
         self.n_singleton = len(self.singleton_idxs)
         self.n_non_singleton = len(self.non_singleton_idxs)
         
-        singleton_labels = dataset.label[self.singleton_idxs]
+        singleton_labels = self.dataset.label[self.singleton_idxs]
         # print(f'ClusterStratifiedShuffleSplit._load_clusters: Found {self.n_singleton} singleton clusters.')
         print(f'ClusterStratifiedShuffleSplit._load_clusters: Found {(singleton_labels == 1).sum()} singleton clusters with "real" labels.')
         print(f'ClusterStratifiedShuffleSplit._load_clusters: Found {(singleton_labels == 0).sum()} singleton clusters with "spurious" labels.')
@@ -98,8 +96,14 @@ class ClusterStratifiedShuffleSplit():
         train_idxs, test_idxs = self.splits[self.i]
         train_idxs = np.concat([train_idxs, self.singleton_idxs], axis=None)
 
-        self.i += 1 # Increment the counter. 
-        return self.dataset.subset(train_idxs), self.dataset.subset(test_idxs) 
+        self.i += 1 # Increment the counter.
+        train_dataset = self.dataset.subset(train_idxs)
+        test_dataset = self.dataset.subset(test_idxs) 
+
+        train_dataset.set_attr('cluster_label', self.cluster_df.cluster_label.iloc[train_idxs])
+        test_dataset.set_attr('cluster_label', self.cluster_df.cluster_label.iloc[test_idxs])
+
+        return train_dataset, test_dataset
     
     def save(self, path:str, best_split:int=None):  
         content = dict()
