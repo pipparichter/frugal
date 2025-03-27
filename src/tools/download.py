@@ -126,7 +126,6 @@ class NCBI():
                 shutil.rmtree(dir_)
 
 
-
 class AntiFam():
 
     def __init__(self):

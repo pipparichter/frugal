@@ -3,8 +3,8 @@ seed(42) # Make sure everything is random-seeded for reproducibility.
 
 import numpy as np 
 import pandas as pd 
-from src.dataset import Dataset, Splitter, Datasets, Pruner
-from src.sampler import Sampler
+from src.dataset import Dataset, Datasets, Pruner
+from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
 import argparse
 from src.clusterer import Clusterer
@@ -13,13 +13,11 @@ from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
 from src.labeler import Labeler
-import re
 import random
 import glob
 from tqdm import tqdm 
 import os
 from src import get_genome_id, fillna
-from sklearn.model_selection import GroupShuffleSplit
 from multiprocessing import Pool
 from transformers import logging
 
@@ -178,6 +176,7 @@ def train():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
+    parser.add_argument('--cluster-path', type=str, default=None)
     parser.add_argument('--model-name', type=str)
     parser.add_argument('--output-dir', default='./models', type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
@@ -192,6 +191,7 @@ def train():
 
     args = parser.parse_args()
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
+    cluster_path = args.input_path.replace('.h5', '_cluster.csv') if (args.cluster_path is None) else args.cluster_path # Define a default cluster path. 
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['seq', 'label', 'genome_id'])
 
@@ -199,10 +199,10 @@ def train():
     assert dims[0] == dataset.n_features, f'train: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
     assert dims[-1] == dataset.n_classes, f'train: Last model dimension {dims[-1]} does not match the number of classes {dataset.n_classes}.'
 
-    splitter = Splitter(dataset, n_splits=args.n_splits)
+    splits = ClusterStratifiedShuffleSplit(dataset, cluster_path=cluster_path, n_splits=args.n_splits)
     best_model = None
     best_split = None
-    for i, (train_dataset, test_dataset) in enumerate(splitter):
+    for i, (train_dataset, test_dataset) in enumerate(splits):
         model = Classifier(dims=dims, feature_type=args.feature_type)
         model.scale(train_dataset, fit=True)
         model.scale(test_dataset, fit=False)
@@ -218,7 +218,7 @@ def train():
         print()
 
     best_model.save(output_path)
-    splitter.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
+    splits.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
 
     print(f'train: Saved best model to {output_path}')
 

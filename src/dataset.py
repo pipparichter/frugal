@@ -1,20 +1,12 @@
 import pandas as pd
 import numpy as np
 import torch
-from src import get_genome_id
-import os
 from torch.nn.functional import one_hot
-from sklearn.model_selection import train_test_split, GroupShuffleSplit, StratifiedShuffleSplit
 from collections import namedtuple
 import copy
 import tables 
 from tqdm import tqdm
-import json
-import pandas as pd 
-import numpy as np 
-# from sklearn.cluster import DBSCAN # , OPTICS
 from sklearn.neighbors import NearestNeighbors
-from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import StandardScaler
 
 
@@ -145,51 +137,6 @@ class Dataset(torch.utils.data.Dataset):
         store.put('metadata', metadata_df, format='table')
         store.put(self.feature_type, embedding_df, format='table')
         store.close()
-
-
-# I wonder if I should be smarter about how I split the dataset. 
-
-class Splitter():
-
-    def __init__(self, dataset:Dataset, n_splits:int=5, test_size:float=0.1, train_size:float=0.9):
-
-        self.stratified_shuffle_split = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, train_size=train_size, random_state=42)
-        idxs = np.arange(len(dataset))
-        self.splits = list(self.stratified_shuffle_split.split(idxs, dataset.label))
-
-        self.i = 0
-        self.n_splits = n_splits 
-        self.train_size = train_size 
-        self.test_size = test_size
-        self.dataset = dataset 
-
-    def __len__(self):
-        return self.n_splits
-
-    def __iter__(self):
-        return self 
-    
-    def __next__(self):
-        if self.i >= self.n_splits:
-            raise StopIteration
-        
-        train_idxs, test_idxs = self.splits[self.i]
-        # datasets = Datasets(self.dataset.subset(train_idxs), self.dataset.subset(test_idxs))
-
-        self.i += 1 # Increment the counter. 
-        return self.dataset.subset(train_idxs), self.dataset.subset(test_idxs) 
-    
-    def save(self, path:str, best_split:int=None):  
-        content = dict()
-        # Make sure everything is in the form of normal integers so it's JSON-serializable (not Numpy datatypes).
-        for i, (train_idxs, test_idxs) in enumerate(self.splits):
-            train_idxs = [int(idx) for idx in train_idxs]
-            test_idxs = [int(idx) for idx in test_idxs]
-            content[i] = {'train_idxs':list(train_idxs), 'test_idxs':list(test_idxs)}
-        content['best_split'] = int(best_split)
-        with open(path, 'w') as f:
-            json.dump(content, f)
-
 
 
 class Pruner():
