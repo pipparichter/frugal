@@ -172,7 +172,7 @@ def ref():
     print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/dataset_.h5 --model-name campylobacterota_esm_650m_gap_subset_v201"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/train_dataset.h5 --model-name test"
 def train():
 
     parser = argparse.ArgumentParser()

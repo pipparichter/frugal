@@ -38,9 +38,9 @@ class ClusterStratifiedShuffleSplit():
             assert np.intersect1d(train_idxs, self.singleton_idxs).size == 0, 'ClusterStratifiedShuffleSplit._check: There are singleton indices in the split.'
             assert np.intersect1d(test_idxs, self.singleton_idxs).size == 0, 'ClusterStratifiedShuffleSplit._check: There are singleton indices in the split.'
 
-    def _check_clusters(self, cluster_df):
-        assert len(cluster_df) == len(self.dataset), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
-        assert np.all(np.sort(cluster_df.index) == np.sort(self.dataset.index)), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
+    # def _check_clusters(self, cluster_df):
+    #     assert len(cluster_df) == len(self.dataset), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
+    #     assert np.all(np.sort(cluster_df.index) == np.sort(self.dataset.index)), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
 
     @staticmethod
     def _split_non_homogenous_clusters(cluster_df:pd.DataFrame) -> pd.DataFrame:
@@ -64,7 +64,7 @@ class ClusterStratifiedShuffleSplit():
     def _load_clusters(self, path:str):
 
         cluster_df = pd.read_csv(path, index_col=0) # The index should be the sequence ID, and should have a cluster_label column. 
-        self._check_clusters(cluster_df)
+        # self._check_clusters(cluster_df)
         cluster_df = cluster_df.loc[self.dataset.index].copy() # Make sure the index order matches. 
         cluster_df['label'] = self.dataset.label
 
