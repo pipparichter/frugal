@@ -234,7 +234,7 @@ def predict():
         model_name = os.path.basename(model_path).replace('.pkl', '')
         model = Classifier.load(model_path)
 
-        attrs = ['label'] if args.load_labels else ['genome_id', 'seq']
+        attrs = ['label'] if args.load_labels else []
         dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=attrs)
 
         model.scale(dataset, fit=False)
