@@ -202,16 +202,16 @@ class Classifier(torch.nn.Module):
         # return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) 
         return self.get_best_metric('test_accuracy') > model.get_best_metric('test_accuracy')
 
-    def _improved(self, epoch:int, min_epochs:int=20):
+    def _improved(self, epoch:int):
         # test_precision_0_improved = self.get_latest_metric('test_precision_0') > self.get_best_metric('test_precision_0')
         # test_precision_0_equal = self.get_latest_metric('test_precision_0') == self.get_best_metric('test_precision_0')
         # test_recall_0_improved = self.get_latest_metric('test_recall_0') > self.get_best_metric('test_recall_0')
         # return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) and (epoch > min_epoch)
-        if epoch < min_epochs:
+        if epoch < 1:
             return False
         return self.get_latest_metric('test_accuracy') > self.get_best_metric('test_accuracy')
 
-    def fit(self, datasets:tuple, epochs:int=100, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False, min_epochs:int=20):
+    def fit(self, datasets:tuple, epochs:int=100, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False):
 
         assert datasets.test.scaled, 'Classifier.fit: The input test Dataset has not been scaled.' 
         assert datasets.train.scaled, 'Classifier.fit: The input train Dataset has not been scaled.'
@@ -248,7 +248,7 @@ class Classifier(torch.nn.Module):
             # pbar.set_description(f'Classifier.fit: {metrics}')
             # pbar.refresh()
 
-            if self._improved(epoch=epoch, min_epochs=min(min_epochs, epochs - 1)):
+            if self._improved(epoch=epoch):
                 self.best_epoch = epoch + 1
                 # best_metric = self.get_best_metric(metric=metric)
                 best_model_weights = copy.deepcopy(self.state_dict())

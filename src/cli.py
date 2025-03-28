@@ -174,14 +174,14 @@ def ref():
 # v2 1280,1024,512,2
 # v3 1280,1024,512,256,2
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,2 --input-path ./data/train_dataset.h5 --model-name campylobacterota_v1"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,2 --input-path ./data/train_dataset.h5 --model-name campylobacterota_v2"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,256,2 --input-path ./data/train_dataset.h5 --model-name campylobacterota_v3"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v1"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v2"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v3"
 def train():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
-    parser.add_argument('--cluster-path', type=str, default=None)
+    parser.add_argument('--cluster-path', type=str, default='./data/dataset_dereplicated_cluster.csv')
     parser.add_argument('--model-name', type=str)
     parser.add_argument('--output-dir', default='./models', type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
