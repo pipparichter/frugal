@@ -1,5 +1,8 @@
 import os 
 import subprocess 
+# from src.files import FASTAFile
+from src import get_genome_id
+from tqdm import tqdm
 
 
 def get_output_path(input_path:str, output_dir:str):
@@ -37,4 +40,13 @@ class Prodigal():
         cmd = f'prodigal -i {input_path} -a {output_path} -g {translation_table}'
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    
+
+def remove_asterisks(*paths):
+    '''Prodigal adds an asterisk marking the terminal end of each amino acid sequence by default. These are not compatible 
+    with tools like InterProScan, so should be removed.'''
+    for path in tqdm(paths, desc='remove_asterisks'):
+        with open(path, 'r') as f:
+            content = f.read()
+        content = content.replace('*', '')
+        with open(path, 'w') as f:
+            f.write(content)

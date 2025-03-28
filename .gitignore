@@ -2,3 +2,4 @@ data/*
 models/*
 tripy.egg-info
 **/__pycache__
+**/temp

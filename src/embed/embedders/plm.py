@@ -77,7 +77,7 @@ class ESMEmbedder(PLMEmbedder):
 
     def _preprocess(self, seqs:list):
         # Based on the example Jupyter notebook, it seems as though sequences require no real pre-processing for the ESM model.
-        return seqs 
+        return [seq.replace(r'*', '') for seq in self.seqs] # Just make sure there's no terminal asterisk.  
 
     def _postprocess(self, outputs:torch.FloatTensor, seqs:list=None):
         ''''''

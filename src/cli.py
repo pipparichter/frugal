@@ -8,11 +8,10 @@ from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
 import argparse
 from src.clusterer import Clusterer
-from src.reference import Reference
+from src.reference import Reference, ReferenceAnnotator
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
 from src.embed.library import add 
-from src.labeler import Labeler
 import random
 import glob
 from tqdm import tqdm 
@@ -141,33 +140,32 @@ def ref():
     parser.add_argument('--input-path', nargs='+', type=str)
     parser.add_argument('--output-dir', default='./data/ref/', type=str)
     parser.add_argument('--gbffs-dir', default='./data/ncbi/gbffs', type=str)
-    parser.add_argument('--homologs-dir', default='./data/proteins/homologs', type=str)
-    parser.add_argument('--load-homologs', action='store_true')
-    parser.add_argument('--prodigal-output', action='store_true')
-    parser.add_argument('--summarize', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--annotate', action='store_true')
+    parser.add_argument('--min-sequence-identity', type=float, default=1)
+    parser.add_argument('--max-overlap', type=int, default=50)
     args = parser.parse_args()
 
-    input_paths = args.input_path # glob.glob(args.input_path) # Supports the user being able to specify a pattern.
+    input_paths = args.input_path  
     genome_ids = [get_genome_id(path, errors='raise') for path in input_paths]
-    gbff_paths = [glob.glob(os.path.join(args.gbffs_dir, genome_id + '*'))[0] for genome_id in genome_ids]
+    gbff_paths = [os.path.join(args.gbffs_dir, f'{genome_id}_genomic.gbff') for genome_id in genome_ids]
     
-    pbar = tqdm(zip(genome_ids, input_paths, gbff_paths), total=len(genome_ids))
-    for genome_id, input_path, ref_path in pbar:
-        results_output_path = os.path.join(args.output_dir, f'{genome_id}_results.csv')
-        summary_output_path = os.path.join(args.output_dir, f'{genome_id}_summary.csv')
+    for i, (genome_id, input_path, gbff_path) in enumerate(zip(genome_ids, input_paths, gbff_paths)):
+        ref_all_output_path = os.path.join(args.output_dir, f'{genome_id}_ref_all.csv')
+        ref_output_path = os.path.join(args.output_dir, f'{genome_id}_ref.csv')
 
-        pbar.set_description(f'ref: Searching reference for {genome_id}.')
-        if os.path.exists(results_output_path) and (not args.overwrite):
-            continue
-
-        genome = Reference(ref_path, load_homologs=args.load_homologs, homologs_dir=args.homologs_dir)
-        query_df = FASTAFile(path=input_path).to_df(prodigal_output=args.prodigal_output)
-        results_df, summary_df = genome.search(query_df, verbose=False, summarize=args.summarize)
-
-        results_df.to_csv(results_output_path)
-        if not (summary_df is None):
-            summary_df.to_csv(summary_output_path)
+        if (not os.path.exists(ref_output_path)) or args.overwrite:
+            print(f'ref: Searching reference for genome {genome_id}, {i} of {len(genome_ids)}.')
+            reference = Reference(gbff_path)
+            query_df = FASTAFile(path=input_path).to_df(prodigal_output=True)
+            ref_all_df, ref_df = reference.search(query_df, verbose=False)
+            ref_all_df.to_csv(ref_all_output_path)
+            ref_df.to_csv(ref_output_path)
+        if args.annotate:
+            print(f'ref: Annotating reference results for genome {genome_id}, {i} of {len(genome_ids)}.')
+            annotator = ReferenceAnnotator(max_overlap=args.max_overlap, min_sequence_identity=args.min_sequence_identity)
+            annotator.run(ref_output_path)
+        print()
 
     print(f'ref: Search complete. Results written to {args.output_dir}')
 
@@ -185,10 +183,6 @@ def train():
     parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--n-splits', default=1, type=int)
-    # parser.add_argument('--balance-classes', action='store_true')
-    # parser.add_argument('--balance-lengths', action='store_true')
-    # parser.add_argument('--fit-loss-func', action='store_true')
-    # parser.add_argument('--loss-func-weights', type=str, default=None)
 
     args = parser.parse_args()
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
@@ -240,7 +234,7 @@ def predict():
         model_name = os.path.basename(model_path).replace('.pkl', '')
         model = Classifier.load(model_path)
 
-        attrs = ['genome_id', 'seq'] + ['label'] if args.load_labels else ['genome_id', 'seq']
+        attrs = ['label'] if args.load_labels else ['genome_id', 'seq']
         dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=attrs)
 
         model.scale(dataset, fit=False)
@@ -300,39 +294,6 @@ def stats():
         print(f'stats: Metrics')
         for metric in metrics:
             print(f'stats:\t{metric} = {model.metrics[metric][model.best_epoch]:.3f}')
-
-
-def label():
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', nargs='+', type=str)
-    parser.add_argument('--interpro-dir', type=str, default='./data/interpro')
-    parser.add_argument('--labels-dir', type=str, default='./data/labels')
-    parser.add_argument('--ref-dir', type=str, default='./data/ref')
-    parser.add_argument('--max-overlap', type=int, default=50)
-    parser.add_argument('--add-manual-labels', action='store_true')
-    parser.add_argument('--remove-suspect', action='store_true')
-    parser.add_argument('--overwrite')
-    args = parser.parse_args()
-
-    genome_ids = [get_genome_id(path) for path in args.input_path]
-    output_paths = [os.path.join(args.labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids]
-    ref_paths = [os.path.join(args.ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids]
-
-    for ref_path, input_path, output_path in zip(ref_paths, args.input_paths, output_paths):
-        
-        if os.path.exists(output_path) and (not args.overwrite):
-            continue 
-        
-        if os.path.exists(output_path):
-            labeler = Labeler.load(labels_path=output_path, ref_path=ref_path, interpro_dir=args.interpro_dir)
-        else:
-            labeler = Labeler(ref_path, max_overlap=args.max_overlap)
-        
-        if labeler.has_manual_labels: # I really do not want to accidentally overwrite maual labels. 
-            continue 
-
-        labeler.run(add_manual_labels=args.add_manual_labels, remove_suspect=args.remove_suspect)
 
 
 

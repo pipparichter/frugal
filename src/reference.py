@@ -5,6 +5,7 @@ from tqdm import tqdm
 from src import get_genome_id, fillna
 import warnings
 import os 
+from Bio.Align import PairwiseAligner
 import re
 
 # TODO: Take a closer look at this file, GCF_000009085.1_genomic.gbff, which seems to have a lot of weirdness. It seems as though 
@@ -13,15 +14,12 @@ import re
 
 class Reference():
 
-    def __init__(self, path:str, load_homologs:bool=True, homologs_dir:str='../data/proteins/homologs/'):
+    def __init__(self, path:str):
 
         self.genome_id = get_genome_id(path)
         df = GBFFFile(path).to_df()
         df['genome_id'] = self.genome_id
         self.df = df
-
-        if load_homologs:
-            self.load_homologs(dir_=homologs_dir)
 
     def __str__(self):
         return self.genome_id
@@ -65,7 +63,6 @@ class Reference():
         return info
 
     def _get_hits(self, query):
-
         ref_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
         # The and stop are both inclusive, so if starts or stops are equal, it counts as an overlap.  
         hits_df = ref_df[~(ref_df.start > query.stop) & ~(ref_df.stop < query.start)].copy() # Everything which passes this filter overlaps with the query region. 
@@ -97,21 +94,21 @@ class Reference():
         hits_df = hits_df.merge(hits_info_df, left_index=True, right_on='subject_id', validate='one_to_one') # This will reset the index, which is no longer important. 
         return hits_df
 
-    def search(self, query_df:pd.DataFrame, verbose:bool=True, summarize:bool=True):
-        results_df = list()
+    def search(self, query_df:pd.DataFrame, verbose:bool=True):
+        ref_all_df = list()
         for query in tqdm(list(query_df.itertuples()), desc='Reference.search', disable=(not verbose)):
             hits_df = self._get_hits(query) # Get the hit with the biggest overlap, with a preference for "valid" hits.
             if hits_df is not None:
-                results_df.append(hits_df)
+                ref_all_df.append(hits_df)
 
-        results_df = pd.concat(results_df).reset_index(drop=True)
-        summary_df = Reference.summarize(query_df, results_df) if summarize else None
-        return results_df, summary_df
+        ref_all_df = pd.concat(ref_all_df).reset_index(drop=True)
+        ref_df = Reference.summarize(query_df, ref_all_df) 
+        return ref_all_df, ref_df
 
     @staticmethod
-    def summarize(query_df:pd.DataFrame, results_df:pd.DataFrame):
-        summary_df = []
-        for query_id, df in results_df.groupby('query_id'):
+    def summarize(query_df:pd.DataFrame, ref_all_df:pd.DataFrame):
+        ref_df = []
+        for query_id, df in ref_all_df.groupby('query_id'):
             row = dict()
             row['query_id'] = query_id
             row['n_hits'] = len(df)
@@ -122,36 +119,118 @@ class Reference():
             top_hit = df.sort_values(by=['overlap_length', 'in_frame'], ascending=False).iloc[0]
             top_hit = {field.replace('subject_', 'top_hit_'):value for field, value in top_hit.to_dict().items()}
             row.update(top_hit)
-            summary_df.append(row)
-        summary_df = pd.DataFrame(summary_df).set_index('query_id')
+            ref_df.append(row)
+        ref_df = pd.DataFrame(ref_df).set_index('query_id')
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', FutureWarning)
             # Add the query IDs which had no search results to the summary DataFrame. 
-            index = pd.Index(name='query_id', data=[id_ for id_ in query_df.index if (id_ not in summary_df.index)])
-            summary_df = pd.concat([summary_df, pd.DataFrame(index=index, columns=summary_df.columns)])
-            summary_df = summary_df.loc[query_df.index] # Make sure the DataFrames are in the same order for convenience.
+            index = pd.Index(name='query_id', data=[id_ for id_ in query_df.index if (id_ not in ref_df.index)])
+            ref_df = pd.concat([ref_df, pd.DataFrame(index=index, columns=ref_df.columns)])
+            ref_df = ref_df.loc[query_df.index] # Make sure the DataFrames are in the same order for convenience.
 
-        return fillna(summary_df, rules={bool:False, str:'none', int:0, float:0}, errors='raise')
+        return fillna(ref_df, rules={bool:False, str:'none', int:0, float:0}, errors='raise')
+    
+    @staticmethod
+    def load_ref(path:str) -> pd.DataFrame:
+        dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
+        df = pd.read_csv(path, dtype=dtypes, index_col=0) # Load in the reference output. 
+        return df 
 
-    def load_homologs(self, dir_:str='../data/proteins/homologs/'):
 
-        protein_id_pattern = ['UniRef([0-9]{1,})_([0-9A-Za-z]+)', '[A-Z]P_([0-9]+).([0-9]+)']
-        protein_id_pattern = re.compile(f"({'|'.join(protein_id_pattern)})")
 
-        path = os.path.join(dir_, f'{self.genome_id}_protein.faa')
-        if not os.path.exists(path):    
-            print(f'\nReference.load_homologs: No homolog file for genome {self.genome_id} was found in {dir_}')
-            return
+class ReferenceAnnotator():
+    '''Assigns one of the following categories to a sequence based on the results of comparing its coordinates to the 
+    reference genome annotation. 
+    
+    (1) match: Sequences where the boundaries exactly match the reference, or have 100 percent sequence identity with the reference. 
+    (2) conflict: Sequences which exceed max_overlap with any 
+    (3) intergenic
+    (4) pseudogene: A separate category is needed for pseudogenes, because it is hard to determine if it is a match or spurious
+        translation in these cases. This is the category for any predictions with same-strand overlap with a pseudogene.  
+    '''
+
+    categories = np.array(['match', 'intergenic', 'conflict', 'pseudogene'])
+
+    # is_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
+    # is_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
+    # is_suspect = lambda df : ReferenceAnnotator.is_hypothetical(df) & ReferenceAnnotator.is_ab_initio(df) # This will be False for intergenic sequences. 
+
+    def __init__(self, max_overlap:int=50, min_sequence_identity:float=1):
+
+        self.max_overlap = max_overlap
+        self.min_sequence_identity = min_sequence_identity
+
+        self.is_pseudogene = lambda df : (df.same_strand & df.top_hit_pseudo)
+        self.is_match = lambda df : ~self.is_pseudogene(df) & df.in_frame & (df.top_hit_feature == 'CDS')
+        self.is_intergenic = lambda df :  ~self.is_match(df) & ~self.is_pseudogene(df) & (df.overlap_length < max_overlap) # Does not overlap with anything. 
+        self.is_conflict = lambda df : ~self.is_intergenic(df) & ~self.is_match(df) & ~self.is_pseudogene(df)  
+
+    @staticmethod
+    def _get_sequence_identity(seq:str, ref_seq:str) -> float: 
+        aligner = PairwiseAligner(match_score=1, mismatch_score=0, gap_score=0)
+        alignment = aligner.align(seq, ref_seq)[0] # I think this will get the best alignment?
+        score = alignment.score
+        score = max(score / len(seq), score / len(ref_seq)) # Normalize the score by sequence length. 
+        return score
+    
+    def _check_matches(self, ref_df:pd.DataFrame):
         
-        homologs_df = FASTAFile(path=path).to_df(prodigal_output=False)
-        homologs_df = homologs_df.groupby(homologs_df.index).first() # Drop any duplicates. 
-        print(f'\nReference.add_homologs: Loaded {len(homologs_df)} homologs; {self.df.pseudo.sum()} pseudogenes present in the genome.')
-        homologs_df.index.name = 'evidence_details'
-        homologs_df, _ = homologs_df.align(self.df.set_index('evidence_details'), axis=0, join='right', fill_value='none')
-        assert len(homologs_df) == len(self.df), f'Reference.load_homologs: Expected len(homologs_df) == len(self.df), but len(homologs_df) is {len(homologs_df)} and len(self.df) is {len(self.df)}.'
-        self.df['homolog_seq'] = homologs_df.seq.values
-        self.df['homolog_id'] = ['none' if (re.match(protein_id_pattern, id_) is None) else id_ for id_ in homologs_df.index]
+        sequence_identities = list()
+        n_match_to_conflict = 0
+        n_match_to_intergenic = 0
+        for row in tqdm(ref_df.itertuples(), total=len(ref_df), desc='ReferenceAnnotator._check_matches'):
+            if row.category == 'match':
+                sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
+                sequence_identities.append(sequence_identity)
+                if (sequence_identity < self.min_sequence_identity) and (row.overlap_length >= self.max_overlap):
+                    ref_df.loc[row.Index, 'category'] = 'conflict'
+                    n_match_to_conflict += 1
+                elif (sequence_identity < self.min_sequence_identity) and (row.overlap_length < self.max_overlap):
+                    ref_df.loc[row.Index, 'category'] = 'intergenic'
+                    n_match_to_intergenic += 1
+            else:
+                sequence_identities.append(0)
+        ref_df['sequence_identity'] = sequence_identities
+
+        if n_match_to_intergenic > 0:
+            print(f'ReferenceAnnotator._check_matches: Downgraded {n_match_to_intergenic} "match" to "intergenic."')
+        if n_match_to_conflict > 0:
+            print(f'ReferenceAnnotator._check_matches: Downgraded {n_match_to_conflict} "match" to "conflict."')
+
+        return ref_df 
+
+    def run(self, path:str):
+        ref_df = Reference.load_ref(path)
+        conditions = [self.is_match(ref_df), self.is_intergenic(ref_df), self.is_conflict(ref_df), self.is_pseudogene(ref_df)]
+        ref_df['category'] = np.select(conditions, ReferenceAnnotator.categories, default='none')
+        assert (ref_df.category == 'none').sum() == 0, 'ReferenceAnnotator.run: Some sequences were not assigned annotations.'
+
+        ref_df = self._check_matches(ref_df)
+        ref_df.to_csv(path) # Write the DataFrame back to the original path. 
+
+
+
+
+
+    # def load_homologs(self, dir_:str='../data/proteins/homologs/'):
+
+    #     protein_id_pattern = ['UniRef([0-9]{1,})_([0-9A-Za-z]+)', '[A-Z]P_([0-9]+).([0-9]+)']
+    #     protein_id_pattern = re.compile(f"({'|'.join(protein_id_pattern)})")
+
+    #     path = os.path.join(dir_, f'{self.genome_id}_protein.faa')
+    #     if not os.path.exists(path):    
+    #         print(f'\nReference.load_homologs: No homolog file for genome {self.genome_id} was found in {dir_}')
+    #         return
+        
+    #     homologs_df = FASTAFile(path=path).to_df(prodigal_output=False)
+    #     homologs_df = homologs_df.groupby(homologs_df.index).first() # Drop any duplicates. 
+    #     print(f'\nReference.add_homologs: Loaded {len(homologs_df)} homologs; {self.df.pseudo.sum()} pseudogenes present in the genome.')
+    #     homologs_df.index.name = 'evidence_details'
+    #     homologs_df, _ = homologs_df.align(self.df.set_index('evidence_details'), axis=0, join='right', fill_value='none')
+    #     assert len(homologs_df) == len(self.df), f'Reference.load_homologs: Expected len(homologs_df) == len(self.df), but len(homologs_df) is {len(homologs_df)} and len(self.df) is {len(self.df)}.'
+    #     self.df['homolog_seq'] = homologs_df.seq.values
+    #     self.df['homolog_id'] = ['none' if (re.match(protein_id_pattern, id_) is None) else id_ for id_ in homologs_df.index]
 
 
 

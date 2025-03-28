@@ -10,7 +10,6 @@ commands = list()
 commands += ['prune=src.cli:prune']
 commands += ['stats=src.cli:stats']
 commands += ['library=src.cli:library']
-commands += ['label=src.cli:label']
 commands += ['ref=src.cli:ref']
 commands += ['embed=src.cli:embed']
 commands += ['train=src.cli:train']
