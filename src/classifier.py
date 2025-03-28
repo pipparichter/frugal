@@ -211,7 +211,7 @@ class Classifier(torch.nn.Module):
             return False
         return self.get_latest_metric('test_accuracy') > self.get_best_metric('test_accuracy')
 
-    def fit(self, datasets:tuple, epochs:int=100, lr:float=1e-7, batch_size:int=16, fit_loss_func:bool=False, min_epochs:int=20):
+    def fit(self, datasets:tuple, epochs:int=100, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False, min_epochs:int=20):
 
         assert datasets.test.scaled, 'Classifier.fit: The input test Dataset has not been scaled.' 
         assert datasets.train.scaled, 'Classifier.fit: The input train Dataset has not been scaled.'

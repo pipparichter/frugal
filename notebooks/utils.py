@@ -16,13 +16,13 @@ plt.rcParams['font.family'] = 'Arial'
 
 
 def recall(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
-    model_labels = (df[f'model_output_{class_}'] > threshold).astype(int)
+    model_labels = np.where(df[f'model_output_{class_}'] > threshold, class_, int(not class_))
     n = ((model_labels == class_) & (df.label == class_)).sum()
     N = (df.label == class_).sum() # Total number of relevant instances (i.e. members of the class)
     return n / N
 
 def precision(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
-    model_labels = (df[f'model_output_{class_}'] > threshold).astype(int)
+    model_labels = np.where(df[f'model_output_{class_}'] > threshold, class_, int(not class_))
     n = ((model_labels == class_) & (df.label == class_)).sum()
     N = (model_labels == class_).sum() # Total number of retrieved instances (i.e. predicted members of the class)
     return n / N
@@ -105,82 +105,6 @@ def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata
     genome_metadata_df = genome_metadata_df.rename(columns=col_names)
     genome_metadata_df = fillna(genome_metadata_df, rules={str:'none'}, errors='ignore')
     return genome_metadata_df.set_index('genome_id')
-
-
-class Results():
-    '''Class for managing loading and merging of results.'''
-    ref_dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
-
-    def __init__(self, genome_ids:list, load_ref:bool=True, load_labels:bool=True, **kwargs):
-        self.genome_ids = genome_ids
-        self.df = None
-        if load_ref:
-            self.load_ref(**kwargs)
-        if load_labels:
-            self.load_labels(**kwargs)
-
-    def _merge(self, df:pd.DataFrame):
-        if self.df is None:
-            df = df[df.genome_id.isin(self.genome_ids)] # Expecting whatever this is to have a genome ID column. 
-            self.df = df.copy()
-        else:
-            # More complicated merging strategy to allow sequential loading of separate BLAST files without overwriting.
-            shared_cols = np.intersect1d(self.df.columns.values, df.columns.values)
-            df_ = self.df[shared_cols].copy().replace('none', np.nan)
-            df_ = df_.combine_first(df) # This will prioritize existing data. 
-            self.df = self.df.drop(columns=shared_cols)
-            self.df = self.df.merge(df_, left_index=True, right_index=True, how='left', validate='one_to_one')
-            self.df = fillna(self.df, rules={str:'none'}, errors='ignore')
-
-    def load_predict(self, path:str, model_name:str=None):
-        pred_df = pd.read_csv(path, index_col=0)
-        ids = pred_df.index # IDs to keep after merging. 
-        if model_name is not None:
-            cols = [col for col in pred_df.columns if ((model_name in col) or (col == 'label'))]
-            pred_df = pred_df[cols].copy()
-            pred_df = pred_df.rename(columns={col:col.replace(f'{model_name}', 'model') for col in cols})
-            pred_df['model_name'] = model_name
-        self._merge(pred_df)
-        self.df = self.df.loc[ids] # Drop the IDs without predictions. 
-
-    def load_interpro(self, path:str='../data/model_organism_spurious_interpro.tsv'):
-        interpro_df = InterProScanFile(path).to_df(drop_duplicates=True, add_prefix=True)
-        self._merge(interpro_df)
-        
-    def load_blast(self, path:str='../data/model_organism_spurious_blast.json'):
-        blast_df = BLASTJsonFile(path).to_df(drop_duplicates=True, add_prefix=True)
-        self._merge(blast_df)
-
-    def load_ref(self, ref_dir:str='../data/ref', **kwargs):
-        paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in self.genome_ids]
-        # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
-        ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=Results.ref_dtypes).assign(genome_id=get_genome_id(path)) for path in paths], ignore_index=False)
-        self._merge(ref_df)
-
-    def load_labels(self, labels_dir:str='../data/labels', **kwargs):
-        paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in self.genome_ids] 
-        labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in paths])
-        self._merge(labels_df)
-
-    def to_df(self, **filters):
-        df = self.df.copy()
-        for col, value in filters.items():
-            df = df[df[col] == value].copy()
-        return df
-
-    def to_fasta(self, path:str, seq_col:str='query_seq', **filters):
-        df = self.to_df(**filters)
-        df = df.rename(columns={seq_col:'seq'})
-        FASTAFile(df=df).write(path)
-
-    @classmethod
-    def concat(cls, r1, r2):
-        genome_ids = list(r1.genome_ids) + list(r2.genome_ids)
-        df = pd.concat([r1.df, r2.df])
-        
-        results = cls(genome_ids, load_labels=False, load_ref=False)
-        results.df = df 
-        return results
 
 
 

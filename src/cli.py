@@ -170,7 +170,13 @@ def ref():
     print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "train --input-path ./data/train_dataset.h5 --model-name test"
+# v1 1280,1024,2
+# v2 1280,1024,512,2
+# v3 1280,1024,512,256,2
+
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,2 --input-path ./data/train_dataset.h5 --model-name campylobacterota_v1"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,2 --input-path ./data/train_dataset.h5 --model-name campylobacterota_v2"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,256,2 --input-path ./data/train_dataset.h5 --model-name campylobacterota_v3"
 def train():
 
     parser = argparse.ArgumentParser()
@@ -180,9 +186,9 @@ def train():
     parser.add_argument('--output-dir', default='./models', type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--dims', type=str, default='1280,1024,512,2')
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
-    parser.add_argument('--n-splits', default=1, type=int)
+    parser.add_argument('--n-splits', default=5, type=int)
 
     args = parser.parse_args()
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
