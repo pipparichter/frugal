@@ -15,8 +15,7 @@ import re
 #   than caused by clustering the training and testing dataset together. 
 # TODO: Why does KMeans need to use Euclidean distance? Other distance metrics also have a concept of closeness. 
 # https://www.biorxiv.org/content/10.1101/2024.11.13.623527v1.full
-
-
+# TODO: Can and should probably make tree parsing recursive. 
 
 class Clusterer():
 
@@ -101,7 +100,7 @@ class Clusterer():
             cluster_idxs = np.where(self.cluster_labels == cluster_to_split)[0]
 
             if self.verbose:
-                print(f'Clusterer.fit: Split {iter}, cluster {cluster_to_split} divided using bisection strategy {self.bisecting_strategy}.')
+                print(f'Clusterer.fit: Split {iter}, cluster {cluster_to_split} divided using bisection strategy {self.bisecting_strategy}.', flush=True)
             
             kmeans = KMeans(**self.kmeans_kwargs)
             kmeans.fit(embeddings[cluster_idxs])
@@ -127,7 +126,8 @@ class Clusterer():
 
         if self.check_non_homogenous:
             n = self._get_n_non_homogenous()
-            warnings.warn(f'Clusterer.fit: There are {n} remaining clusters which are not homogenous.')
+            if (n > 0):
+                warnings.warn(f'Clusterer.fit: There are {n} remaining clusters which are not homogenous.')
 
     def save(self, path:str):
         with open(path, 'wb') as f:
@@ -138,8 +138,71 @@ class Clusterer():
         with open(path, 'rb') as f:
             obj = pickle.load(f)
         return obj
+    
 
-# class Clusterer():
+class ClusterTreeNode():
+
+    def __init__(self, cluster_labels:list, index:np.ndarray=None, labels:np.ndarray=None):
+
+        self.index = index
+        self.labels = labels
+        self.cluster_labels = cluster_labels
+
+        self.children = []
+
+    def is_homogenous(self):
+        return np.all(self.labels == self.labels[0])
+    
+    def copy(self):
+        pass 
+
+    def __len__(self):
+        return len(self.cluster_labels)
+
+
+class ClusterTree():
+    split_pattern = r'\(([\d]{1,}), ([\d]{1,})\)'
+    def __init__(self, clusterer):
+
+        self.tree = clusterer.tree 
+        self.cluster_labels = clusterer.cluster_labels
+        self.index = clusterer.index
+        self.labels = clusterer.labels
+        self.root_node = self._parse_tree(self.tree)
+    
+    def _get_node(self, cluster_labels:list):
+        mask = np.isin(self.cluster_labels, cluster_labels)
+        index = self.index[mask].copy()
+        labels = self.labels[mask].copy()
+        return ClusterTreeNode(cluster_labels=cluster_labels, index=index, labels=labels)
+    
+    def _merge_nodes(self, left_node, right_node):
+        cluster_labels = left_node.cluster_labels + right_node.cluster_labels
+        parent_node = self._get_node(cluster_labels)
+        parent_node.children = [left_node, right_node]
+        return parent_node
+
+    def _parse_tree(self, tree:str):
+
+        nodes = {cluster_label:self._get_node([cluster_label]) for cluster_label in np.unique(self.cluster_labels)}
+
+        while len(tree) > 1:
+            splits = re.findall(ClusterTree.split_pattern, tree)
+            splits = [(int(left_node_label), int(right_node_label)) for left_node_label, right_node_label in splits]
+
+            for left_node_label, right_node_label in splits:
+
+                assert left_node_label < right_node_label, 'ClusterTree._parse_tree: Expected left node label to be less than right node label.'
+
+                right_node, left_node = nodes[left_node_label], nodes[right_node_label]
+                parent_node = self._merge_nodes(left_node, right_node)
+                
+                nodes[left_node_label] = parent_node
+                nodes[right_node_label] = None 
+                tree = tree.replace(f'({left_node_label}, {right_node_label})', str(left_node_label))
+        # assert len(nodes) == 1, 'Clusterer._parse_tree: There should only be one node in in the nodes dictionary.'
+        return nodes[0]
+
 
 #     def __init__(self, tolerance=1e-8, n_clusters:int=1000, n_init:int=10, max_iter:int=1000, verbose:bool=False):
         

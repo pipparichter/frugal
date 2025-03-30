@@ -38,21 +38,25 @@ def cluster():
 
     attrs = ['label'] if (args.bisection_strategy == 'largest_non_homogenous') else []
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=attrs)
-
+    
+    df = pd.DataFrame(index=dataset.index)
+    df.index.name = 'id'
+    
     if args.cluster_path is not None:
         clusterer = Clusterer.load(args.cluster_path)
+
+        dists = clusterer.transform(dataset)
+        df['cluster_label'] = np.argmin(dists, axis=1)
+        for i in range(dists.shape[1]):
+            df[f'distance_to_cluster_{i}'] = dists[:, i].ravel().copy()
     else:
         clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisection_strategy)
         clusterer.fit(dataset)
         clusterer.save(output_path.replace('.csv', '.pkl'))
-
-    columns = [f'distance_to_cluster_{i}' for i in range(clusterer.n_clusters)]
-    df = pd.DataFrame(clusterer.transform(dataset), index=dataset.index, columns=columns)
-    df.index.name = 'id'
-    df['cluster_label'] = clusterer.predict(dataset)
-    df = df[['cluster_label'] + columns]
+        # To computationally-intensive to compute the entire distance matrix when clustering on a big dataset. 
+        df['cluster_label'] = clusterer.cluster_labels
+    
     df.to_csv(output_path)
-
     print(f'cluster: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
     print(f'cluster: Sequence clusters saved to {output_path}')
 
