@@ -30,6 +30,7 @@ def cluster():
     parser.add_argument('--cluster-path', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     parser.add_argument('--n-clusters', default=50000, type=int)
+    parser.add_argument('--bisection-strategy', default='largest_non_homogenous', type=str)
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
@@ -40,7 +41,7 @@ def cluster():
     if args.cluster_path is not None:
         clusterer = Clusterer.load(args.cluster_path)
     else:
-        clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose)
+        clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisection_strategy)
         clusterer.fit(dataset)
         clusterer.save(output_path.replace('.csv', '.pkl'))
 
