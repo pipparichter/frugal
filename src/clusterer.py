@@ -33,20 +33,6 @@ class Clusterer():
         for cluster_label, cluster_df in df.groupby('cluster_label'):
             assert cluster_df.label.nunique() == 1, f'Clusterer._check_homogenous: Cluster {cluster_label} is not homogenous.'
 
-
-    # def get_distance_to_cluster_center(self, dataset):
-    #     # cluster_centers = self.cluster_centers[self.cluster_labels, :]
-    #     assert np.all(dataset.index == self.index), 'get_distance_to_cluster_center: The Dataset index does not match the stored index.'
-    #     embeddings = Clusterer._get_embeddings(dataset) # Use half precision to reduce memory. 
-    #     embeddings = self.scaler.transform(embeddings)
-
-    #     dists = self.kmeans.transform(embeddings)
-    #     n_errors = (np.argmin(dists, axis=1) == self.cluster_labels).sum()
-    #     assert n_errors == 0, f'get_distance_to_cluster_center: {n_errors} cluster labels do not match the center with the minimum distance.'
-    #     if n_errors > 0:
-    #         warnings.warn(f'get_distance_to_cluster_center: {n_errors} cluster labels do not match the center with the minimum distance.')
-    #     return dists.min(axis=1)
-
     def transform(self, dataset):
         embeddings = dataset.numpy().astype(np.float16) # Use half precision to reduce memory. 
         embeddings = self.scaler.transform(embeddings)
@@ -55,7 +41,7 @@ class Clusterer():
     
     def predict(self, dataset):
         dists = self.transform(dataset)
-        return dists.min(axis=1) 
+        return dists.argmin(axis=1) 
     
     def fit(self, dataset): # , check_homogenous:bool=False):
         embeddings = dataset.numpy().astype(np.float16) # Use half precision to reduce memory. 
