@@ -29,7 +29,7 @@ def cluster():
     parser.add_argument('--output-path', default=None, type=str)
     parser.add_argument('--cluster-path', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser.add_argument('--n-clusters', default=None, type=int)
+    parser.add_argument('--n-clusters', default=50000, type=int)
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
@@ -42,7 +42,7 @@ def cluster():
     else:
         clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose)
         clusterer.fit(dataset)
-        clusterer.save(output_path.replace('.csv', '.pickle'))
+        clusterer.save(output_path.replace('.csv', '.pkl'))
 
     columns = [f'distance_to_cluster_{i}' for i in range(clusterer.n_clusters)]
     df = pd.DataFrame(clusterer.transform(dataset), index=dataset.index, columns=columns)

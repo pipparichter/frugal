@@ -17,7 +17,7 @@ import pickle
 
 class Clusterer():
 
-    def __init__(self, tolerance=1e-8, n_clusters:int=1000, n_init:int=10, max_iter:int=300, verbose:bool=False):
+    def __init__(self, tolerance=1e-8, n_clusters:int=1000, n_init:int=10, max_iter:int=1000, verbose:bool=False):
         
         self.n_clusters = n_clusters
         self.kmeans = BisectingKMeans(verbose=verbose, n_clusters=n_clusters, bisecting_strategy='largest_cluster', tol=tolerance, n_init=n_init, random_state=42, max_iter=max_iter) # Will use Euclidean distance. 
