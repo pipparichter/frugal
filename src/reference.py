@@ -10,6 +10,7 @@ import re
 
 # TODO: Take a closer look at this file, GCF_000009085.1_genomic.gbff, which seems to have a lot of weirdness. It seems as though 
 #   pseudogenes are being entered as misc_features.  
+# TODO: Make sure sequences are added under query_hit even if there is no hit. 
 
 
 class Reference():
@@ -134,6 +135,7 @@ class Reference():
     @staticmethod
     def load_ref(path:str) -> pd.DataFrame:
         dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
+        dtypes.update({'top_hit_pseudo':bool, 'in_frame':bool})
         df = pd.read_csv(path, dtype=dtypes, index_col=0) # Load in the reference output. 
         return df 
 
@@ -174,29 +176,32 @@ class ReferenceAnnotator():
         score = max(score / len(seq), score / len(ref_seq)) # Normalize the score by sequence length. 
         return score
     
-    def _check_matches(self, ref_df:pd.DataFrame):
-        
-        sequence_identities = list()
-        n_match_to_conflict = 0
-        n_match_to_intergenic = 0
-        for row in tqdm(ref_df.itertuples(), total=len(ref_df), desc='ReferenceAnnotator._check_matches'):
-            if row.category == 'match':
-                sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
-                sequence_identities.append(sequence_identity)
-                if (sequence_identity < self.min_sequence_identity) and (row.overlap_length >= self.max_overlap):
-                    ref_df.loc[row.Index, 'category'] = 'conflict'
-                    n_match_to_conflict += 1
-                elif (sequence_identity < self.min_sequence_identity) and (row.overlap_length < self.max_overlap):
-                    ref_df.loc[row.Index, 'category'] = 'intergenic'
-                    n_match_to_intergenic += 1
-            else:
-                sequence_identities.append(0)
-        ref_df['sequence_identity'] = sequence_identities
+    def _check(self, ref_df:pd.DataFrame):
 
-        if n_match_to_intergenic > 0:
-            print(f'ReferenceAnnotator._check_matches: Downgraded {n_match_to_intergenic} "match" to "intergenic."')
-        if n_match_to_conflict > 0:
-            print(f'ReferenceAnnotator._check_matches: Downgraded {n_match_to_conflict} "match" to "conflict."')
+        ref_df['sequence_identity'] = np.where(ref_df.exact_match, 1, 0).astype(np.float64)
+        
+        mask, n_downgraded = ((ref_df.category == 'match') & ~ref_df.exact_match), 0
+        for row in tqdm(ref_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
+            sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
+            ref_df.loc[row.Index, 'sequence_identity'] = sequence_identity
+            if (sequence_identity < self.min_sequence_identity):
+                ref_df.loc[row.Index, 'category'] = 'conflict' if (row.overlap_length >= self.max_overlap) else 'intergenic'
+                n_downgraded += 1
+
+
+        # I think there are some cases which are matches, but because one sequence is partial, they are not registering
+        # as in-frame. These are being categorized as conflicts or intergenic depending on the overlap. 
+
+        mask, n_upgraded = ((ref_df.category.isin(['intergenic', 'conflict'])) & ref_df.same_strand & (ref_df.top_hit_feature == 'CDS')), 0
+        for row in tqdm(ref_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
+            sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
+            ref_df.loc[row.Index, 'sequence_identity'] = sequence_identity
+            if (sequence_identity >= self.min_sequence_identity):
+                ref_df.loc[row.Index, 'category'] = 'match'
+                n_upgraded += 1
+            
+        print(f'ReferenceAnnotator._check: Downgraded {n_downgraded} "match" sequences to "intergenic" or "conflict".')
+        print(f'ReferenceAnnotator._check: Upgraded {n_upgraded} "intergenic" or "conflict" sequences to "match.')
 
         return ref_df 
 
@@ -206,7 +211,8 @@ class ReferenceAnnotator():
         ref_df['category'] = np.select(conditions, ReferenceAnnotator.categories, default='none')
         assert (ref_df.category == 'none').sum() == 0, 'ReferenceAnnotator.run: Some sequences were not assigned annotations.'
 
-        ref_df = self._check_matches(ref_df)
+        ref_df['sequence_identity'] = 0.0
+        ref_df = self._check(ref_df)
         ref_df.to_csv(path) # Write the DataFrame back to the original path. 
 
 

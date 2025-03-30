@@ -27,22 +27,31 @@ def cluster():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--output-path', default=None, type=str)
+    parser.add_argument('--cluster-path', default=None, type=str)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--n-clusters', default=None, type=int)
-    parser.add_argument('--check-homogenous', action='store_true')
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
 
     output_path = args.input_path.replace('.h5', '_cluster.csv') if (args.output_path is None) else args.output_path
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
-    clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose)
-    clusterer.fit(dataset, check_homogenous=args.check_homogenous)
-    clusterer.write(output_path, dataset=dataset)
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=[])
+
+    if args.cluster_path is not None:
+        clusterer = Clusterer.load(args.cluster_path)
+    else:
+        clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose)
+        clusterer.fit(dataset)
+        clusterer.save(output_path.replace('.csv', '.pickle'))
+
+    columns = [f'distance_to_cluster_{i}' for i in range(clusterer.n_clusters)]
+    df = pd.DataFrame(clusterer.transform(dataset), index=dataset.index, columns=columns)
+    df.index.name = 'id'
+    df['cluster_label'] = clusterer.predict(dataset)
+    df = df[['cluster_label'] + columns]
+    df.to_csv(output_path)
 
     print(f'cluster: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
-    # print(f'cluster: {clusterer.n_singleton_clusters} clusters only contain one sequence.')
     print(f'cluster: Sequence clusters saved to {output_path}')
 
 
@@ -142,7 +151,7 @@ def ref():
     parser.add_argument('--gbffs-dir', default='./data/ncbi/gbffs', type=str)
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--annotate', action='store_true')
-    parser.add_argument('--min-sequence-identity', type=float, default=1)
+    parser.add_argument('--min-sequence-identity', type=float, default=0.9) # Set to 0.9 to allow some wiggle room with the start codons. 
     parser.add_argument('--max-overlap', type=int, default=50)
     args = parser.parse_args()
 
@@ -230,7 +239,6 @@ def predict():
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--model-path', nargs='+', type=str, default=None)
     parser.add_argument('--output-dir', default='./data/', type=str)
-    # parser.add_argument('--models-dir', default='./models', type=str)
     parser.add_argument('--load-labels', action='store_true')
     args = parser.parse_args()
 

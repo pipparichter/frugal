@@ -230,7 +230,6 @@ class Classifier(torch.nn.Module):
         self._update_metrics(datasets.test) # Initialize the metrics list. 
         best_model_weights = copy.deepcopy(self.state_dict())
 
-        # pbar = tqdm(list(range(epochs))) 
         for epoch in range(epochs):
             losses = list() # Re-initialize the epoch loss. 
             for batch in dataloader:
@@ -244,9 +243,6 @@ class Classifier(torch.nn.Module):
                 optimizer.zero_grad()
             
             metrics = self._update_metrics(datasets.test, losses=losses)
-
-            # pbar.set_description(f'Classifier.fit: {metrics}')
-            # pbar.refresh()
 
             if self._improved(epoch=epoch):
                 self.best_epoch = epoch + 1
