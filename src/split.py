@@ -38,28 +38,24 @@ class ClusterStratifiedShuffleSplit():
             assert np.intersect1d(train_idxs, self.singleton_idxs).size == 0, 'ClusterStratifiedShuffleSplit._check: There are singleton indices in the split.'
             assert np.intersect1d(test_idxs, self.singleton_idxs).size == 0, 'ClusterStratifiedShuffleSplit._check: There are singleton indices in the split.'
 
-    # def _check_clusters(self, cluster_df):
-    #     assert len(cluster_df) == len(self.dataset), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
-    #     assert np.all(np.sort(cluster_df.index) == np.sort(self.dataset.index)), 'ClusterStratifiedShuffleSplit._check_clusters: The dataset and cluster DataFrame indices do not match.'
+    # @staticmethod
+    # def _split_non_homogenous_clusters(cluster_df:pd.DataFrame) -> pd.DataFrame:
 
-    @staticmethod
-    def _split_non_homogenous_clusters(cluster_df:pd.DataFrame) -> pd.DataFrame:
+    #     is_non_homogenous = lambda df : (df.label.nunique() > 1)
+    #     is_homogenous = lambda df : (df.label.nunique() == 1)
 
-        is_non_homogenous = lambda df : (df.label.nunique() > 1)
-        is_homogenous = lambda df : (df.label.nunique() == 1)
+    #     cluster_labels = cluster_df.cluster_label.unique()
+    #     non_homogenous_cluster_labels = cluster_labels[cluster_df.groupby('cluster_label', sort=False).apply(is_non_homogenous, include_groups=False)]
+    #     print(f'ClusterStratifiedShuffleSplit._split_non_homogenous_clusters: Found {len(non_homogenous_cluster_labels)} non-homogenous clusters.')
 
-        cluster_labels = cluster_df.cluster_label.unique()
-        non_homogenous_cluster_labels = cluster_labels[cluster_df.groupby('cluster_label', sort=False).apply(is_non_homogenous, include_groups=False)]
-        print(f'ClusterStratifiedShuffleSplit._split_non_homogenous_clusters: Found {len(non_homogenous_cluster_labels)} non-homogenous clusters.')
+    #     max_cluster_label = cluster_labels.max()
+    #     for cluster_label in non_homogenous_cluster_labels:
+    #         cluster_ids = cluster_df[(cluster_df.cluster_label == cluster_label) & (cluster_df.label == 1)].index 
+    #         cluster_df.loc[cluster_ids, 'cluster_label'] = max_cluster_label + 1
+    #         max_cluster_label += 1
 
-        max_cluster_label = cluster_labels.max()
-        for cluster_label in non_homogenous_cluster_labels:
-            cluster_ids = cluster_df[(cluster_df.cluster_label == cluster_label) & (cluster_df.label == 1)].index 
-            cluster_df.loc[cluster_ids, 'cluster_label'] = max_cluster_label + 1
-            max_cluster_label += 1
-
-        assert np.all(cluster_df.groupby('cluster_label').apply(is_homogenous, include_groups=False)), f'ClusterStratifiedShuffleSplit._split_non_homogenous_clusters: There are still non-homogenous clusters.'
-        return cluster_df
+    #     assert np.all(cluster_df.groupby('cluster_label').apply(is_homogenous, include_groups=False)), f'ClusterStratifiedShuffleSplit._split_non_homogenous_clusters: There are still non-homogenous clusters.'
+    #     return cluster_df
 
     def _load_clusters(self, path:str):
 
