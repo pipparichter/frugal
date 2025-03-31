@@ -1,6 +1,3 @@
-from src import seed 
-seed(42) # Make sure everything is random-seeded for reproducibility. 
-
 import numpy as np 
 import pandas as pd 
 from src.dataset import Dataset, Datasets, Pruner

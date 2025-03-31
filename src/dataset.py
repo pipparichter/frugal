@@ -44,6 +44,7 @@ class Dataset(torch.utils.data.Dataset):
         
         self.attrs = list(kwargs.keys())
         for attr, value in kwargs.items():
+            value = np.array(list(value))
             setattr(self, attr, value)
 
         # I think that prepending an underscore to the attribute name makes the attribute inaccessible from outside the class. 

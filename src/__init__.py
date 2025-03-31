@@ -1,22 +1,11 @@
 import numpy as np 
-import torch 
-import random
 import re
-import matplotlib.pyplot as plt 
 import pandas as pd 
 import warnings 
+from Bio.Align import PairwiseAligner
+import itertools
 
-plt.rcParams['font.family'] = 'Arial'
-
-def seed(seed:int=42):
-
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    # When running on the CuDNN backend, two further options must be set
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+# plt.rcParams['font.family'] = 'Arial'
 
 
 def get_genome_id(input_path:str, errors='raise', default:str=None) -> str:
@@ -33,7 +22,7 @@ def has_mixed_dtypes(df:pd.DataFrame):
     return (n_dtypes > 1).sum() > 0
 
 
-def get_dtypes(df:pd.DataFrame, errors:str='warn'):
+def get_dtypes(df:pd.DataFrame):
     dtypes = dict()
     for col in df.columns:
         dtype = df[col].dropna().apply(type).values
@@ -54,6 +43,33 @@ def fillna(df:pd.DataFrame, rules:dict={bool:False, str:'none', int:0}, errors='
             if errors == 'raise':
                 assert df[col].isnull().sum() == 0, f'fillna: There are still NaNs in column {col}.'
     return df 
+
+
+def get_sequence_identity(seqs:list) -> float: 
+    aligner = PairwiseAligner(match_score=1, mismatch_score=0, gap_score=0)
+    alignment = aligner.align(seqs[0], seqs[1])[0] # I think this will get the best alignment?
+    score = alignment.score
+    score = max(score / len(seqs[0]), score / len(seqs[1])) # Normalize the score by sequence length. 
+    return score
+
+def get_sequence_identities(seq_df:pd.DataFrame, as_matrix:bool=False):
+    n = len(seq_df)
+
+    if n == 1:
+        return np.ones(1) if (not as_matrix) else np.ones((1, 1))
+    
+    idxs = itertools.combinations(seq_df.index, 2)
+    idxs = [(i, j) for i, j in idxs if (i != j)]
+
+    if (not as_matrix):
+        return np.array([get_sequence_identity((seq_df.loc[i].seq, seq_df.loc[j].seq)) for i, j in idxs])
+    
+    values = pd.DataFrame(np.eye(n), index=seq_df.index, columns=seq_df.index)
+    for i, j in idxs:
+        sequence_identity = get_sequence_identity((seq_df.loc[i].seq, seq_df.loc[j].seq))
+        values.loc[i, j] = sequence_identity
+        values.loc[j, i] = sequence_identity
+    return values
 
 
 

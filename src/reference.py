@@ -218,7 +218,6 @@ class ReferenceAnnotator():
 
 
 
-
     # def load_homologs(self, dir_:str='../data/proteins/homologs/'):
 
     #     protein_id_pattern = ['UniRef([0-9]{1,})_([0-9A-Za-z]+)', '[A-Z]P_([0-9]+).([0-9]+)']

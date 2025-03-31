@@ -15,7 +15,9 @@ import re
 #   than caused by clustering the training and testing dataset together. 
 # TODO: Why does KMeans need to use Euclidean distance? Other distance metrics also have a concept of closeness. 
 # https://www.biorxiv.org/content/10.1101/2024.11.13.623527v1.full
-# TODO: Can and should probably make tree parsing recursive. 
+# TODO: Can and should probably make tree parsing recursive.
+
+
 
 class Clusterer():
 
@@ -140,6 +142,9 @@ class Clusterer():
         return obj
     
 
+# Want some kind of metric for cluster "difficulty" based on the bisection tree. 
+# Something like "How many splits before the leaf containing the child is homogenous?"
+# More splits would mean it's more mixed in with opposite-labeled things. 
 class ClusterTreeNode():
 
     def __init__(self, cluster_labels:list, index:np.ndarray=None, labels:np.ndarray=None):
@@ -153,8 +158,11 @@ class ClusterTreeNode():
     def is_homogenous(self):
         return np.all(self.labels == self.labels[0])
     
-    def copy(self):
-        pass 
+    def contains(self, cluster_label:int):
+        return (cluster_label in self.cluster_labels)
+
+    def is_terminal(self):
+        return len(self.children) == 0
 
     def __len__(self):
         return len(self.cluster_labels)
@@ -168,6 +176,7 @@ class ClusterTree():
         self.cluster_labels = clusterer.cluster_labels
         self.index = clusterer.index
         self.labels = clusterer.labels
+        self.n_splits = clusterer.n_clusters - 1
         self.root_node = self._parse_tree(self.tree)
     
     def _get_node(self, cluster_labels:list):
@@ -181,11 +190,12 @@ class ClusterTree():
         parent_node = self._get_node(cluster_labels)
         parent_node.children = [left_node, right_node]
         return parent_node
-
+    
     def _parse_tree(self, tree:str):
 
         nodes = {cluster_label:self._get_node([cluster_label]) for cluster_label in np.unique(self.cluster_labels)}
 
+        pbar = tqdm(total=self.n_splits, desc='ClusterTree._parse_tree')
         while len(tree) > 1:
             splits = re.findall(ClusterTree.split_pattern, tree)
             splits = [(int(left_node_label), int(right_node_label)) for left_node_label, right_node_label in splits]
@@ -200,8 +210,30 @@ class ClusterTree():
                 nodes[left_node_label] = parent_node
                 nodes[right_node_label] = None 
                 tree = tree.replace(f'({left_node_label}, {right_node_label})', str(left_node_label))
+                pbar.update(1)
+
         # assert len(nodes) == 1, 'Clusterer._parse_tree: There should only be one node in in the nodes dictionary.'
+        pbar.close()
         return nodes[0]
+    
+    def get_first_homogenous_node(self, cluster_label:int=None):
+        '''Retrieve the first node containing the specified cluster which is homogenous, as well as the depth at which
+        the node is found. The number of splits required to get a homogenous cluster containing the cluster label
+        should be a proxy for the cluster "difficulty."'''
+
+        def _get_first_homogenous_node(curr_node:ClusterTreeNode, n_splits:int):
+            if curr_node.is_homogenous():
+                return curr_node, n_splits 
+            elif curr_node.is_terminal():
+                print(f'ClusterTree.get_first_homogenous_node: No homogenous node containing {cluster_label} was found in the tree.')
+                return None, n_splits
+            else:
+                left_node, right_node = curr_node.children
+                next_node = left_node if (left_node.contains(cluster_label)) else right_node
+                return _get_first_homogenous_node(next_node, n_splits + 1)
+            
+        return _get_first_homogenous_node(self.root_node, 0)
+        
 
 
 #     def __init__(self, tolerance=1e-8, n_clusters:int=1000, n_init:int=10, max_iter:int=1000, verbose:bool=False):

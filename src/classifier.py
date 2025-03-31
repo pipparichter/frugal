@@ -14,6 +14,7 @@ from sklearn.metrics import balanced_accuracy_score
 import io
 import warnings 
 from src.sampler import Sampler
+import random
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes? I think it's just a minor thing, so that regardless of the number of
@@ -24,6 +25,18 @@ from src.sampler import Sampler
 # TODO: Either figure out a different metric, or require both accuracy and precision to meet a certain threshold. 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+# Seed everything for reproducibility. This should be run every time the module is imported. 
+seed = 42 
+
+np.random.seed(seed)
+random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+# When running on the CuDNN backend, two further options must be set
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 
 class Unpickler(pickle.Unpickler):
     # https://github.com/pytorch/pytorch/issues/16797

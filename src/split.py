@@ -4,6 +4,9 @@ import json
 import pandas as pd
 import numpy as np
 
+# TODO: Might be nice to clean up the way cluster labels are managed, like store them as attributes in the 
+#   Dataset, and verify that the cluster label is poplated before proceeding with the split.
+
 
 class ClusterStratifiedShuffleSplit():
     '''Implements a splitting strategy based on the results of clustering. The split ensures that all singleton clusters are 
@@ -57,6 +60,13 @@ class ClusterStratifiedShuffleSplit():
     #     assert np.all(cluster_df.groupby('cluster_label').apply(is_homogenous, include_groups=False)), f'ClusterStratifiedShuffleSplit._split_non_homogenous_clusters: There are still non-homogenous clusters.'
     #     return cluster_df
 
+    @staticmethod
+    def _check_homogenous_clusters(cluster_df:pd.DataFrame):
+        '''Verify that all clusters are homogenous, i.e. every element in the cluster is assigned the same label.'''
+        for cluster_label, df in cluster_df.groupby('cluster_label'):
+            assert df.label.nunique() == 1, f'ClusterStratifiedShuffleSplit._check_homogenous_clusters: Cluster {cluster_label} is not homogenous.'
+        print(f'ClusterStratifiedShuffleSplit._check_homogenous_clusters: All clusters in loaded file are homogenous.')
+
     def _load_clusters(self, path:str):
 
         cluster_df = pd.read_csv(path, index_col=0) # The index should be the sequence ID, and should have a cluster_label column. 
@@ -64,7 +74,8 @@ class ClusterStratifiedShuffleSplit():
         cluster_df = cluster_df.loc[self.dataset.index].copy() # Make sure the index order matches. 
         cluster_df['label'] = self.dataset.label
 
-        cluster_df = ClusterStratifiedShuffleSplit._split_non_homogenous_clusters(cluster_df)
+        # cluster_df = ClusterStratifiedShuffleSplit._split_non_homogenous_clusters(cluster_df)
+        ClusterStratifiedShuffleSplit._check_homogenous_clusters(cluster_df)
 
         singleton = cluster_df.groupby('cluster_label', sort=False).apply(lambda df : (len(df) == 1), include_groups=False)
         cluster_df['singleton'] = cluster_df.cluster_label.map(singleton)
