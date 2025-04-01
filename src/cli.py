@@ -35,7 +35,7 @@ def cluster():
 
     output_path = args.input_path.replace('.h5', '_cluster.csv') if (args.output_path is None) else args.output_path
 
-    attrs = ['label'] if (args.bisection_strategy == 'largest_non_homogenous') else []
+    attrs = ['label'] if ((args.bisection_strategy == 'largest_non_homogenous') and (args.cluster_path is None)) else []
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=attrs)
     
     df = pd.DataFrame(index=dataset.index)
