@@ -4,6 +4,11 @@ from src.files import FASTAFile
 import subprocess
 import shutil
 
+# From the MMseqs user guide: The sequence identity is estimated from the local alignment bit score divided 
+# by the maximum length of the two aligned sequence segments. A linear regression function which correlates this normalized
+# score to sequence identity is then used to estimate the sequence identity. This is a better measure of degree of similarity
+# than the actual sequence identity, because it also takes the degree of similarity between aligned amino acids and the number and length
+# of gaps into account
 
 class MMSeqs():
 
@@ -78,30 +83,40 @@ class MMSeqs():
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
         
         return query_database_path, subject_database_path, output_database_path
+    
+    @staticmethod
+    def _add_cols(df:pd.DataFrame, align_df:pd.DataFrame, cols:list=[], prefix:str='query'):
+        assert df.index.is_unique
+        for col in cols:
+            if col not in df.columns:
+                continue 
+            align_df[f'{prefix}_{col}'] = align_df[f'{prefix}_id'].map(df[col])
+        return align_df
+    
 
-
-    def align(self, query_df:pd.DataFrame, subject_df:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='../data/', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10):
+    def align(self, query_df:pd.DataFrame, subject_df:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='../data/', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10, add_cols:list=[]):
         # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
         subject_name = query_name if (subject_name is None) else subject_name
         output_path = os.path.join(output_dir, f'{query_name}_{subject_name}_align.tsv')
 
-        if os.path.exists(output_path) and (not overwrite):
-            return MMSeqs.load_align(output_path)
-        
-        query_database_path, subject_database_path, prefilter_database_path = self._prefilter(query_df, subject_df=subject_df, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity)
-        
-        output_database_name = f'{query_name}_{subject_name}_align_database'
-        output_database_dir = self._make_database_dir(output_database_name)
-        output_database_path = os.path.join(output_database_dir, output_database_name)
-        
-        print(f'MMSeqs.align: Running alignment on query database {os.path.basename(query_database_path)}.')
-        cmd = f'mmseqs align {query_database_path} {subject_database_path} {prefilter_database_path} {output_database_path}'
-        cmd += f' -e {max_e_value}'
-        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+        if not os.path.exists(output_path) or (overwrite):
+            query_database_path, subject_database_path, prefilter_database_path = self._prefilter(query_df, subject_df=subject_df, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity)
+            
+            output_database_name = f'{query_name}_{subject_name}_align_database'
+            output_database_dir = self._make_database_dir(output_database_name)
+            output_database_path = os.path.join(output_database_dir, output_database_name)
+            
+            print(f'MMSeqs.align: Running alignment on query database {os.path.basename(query_database_path)}.')
+            cmd = f'mmseqs align {query_database_path} {subject_database_path} {prefilter_database_path} {output_database_path}'
+            cmd += f' -e {max_e_value}'
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(f'mmseqs convertalis {query_database_path} {subject_database_path} {output_database_path} {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
     
-        subprocess.run(f'mmseqs convertalis {query_database_path} {subject_database_path} {output_database_path} {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
-   
-        return MMSeqs.load_align(output_path)
+        align_df = MMSeqs.load_align(output_path)
+        align_df = MMSeqs._add_cols(query_df, align_df, cols=add_cols, prefix='query')
+        align_df = MMSeqs._add_cols(subject_df, align_df, cols=add_cols, prefix='subject')
+        return align_df
+        
 
     def cluster(self, df:pd.DataFrame, name:str=None, output_dir:str='../data', sequence_identity:float=0.2, overwrite:bool=False):
 
@@ -119,7 +134,7 @@ class MMSeqs():
         return MMSeqs.load_cluster(output_path)
 
     @staticmethod
-    def load_cluster(path:str, add_prefix:bool=True, **kwargs):
+    def load_cluster(path:str, add_prefix:bool=True):
         df = pd.read_csv(path, delimiter='\t', names=MMSeqs.cluster_fields)
         cluster_ids = {rep:i for i, rep in enumerate(df.cluster_rep.unique())} # Add integer IDs for each cluster. 
         df['cluster_label'] = [cluster_ids[rep] for rep in df.cluster_rep]
@@ -129,10 +144,9 @@ class MMSeqs():
         return df
 
     @staticmethod
-    def load_align(path:str, add_prefix:bool=False, **kwargs):
+    def load_align(path:str, add_prefix:bool=False):
         df = pd.read_csv(path, delimiter='\t', names=MMSeqs.align_fields, header=None)
-        df = df.set_index('query_id')
-
+        # df = df.set_index('query_id')
         if add_prefix:
             df.columns = [f'{MMSeqs.prefix}_{col}' for col in df.columns]
         return df

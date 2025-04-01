@@ -29,6 +29,8 @@ def cluster():
     parser.add_argument('--n-clusters', default=50000, type=int)
     parser.add_argument('--bisection-strategy', default='largest_non_homogenous', type=str)
     parser.add_argument('--verbose', action='store_true')
+    parser.add_argument('--add-labels', action='store_true')
+
     args = parser.parse_args()
 
     output_path = args.input_path.replace('.h5', '_cluster.csv') if (args.output_path is None) else args.output_path
@@ -44,6 +46,8 @@ def cluster():
 
         dists = clusterer.transform(dataset)
         df['cluster_label'] = np.argmin(dists, axis=1)
+        if args.add_labels:
+            df['label'] = df.cluster_label.map(clusterer.get_cluster_label_map())
         for i in range(dists.shape[1]):
             df[f'distance_to_cluster_{i}'] = dists[:, i].ravel().copy()
     else:

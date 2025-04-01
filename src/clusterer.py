@@ -58,6 +58,10 @@ class Clusterer():
         n_classes_per_cluster = [len(np.unique(self.labels[self.cluster_labels == i])) for i in cluster_labels]
         return np.array(n_classes_per_cluster)
     
+    def get_cluster_label_map(self):
+        labels = [self.labels[self.cluster_labels == i][0] for i in np.arange(self.n_clusters)]
+        return dict(zip(np.arange(self.n_clusters), labels))
+    
     def converged(self, kmeans):
         return kmeans.n_iter_ < self.max_iter
         

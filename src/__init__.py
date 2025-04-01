@@ -35,7 +35,7 @@ def get_dtypes(df:pd.DataFrame):
 
 def fillna(df:pd.DataFrame, rules:dict={bool:False, str:'none', int:0}, errors='raise'):
     with pd.option_context('future.no_silent_downcasting', True): # Opt-in to future pandas behavior, which will raise a warning if it tries to downcast.
-        for col, dtype in get_dtypes(df, errors=errors).items():
+        for col, dtype in get_dtypes(df).items():
             value = rules.get(dtype, None)
             if value is not None:
                 df[col] = df[col].fillna(rules[dtype]).astype(dtype)
