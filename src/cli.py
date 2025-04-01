@@ -48,8 +48,10 @@ def cluster():
         df['cluster_label'] = np.argmin(dists, axis=1)
         if args.add_labels:
             df['label'] = df.cluster_label.map(clusterer.get_cluster_label_map())
-        for i in range(dists.shape[1]):
-            df[f'distance_to_cluster_{i}'] = dists[:, i].ravel().copy()
+
+        dists_df = pd.DataFrame(dists, index=df.index)
+        df = df.merge(dists_df, left_index=True, right_index=True)
+
     else:
         clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisection_strategy)
         clusterer.fit(dataset)
