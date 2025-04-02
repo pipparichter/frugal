@@ -313,7 +313,7 @@ def model_predict(args):
 
 def model():
 
-    parser = parser.ArgumentParser()
+    parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(title='model', dest='subcommand', required=True)
 
     model_parser = subparser.add('fit')
