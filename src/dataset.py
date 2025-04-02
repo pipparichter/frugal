@@ -8,7 +8,6 @@ import tables
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
-import h5py 
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
