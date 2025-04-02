@@ -128,7 +128,7 @@ def prune():
     dataset = pruner.prune(dataset)
     print(f'prune: Writing dereplicated Dataset to {output_path}')
     dataset.to_hdf(output_path)
-    dataset.metadata().to_csv(output_path.replace('.csv', '.h5'))
+    dataset.metadata().to_csv(output_path.replace('.h5', '.csv'))
 
 
 def library():
