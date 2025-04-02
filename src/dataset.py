@@ -158,13 +158,13 @@ class Dataset(torch.utils.data.Dataset):
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
     
     def to_hdf(self, path:str):
-        store = pd.HDFStore(path, mode='w')
+        store = pd.HDFStore(path, mode='a', table=True)
 
         metadata_df = self.metadata()
         store.put('metadata', metadata_df, format='table')
         
         if self.has_embedding():
-            embedding_df = pd.DataFrame(self.numpy, index=pd.Series(self.index, name='id'))
+            embedding_df = pd.DataFrame(self.numpy(), index=pd.Series(self.index, name='id'))
             assert len(embedding_df) == len(metadata_df), 'Dataset.write: The indices of the embedding and the metadata do not match.'
             assert np.all(embedding_df.index == metadata_df.index), 'Dataset.write: The indices of the embedding and the metadata do not match.'
             store.put(self.feature_type, embedding_df, format='table')
