@@ -13,8 +13,8 @@ import pickle
 from sklearn.metrics import balanced_accuracy_score
 import io
 import warnings 
-from src.sampler import Sampler
 import random
+from random import choices 
 
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes? I think it's just a minor thing, so that regardless of the number of
@@ -22,13 +22,11 @@ import random
 # TODO: Refresh my memory on cross-entropy loss. 
 # TODO: Find out what the epsilon parameter of the optimizer does. Apparently it's just a small constant added for numerical stability, so there's no division by zero errors. 
 #   I think to fully understand why it's necessary, I'll need to read the Adam paper https://arxiv.org/abs/1412.6980 
-# TODO: Either figure out a different metric, or require both accuracy and precision to meet a certain threshold. 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Seed everything for reproducibility. This should be run every time the module is imported. 
 seed = 42 
-
 np.random.seed(seed)
 random.seed(seed)
 torch.manual_seed(seed)
@@ -38,13 +36,59 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 
-class Unpickler(pickle.Unpickler):
-    # https://github.com/pytorch/pytorch/issues/16797
+class Unpickler(pickle.Unpickler): # https://github.com/pytorch/pytorch/issues/16797
     def find_class(self, module, name):
         if module == 'torch.storage' and name == '_load_from_bytes':
             return lambda b: torch.load(io.BytesIO(b), weights_only=False, map_location='cpu')
         else: return super().find_class(module, name)
 
+
+class Sampler():
+
+    def __init__(self, dataset, batch_size:int=16, balance:bool=False, sample_size:int=None, **kwargs):
+
+        self.labels = dataset.label
+        self.n_total = len(dataset)
+        self.n_classes = dataset.n_classes
+        self.idxs = np.arange(len(dataset))
+        self.balance = balance
+
+        if balance:
+            self.class_n_per_batch = batch_size // self.n_classes
+            self.batch_size = self.class_n_per_batch * self.n_classes 
+            if self.batch_size != batch_size:
+                warnings.warn(f'Sampler.__init__: Specified batch size {batch_size} is not divisible by {self.n_classes}. Using batch size {self.batch_size} instead.')
+        else:
+            self.class_weights = np.ones(len(self.idxs))
+            self.batch_size = batch_size
+
+        self.sample_size = len(dataset) * self.n_classes if (sample_size is None) else sample_size
+        self.n_batches = self.sample_size // batch_size + 1
+        self.batches = self._get_batches()
+        
+        coverage = ', '.join([f'({i}) {100 * self._coverage(i):.2f}%' for i in range(self.n_classes)])
+        print(f'Sampler.__init__: Generated {self.n_batches} batches of size {self.batch_size}. Coverage per class is {coverage}.')
+
+    def _coverage(self, label:int=1):
+        '''Get the fraction of the specified class which is covered by the sampler.'''
+        idxs = np.unique(np.concatenate(self.batches)) # Get all unique indices covered by the sampler. 
+        batch_n = (self.labels[idxs] == label).sum()
+        total_n = (self.labels == label).sum()
+        return (batch_n / total_n).item()
+
+    def __iter__(self):
+        for i in range(self.n_batches):
+            yield self.batches[i]
+
+    def _get_batches(self):
+        idxs = {i:self.idxs[self.labels == i] for i in range(self.n_classes)} # Pre-sort the indices and weights to avoid repeated filtering (e.g. self.idxs[self.labels == i]).
+        batches = [choices(idxs[i], k=self.class_n_per_batch * self.n_batches) for i in range(self.n_classes)]
+        batches = np.concatenate([np.split(np.array(idxs_), self.n_batches) for idxs_ in batches], axis=1)
+        return batches
+
+    def __len__(self):
+        return self.sample_size
+    
 
 class WeightedCrossEntropyLoss(torch.nn.Module):
 
@@ -79,7 +123,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
 class Classifier(torch.nn.Module):
 
-    copy_attrs = ['loss_func', 'scaler', 'epochs', 'metric', 'metrics', 'best_epoch', 'epochs', 'batch_size', 'lr'] # Attributes to port over when copying. 
+    copy_attrs = ['loss_func', 'scaler', 'epochs', 'metric', 'metrics', 'best_epoch', 'batch_size', 'lr', 'best_weights'] # Attributes to port over when copying. 
 
     def __init__(self, dims:tuple=(1024, 512, 256, 128, 2), loss_func_weights:list=None, feature_type:str=None):
 
@@ -102,9 +146,7 @@ class Classifier(torch.nn.Module):
         self.scaler = StandardScaler()
         self.to(DEVICE)
 
-        self.metrics = {'train_loss':[], 'test_accuracy':[-np.inf]}
-        self.metrics.update({f'test_precision_{i}':[] for i in range(self.n_classes)})
-        self.metrics.update({f'test_recall_{i}':[] for i in range(self.n_classes)})
+        self._init_metrics()
 
         # To be populated during model fitting. 
         self.best_epoch = 0
@@ -112,10 +154,16 @@ class Classifier(torch.nn.Module):
         self.batch_size = None
         self.lr = None
         self.metric = None 
+        self.best_weights = copy.deepcopy(self.state_dict())
+
+
+    def _init_metrics(self):
+        self.metrics = {'train_loss':[], 'test_accuracy':[-np.inf]}
+        self.metrics.update({f'test_precision_{i}':[] for i in range(self.n_classes)})
+        self.metrics.update({f'test_recall_{i}':[] for i in range(self.n_classes)})
 
     def copy(self):
         model = Classifier(dims=self.dims, loss_func_weights=self.loss_func_weights, feature_type=self.feature_type)
-        # model = Classifier(dims=(1280, 512, 2), loss_func_weights=None, feature_type=self.feature_type)
         for attr in Classifier.copy_attrs:
             setattr(model, attr, copy.deepcopy(getattr(self, attr)))
         model.load_state_dict(copy.deepcopy(self.state_dict()))
@@ -209,20 +257,13 @@ class Classifier(torch.nn.Module):
         dataset.scaled = True
 
     def __gt__(self, model):
-        # test_precision_0_improved = self.get_best_metric('test_precision_0') > model.get_best_metric('test_precision_0')
-        # test_precision_0_equal = self.get_best_metric('test_precision_0') == model.get_best_metric('test_precision_0')
-        # test_recall_0_improved = self.get_best_metric('test_recall_0') > model.get_best_metric('test_recall_0')
-        # return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) 
         return self.get_best_metric('test_accuracy') > model.get_best_metric('test_accuracy')
 
     def _improved(self, epoch:int):
-        # test_precision_0_improved = self.get_latest_metric('test_precision_0') > self.get_best_metric('test_precision_0')
-        # test_precision_0_equal = self.get_latest_metric('test_precision_0') == self.get_best_metric('test_precision_0')
-        # test_recall_0_improved = self.get_latest_metric('test_recall_0') > self.get_best_metric('test_recall_0')
-        # return ((test_precision_0_improved) or (test_precision_0_equal and test_recall_0_improved)) and (epoch > min_epoch)
-        if epoch < 1:
-            return False
         return self.get_latest_metric('test_accuracy') > self.get_best_metric('test_accuracy')
+
+    def load_best_weights(self):
+        self.load_state_dict(self.best_weights) # Load the best model weights. 
 
     def fit(self, datasets:tuple, epochs:int=100, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False):
 
@@ -236,12 +277,11 @@ class Classifier(torch.nn.Module):
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         
-        # Consistently finding that a balanced-class sampler performs the best. 
-        sampler = Sampler(datasets.train, batch_size=batch_size, balance_classes=True, sample_size=10 * len(datasets.train))
+        sampler = Sampler(datasets.train, batch_size=batch_size, balance=True, sample_size=10 * len(datasets.train))
         dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
+        self._init_metrics()
         self._update_metrics(datasets.test) # Initialize the metrics list. 
-        best_model_weights = copy.deepcopy(self.state_dict())
 
         for epoch in range(epochs):
             losses = list() # Re-initialize the epoch loss. 
@@ -259,16 +299,11 @@ class Classifier(torch.nn.Module):
 
             if self._improved(epoch=epoch):
                 self.best_epoch = epoch + 1
-                # best_metric = self.get_best_metric(metric=metric)
-                best_model_weights = copy.deepcopy(self.state_dict())
+                self.best_weights = copy.deepcopy(self.state_dict())
                 print(f'Classifier.fit: New best model weights found after epoch {epoch}. {metrics}', flush=True)
             else:
                 print(f'Classifier.fit: No improvement after epoch {epoch}. {metrics}', flush=True)
 
-        # pbar.close()
-        self.load_state_dict(best_model_weights) # Load the best model weights. 
-
-        # Save training parameters in the model. 
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr

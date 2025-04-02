@@ -14,7 +14,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def update_metadata(path:str, col:pd.Series):
-    store = pd.HDFStore(path, 'a')
+    store = pd.HDFStore(path, 'a', table=True)
     metadata_df = store.get('metadata').copy() 
     try:
         assert len(col) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are unequal lengths.'
@@ -22,7 +22,7 @@ def update_metadata(path:str, col:pd.Series):
 
         col = col.loc[metadata_df.index] # Make sure the ordering is the same as in the stored metadata. 
         metadata_df[col.name] = col 
-        store.put('metadata', metadata_df)
+        store.put('metadata', metadata_df, format='table')
         print(f'update_metadata: Successfully added column {col.name} to the metadata.')
     except AssertionError as err:
         print(f'update_metadata: Failed with error "{err}". Closing file {path}')
