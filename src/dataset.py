@@ -18,7 +18,7 @@ def update_metadata(path:str, col:pd.Series):
     metadata_df = store.get('metadata').copy() 
     try:
         assert len(col) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are unequal lengths.'
-        assert len(np.intersect1d(metadata_df.index), col.index) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are do not contain the same values.'
+        assert len(np.intersect1d(metadata_df.index, col.index)) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are do not contain the same values.'
 
         col = col.loc[metadata_df.index] # Make sure the ordering is the same as in the stored metadata. 
         metadata_df[col.name] = col 
