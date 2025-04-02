@@ -8,12 +8,10 @@ def get_requirements(path:str=os.path.join(os.path.dirname(os.path.realpath(__fi
 
 commands = list()
 commands += ['prune=src.cli:prune']
-commands += ['stats=src.cli:stats']
 commands += ['library=src.cli:library']
 commands += ['ref=src.cli:ref']
 commands += ['embed=src.cli:embed']
-commands += ['train=src.cli:train']
-commands += ['predict=src.cli:predict']
+commands += ['model=src.cli:model']
 commands += ['cluster=src.cli:cluster']
 
 setuptools.setup(

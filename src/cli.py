@@ -1,6 +1,6 @@
 import numpy as np 
 import pandas as pd 
-from src.dataset import Dataset, Datasets, Pruner
+from src.dataset import Dataset, Datasets, Pruner, update_metadata
 from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
 import argparse
@@ -20,48 +20,78 @@ from transformers import logging
 
 logging.set_verbosity_error() # Turn off the warning about uninitialized weights. 
 
-def cluster():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', type=str)
-    parser.add_argument('--output-path', default=None, type=str)
-    parser.add_argument('--cluster-path', default=None, type=str)
-    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser.add_argument('--n-clusters', default=50000, type=int)
-    parser.add_argument('--bisection-strategy', default='largest_non_homogenous', type=str)
-    parser.add_argument('--verbose', action='store_true')
-    parser.add_argument('--add-labels', action='store_true')
 
-    args = parser.parse_args()
+def write_predict(df:pd.DataFrame, path:str):
+    if os.path.exists(path):
+        df_ = pd.read_csv(path, index_col=0) # Drop any overlapping columns. 
+        df_ = df_.drop(columns=df.columns, errors='ignore')
+        assert np.all(df_.index == df.index), f'write_predict: Failed to add new predictions to existing predictions file at {path}, indices do not match.'
+        df = df.merge(df_, left_index=True, right_index=True, how='left')
+    df.to_csv(path)
+    print(f'write_predict: Added new predictions to file at {path}.')
 
-    output_path = args.input_path.replace('.h5', '_cluster.csv') if (args.output_path is None) else args.output_path
 
-    attrs = ['label'] if ((args.bisection_strategy == 'largest_non_homogenous') and (args.cluster_path is None)) else []
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=attrs)
+def cluster_fit(args):
+
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
+
+    clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisecting_strategy)
+    clusterer.fit(dataset)
+    print(f'cluster_fit: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
+
+    # Too computationally-intensive to compute the entire distance matrix when clustering on a big dataset.
+    df = pd.DataFrame(index=pd.Series(dataset.index, name='id'))
+    df['cluster_id'] = clusterer.cluster_ids
     
+    base_output_path = args.input_path.replace('.h5', '')
+    clusterer.save(base_output_path + '_cluster.pkl') # Save the Clusterer object.
+    write_predict(df, base_output_path + '_cluster_predict.csv') # Write the cluster predictions to a separate file. 
+    update_metadata(args.input_path, df.cluster_id) # Add the cluster ID to dataset file metadata. 
+
+
+     
+def cluster_predict(args):
+
+    output_path = args.input_path.replace('.h5', '_predict.csv') if (args.output_path is None) else args.output_path
+    attrs = ['label'] if ((args.bisecting_strategy == 'largest_non_homogenous') and (args.cluster_path is None)) else []
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=attrs)
+
+    clusterer = Clusterer.load(args.cluster_path)
+
     df = pd.DataFrame(index=dataset.index)
     df.index.name = 'id'
+    dists = clusterer.transform(dataset)
+    df['cluster_id'] = np.argmin(dists, axis=1)
+    df['cluster_distance_to_center'] = dists[:, df.cluster_id]
+    df['cluster_label'] = df.cluster_id.map(clusterer.get_cluster_id_map())
+
+    write_predict(df, output_path)
+
+
+def cluster():
+    parser = argparse.ArgumentParser()
+
+    parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers(title='cluster', dest='subcommand', required=True)
+
+    cluster_parser = subparser.add_parser('fit')
+    cluster_parser.add_argument('--input-path', type=str)
+    cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    cluster_parser.add_argument('--n-clusters', default=50000, type=int)
+    cluster_parser.add_argument('--bisection-strategy', default='largest_non_homogenous', type=str)
+    cluster_parser.add_argument('--verbose', action='store_true')
+
+    cluster_parser = subparser.add_parser('predict')
+    cluster_parser.add_argument('--input-path', type=str)
+    cluster_parser.add_argument('--output-path', default=None, type=str)
+    cluster_parser.add_argument('--cluster-path', default=None, type=str)
+
+    args = parser.parse_args()
     
-    if args.cluster_path is not None:
-        clusterer = Clusterer.load(args.cluster_path)
-
-        dists = clusterer.transform(dataset)
-        df['cluster_label'] = np.argmin(dists, axis=1)
-        if args.add_labels:
-            df['label'] = df.cluster_label.map(clusterer.get_cluster_label_map())
-
-        dists_df = pd.DataFrame(dists, index=df.index)
-        df = df.merge(dists_df, left_index=True, right_index=True)
-
-    else:
-        clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisection_strategy)
-        clusterer.fit(dataset)
-        clusterer.save(output_path.replace('.csv', '.pkl'))
-        # To computationally-intensive to compute the entire distance matrix when clustering on a big dataset. 
-        df['cluster_label'] = clusterer.cluster_labels
-    
-    df.to_csv(output_path)
-    print(f'cluster: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
-    print(f'cluster: Sequence clusters saved to {output_path}')
+    if args.subcommand == 'fit':
+        cluster_fit(args)
+    if args.subcommand == 'predict':
+        cluster_predict(args)
 
 
 def prune():
@@ -88,21 +118,20 @@ def library():
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(title='library', dest='subcommand', required=True)
 
-    parser_library = subparser.add_parser('add')
-    parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser_library.add_argument('--max-length', default=2000, type=int)
-    parser_library.add_argument('--input-path', nargs='+', default=None)
-    parser_library.add_argument('--input-dir', type=str, default='./data/proteins/')
-    parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
-    parser_library.add_argument('--parallelize', action='store_true')
-    parser_library.add_argument('--n-processes', default=4, type=int)
+    library_parser = subparser.add_parser('add')
+    library_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    library_parser.add_argument('--max-length', default=2000, type=int)
+    library_parser.add_argument('--input-path', nargs='+', default=None)
+    library_parser.add_argument('--input-dir', type=str, default='./data/proteins/')
+    library_parser.add_argument('--library-dir', type=str, default='./data/embeddings')
+    library_parser.add_argument('--parallelize', action='store_true')
+    library_parser.add_argument('--n-processes', default=4, type=int)
     
-    parser_library = subparser.add_parser('get')
-    parser_library.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser_library.add_argument('--input-path', default=None)
-    parser_library.add_argument('--output-path', default=None)
-    parser_library.add_argument('--library-dir', type=str, default='./data/embeddings')
-    parser_library.add_argument('--entry-name-col', type=str, default='genome_id')
+    library_parser = subparser.add_parser('get')
+    library_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    library_parser.add_argument('--input-path', default=None)
+    library_parser.add_argument('--library-dir', type=str, default='./data/embeddings')
+    library_parser.add_argument('--entry-name-col', type=str, default='genome_id')
     
     args = parser.parse_args()
     
@@ -131,22 +160,22 @@ def library_add(args):
 
 def library_get(args):
 
-    output_path = args.input_path.replace('csv', 'h5') if (args.output_path is None) else args.output_path
+    output_path = args.input_path.replace('.csv', '.h5')
     store = pd.HDFStore(output_path, mode='a')
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type) # , max_length=args.max_length)
     
     dtypes = {f'query_{field}':dtype for field, dtype in GBFFFile.dtypes.items()}
     dtypes.update({f'top_hit_{field}':dtype for field, dtype in GBFFFile.dtypes.items()})
-    df = pd.read_csv(args.input_path, index_col=0, dtype=dtypes) # Expect the index column to be the sequence ID. 
-    store.put('metadata', df, format='table')
+    metadata_df = pd.read_csv(args.input_path, index_col=0, dtype=dtypes) # Expect the index column to be the sequence ID. 
+    store.put('metadata', metadata_df, format='table')
 
     embeddings_df = list()
-    for entry_name, df_ in df.groupby(args.entry_name_col): # Read in the embeddings from the genome file. 
-        print(f'library_get: Loading {len(df_)} embeddings from {entry_name}_embedding.csv.')
-        embeddings_df.append(lib.get(entry_name, ids=df_.index))
+    for entry_name, df in metadata_df.groupby(args.entry_name_col): # Read in the embeddings from the genome file. 
+        print(f'library_get: Loading {len(df)} embeddings from {entry_name}_embedding.csv.')
+        embeddings_df.append(lib.get(entry_name, ids=df.index))
     embeddings_df = pd.concat(embeddings_df)
-    embeddings_df = embeddings_df.loc[df.index, :] # Make sure the embeddings are in the same order as the metadata. 
+    embeddings_df = embeddings_df.loc[metadata_df.index, :] # Make sure the embeddings are in the same order as the metadata. 
     store.put(args.feature_type, embeddings_df, format='table')
     store.close()
     print(f'library_get: Embeddings of type {args.feature_type} written to {output_path}')
@@ -195,61 +224,34 @@ def ref():
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v1"
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v2"
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v3"
-def train():
+def model_fit(args):
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', type=str)
-    parser.add_argument('--cluster-path', type=str, default='./data/dataset_dereplicated_cluster.csv')
-    parser.add_argument('--model-name', type=str)
-    parser.add_argument('--output-dir', default='./models', type=str)
-    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser.add_argument('--dims', type=str, default='1280,1024,512,2')
-    parser.add_argument('--epochs', default=50, type=int)
-    parser.add_argument('--batch-size', default=16, type=int)
-    parser.add_argument('--n-splits', default=5, type=int)
-
-    args = parser.parse_args()
     output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
-    cluster_path = args.input_path.replace('.h5', '_cluster.csv') if (args.cluster_path is None) else args.cluster_path # Define a default cluster path. 
-
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'genome_id'])
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['cluster_id', 'label'])
 
     dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
-    assert dims[0] == dataset.n_features, f'train: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
-    assert dims[-1] == dataset.n_classes, f'train: Last model dimension {dims[-1]} does not match the number of classes {dataset.n_classes}.'
+    assert dims[0] == dataset.n_features, f'model_fit: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
+    assert dims[-1] == dataset.n_classes, f'model_fit: Last model dimension {dims[-1]} does not match the number of classes {dataset.n_classes}.'
 
-    splits = ClusterStratifiedShuffleSplit(dataset, cluster_path=cluster_path, n_splits=args.n_splits)
+    splits = ClusterStratifiedShuffleSplit(dataset, n_splits=args.n_splits)
     best_model = None
-    best_split = None
     for i, (train_dataset, test_dataset) in enumerate(splits):
         model = Classifier(dims=dims, feature_type=args.feature_type)
         model.scale(train_dataset, fit=True)
         model.scale(test_dataset, fit=False)
-
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
 
         if (best_model is None) or (model > best_model):
             best_model = model.copy()
-            best_split = i
-            splits.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
             best_model.save(output_path)
-            print(f'train: New best model found. Saved to {output_path}.')
+            print(f'model_fit: New best model found. Saved to {output_path}.')
         print()
 
     best_model.save(output_path)
-    splits.save(os.path.join(args.output_dir, args.model_name + '_splits.json'), best_split=best_split)
-
-    print(f'train: Saved best model to {output_path}')
+    print(f'model_fit: Saved best model to {output_path}')
 
 
-def predict():
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', type=str)
-    parser.add_argument('--model-path', nargs='+', type=str, default=None)
-    parser.add_argument('--output-dir', default='./data/', type=str)
-    parser.add_argument('--load-labels', action='store_true')
-    args = parser.parse_args()
+def model_predict(args):
 
     output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '_predict.csv'))   
 
@@ -264,59 +266,47 @@ def predict():
         model_labels, outputs = model.predict(dataset, include_outputs=True)
 
         df = dict()
-        df['model_label'] = model_labels
+        df[f'{model_name}_label'] = model_labels
         df['id'] = dataset.index 
         for i in range(outputs.shape[-1]): # Iterate over the model predictions for each class, which correspond to a "probability."
-            df[f'model_output_{i}'] = outputs[:, i]
+            df[f'{model_name}_output_{i}'] = outputs[:, i]
         for attr in dataset.attrs: # Add all dataset attributes to the DataFrame. 
             df[attr] = getattr(dataset, attr)
         df = pd.DataFrame(df).set_index('id')
 
-        if args.load_labels: # If the dataset is labeled, compute and report the balanced accuracy. 
-            conditions = [(df.model_label == 1) & (df.label == 0), (df.model_label  == 1) & (df.label == 1), (df.model_label == 0) & (df.label == 1), (df.model_label  == 0) & (df.label == 0)]
-            choices = ['fp', 'tp', 'fn', 'tn']
-            df['model_confusion_matrix'] = np.select(conditions, choices, default='none')
-            fp, tp, fn, tn = [condition.sum() for condition in conditions]
-            print(f'predict: Balanced accuracy {0.5 * (tp / (tp + fn) + (tn / (tn + fp))):.3f}')
-            print(f'predict: Recall {tn / (fp + tn):.3f}, {tp / (tp + fn):.3f}')
-            print(f'predict: Precision {tn / (fn + tn):.3f}, {tp / (tp + fp):.3f}')
-
-        # Rename the generic model columns to the actual model name. 
-        df = df.rename(columns={col:col.replace('model', model_name) for col in df.columns})
-
-        if os.path.exists(output_path):
-            df_ = pd.read_csv(output_path, index_col=0) # Drop any overlapping columns. 
-            df_ = df_.drop(columns=df.columns, errors='ignore')
-            assert np.all(df_.index == df.index), f'predict: Failed to add new predictions to existing predictions file at {output_path}, indices do not match.'
-            df = df.merge(df_, left_index=True, right_index=True, how='left')
+        write_predict(df, output_path)
         
-        df.to_csv(output_path)
-        print(f'predict: Saved model {model_name} predictions on {args.input_path} to {output_path}')
+
+def model():
+
+    parser = parser.ArgumentParser()
+    subparser = parser.add_subparsers(title='model', dest='subcommand', required=True)
+
+    model_parser = subparser.add('fit')
+    model_parser.add_argument('--input-path', type=str)
+    model_parser.add_argument('--cluster-path', type=str, default='./data/dataset_dereplicated_cluster.csv')
+    model_parser.add_argument('--model-name', type=str)
+    model_parser.add_argument('--base-model-path', default=None, type=str)
+    model_parser.add_argument('--output-dir', default='./models', type=str)
+    model_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    model_parser.add_argument('--dims', type=str, default='1280,1024,512,2')
+    model_parser.add_argument('--epochs', default=50, type=int)
+    model_parser.add_argument('--batch-size', default=16, type=int)
+    model_parser.add_argument('--n-splits', default=5, type=int)
 
 
-def stats():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset-path', type=str, default=None)
-    parser.add_argument('--model-path', type=str, default=None)
+    model_parser = subparser.add('predict')
+    model_parser.add_argument('--input-path', type=str)
+    model_parser.add_argument('--model-path', nargs='+', type=str, default=None)
+    model_parser.add_argument('--output-dir', default='./data/', type=str)
+    model_parser.add_argument('--load-labels', action='store_true')
+
     args = parser.parse_args()
-
-    if args.model_path is not None:
-        model_name = os.path.basename(args.model_path).replace('.pkl', '')
-        model = Classifier.load(args.model_path)
-
-        print('stats:', model_name)
-        print('stats:')
-        print('stats: Model dimensions', ' > '.join([str(dims) for dims in model.get_dims()]))
-        print(f'stats: Trained for {model.epochs} epochs with batch size {model.batch_size} and learning rate {model.lr}.')
-        print(f'stats: Used cross-entropy loss with weights', [w.item() for w in model.loss_func.weights])
-        print(f'stats: Using weights from epoch {model.best_epoch}, selected using metric {model.metric}.')
-        if model.sampler is not None:
-            print(f'stats: Balanced classes', model.sampler.balance_classes)
-            print(f'stats: Balanced lengths', model.sampler.balance_lengths)
-        metrics = ['test_precision_0', 'test_recall_0', 'test_precision_1', 'test_recall_1', 'test_accuracy']
-        print(f'stats: Metrics')
-        for metric in metrics:
-            print(f'stats:\t{metric} = {model.metrics[metric][model.best_epoch]:.3f}')
+    
+    if args.subcommand == 'fit':
+        model_fit(args)
+    if args.subcommand == 'predict':
+        model_predict(args)
 
 
 
@@ -354,4 +344,28 @@ def embed():
 
 
 
-        
+# def stats():
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--dataset-path', type=str, default=None)
+#     parser.add_argument('--model-path', type=str, default=None)
+#     args = parser.parse_args()
+
+#     if args.model_path is not None:
+#         model_name = os.path.basename(args.model_path).replace('.pkl', '')
+#         model = Classifier.load(args.model_path)
+
+#         print('stats:', model_name)
+#         print('stats:')
+#         print('stats: Model dimensions', ' > '.join([str(dims) for dims in model.get_dims()]))
+#         print(f'stats: Trained for {model.epochs} epochs with batch size {model.batch_size} and learning rate {model.lr}.')
+#         print(f'stats: Used cross-entropy loss with weights', [w.item() for w in model.loss_func.weights])
+#         print(f'stats: Using weights from epoch {model.best_epoch}, selected using metric {model.metric}.')
+#         if model.sampler is not None:
+#             print(f'stats: Balanced classes', model.sampler.balance_classes)
+#             print(f'stats: Balanced lengths', model.sampler.balance_lengths)
+#         metrics = ['test_precision_0', 'test_recall_0', 'test_precision_1', 'test_recall_1', 'test_accuracy']
+#         print(f'stats: Metrics')
+#         for metric in metrics:
+#             print(f'stats:\t{metric} = {model.metrics[metric][model.best_epoch]:.3f}')
+
+

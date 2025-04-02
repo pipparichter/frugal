@@ -8,10 +8,27 @@ import tables
 from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
-
+import h5py 
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+def update_metadata(path:str, col:pd.Series):
+    store = pd.HDFStore(path, 'w')
+    metadata_df = store.get('metadata').copy() 
+    try:
+        assert len(col) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are unequal lengths.'
+        assert len(np.intersect1d(metadata_df.index), col.index) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are do not contain the same values.'
+
+        col = col.loc[metadata_df.index] # Make sure the ordering is the same as in the stored metadata. 
+        metadata_df[col.name] = col 
+        store.put('metadata', metadata_df)
+        print(f'update_metadata: Successfully added column {col.name} to the metadata.')
+    except AssertionError as err:
+        print(f'update_metadata: Failed with error "{err}". Closing file {path}')
+    store.close() # Make sure to close the file, even in the case of an error. 
+
 
 Datasets = namedtuple('Datasets', ['train', 'test'])
 
@@ -34,7 +51,9 @@ Datasets = namedtuple('Datasets', ['train', 'test'])
 class Dataset(torch.utils.data.Dataset):
     label_map = {'spurious':0, 'real':1}
 
-    def __init__(self, embedding:np.ndarray, index:np.ndarray=None, scaled:bool=False, feature_type:str=None, **kwargs):
+    def __init__(self, embedding:np.ndarray=None, index:np.ndarray=None, scaled:bool=False, feature_type:str=None, path:str=None, **kwargs):
+
+        self.path = path # Store the path from which the Dataset was loaded. 
 
         self.embedding = torch.from_numpy(embedding).to(DEVICE) if (embedding is not None) else embedding
         self.n_features = embedding.shape[-1] if (embedding is not None) else None
@@ -91,46 +110,41 @@ class Dataset(torch.utils.data.Dataset):
 
         attrs = list(metadata_df.columns) if (attrs is None) else attrs
         kwargs = {attr:metadata_df[attr].values.copy() for attr in attrs}
-        return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
+        return cls(embedding, feature_type=feature_type, index=index, scaled=False, path=path, **kwargs)
     
-    
-    @classmethod
-    def from_df(cls, df:pd.DataFrame, feature_type:str=None, attrs:list=[]):
+    # @classmethod
+    # def from_df(cls, df:pd.DataFrame, feature_type:str=None, attrs:list=[]):
 
-        index = df.index.values 
-        embedding = df.values if (feature_type is not None) else None
+    #     index = df.index.values 
+    #     embedding = df.values if (feature_type is not None) else None
 
-        kwargs = {attr:df[attr].copy() for attr in attrs}
-        return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
+    #     kwargs = {attr:df[attr].copy() for attr in attrs}
+    #     return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
 
-    @classmethod
-    def from_csv(cls, path:str, feature_type:str=None, attrs:list=None):
-        df = pd.read_csv(path, index_col=0)
-        attrs = list(df.columns) if (attrs is None) else attrs
-        return Dataset.from_df(df, feature_type=feature_type, attrs=attrs)
+    # @classmethod
+    # def from_csv(cls, path:str, feature_type:str=None, attrs:list=None):
+    #     df = pd.read_csv(path, index_col=0)
+    #     attrs = list(df.columns) if (attrs is None) else attrs
+    #     return Dataset.from_df(df, feature_type=feature_type, attrs=attrs)
 
     def shape(self):
         return self.embedding.shape if self.has_embedding() else self.index.shape
     
-    # def loc(self, index:np.ndarray):
-    #     index = np.where(np.isin(self.index, index))[0]
-    #     embeddings = self.embedding.clone().numpy()
-    #     return embeddings[index, :]
+    def clustered(self):
+        return hasattr(self, 'cluster_id')
+
+    def labeled(self):
+        return hasattr(self, 'label') 
     
     def numpy(self):
         '''Return the stored embeddings as a NumPy array. If no embeddings are stored, return None.'''
         return copy.deepcopy(self.embedding).cpu().numpy() if self.has_embedding() else None
 
-    def to_df(self, metadata:bool=False) -> pd.DataFrame:
-        if metadata:
-            df = {attr:getattr(self, attr) for attr in self.attrs}
-            df = pd.DataFrame(df, index=self.index)
-        else:
-            embedding = self.numpy()
-            df = pd.DataFrame(embedding, index=self.index)
-            df = df[~df.index.duplicated(keep='first')].copy()
-        df.index.name = 'id'
-        return df
+    def metadata(self, attrs:list=None) -> pd.DataFrame:
+        attrs = self.attrs if (attrs is None) else attrs
+        metadata_df = {attr:getattr(self, attr) for attr in attrs}
+        metadata_df = pd.DataFrame(metadata_df, index=pd.Series(self.index, name='id'))
+        return metadata_df
 
     def __getitem__(self, idx:int) -> dict:
         item = {'embedding':self.embedding[idx], 'idx':idx} # , 'index':[self.index[idx]]}
@@ -142,7 +156,6 @@ class Dataset(torch.utils.data.Dataset):
     def set_attr(self, attr:str, values:pd.Series):
         assert len(values) == len(self), 'Dataset.set_attr: The length of the attribute values does not match the length of the Dataset.'
         assert np.all(values.index == self.index), 'Dataset.set_attr: The index of the attribute values does not match the index of the Dataset.'
-        
         values = values.loc[self.index] # Make sure the index in the series is the same as that of the DataFrame. 
         self.attrs.append(attr)
         setattr(self, attr, values.values)
@@ -154,20 +167,18 @@ class Dataset(torch.utils.data.Dataset):
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
     
     def to_hdf(self, path:str):
-        metadata_df = self.to_df(metadata=True)
+        store = pd.HDFStore(path, mode='w')
+
+        metadata_df = self.metadata()
         store.put('metadata', metadata_df, format='table')
         
         if self.has_embedding():
-            embedding_df = self.to_df(metadata=False)
+            embedding_df = pd.DataFrame(self.numpy, index=pd.Series(self.index, name='id'))
             assert len(embedding_df) == len(metadata_df), 'Dataset.write: The indices of the embedding and the metadata do not match.'
             assert np.all(embedding_df.index == metadata_df.index), 'Dataset.write: The indices of the embedding and the metadata do not match.'
-            store = pd.HDFStore(path, mode='w')
             store.put(self.feature_type, embedding_df, format='table')
-        store.close()
 
-    def to_csv(self, path:str, metadata:bool=False):
-        df = self.to_df(metadata=metadata)
-        df.to_csv(path)
+        store.close()
 
 
 class Pruner():
@@ -241,37 +252,17 @@ class Pruner():
         print(f'Pruner.prune: Removing {len(self.remove_ids)} sequences from the input Dataset.')
         print(f'Pruner.prune: {len(self.keep_ids)} sequences remaining.')
         return dataset.subset(self.keep_idxs)
+    
+
+    def update_metadata(self, col:pd.Series):
+        assert (self.path is not None), 'Dataset.update_metadata: The Dataset has no stored path.'
+        update_metadata(self.path, col)
         
 
 
-# def build(genome_ids:list, output_path:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', max_length:int=2000, labeled:bool=True):
 
-#     print(f'build: Loading data from {len(genome_ids)} genomes.')
 
-#     # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
-#     ref_paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids]
-#     ref_dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
-#     ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=ref_dtypes).assign(genome_id=get_genome_id(path)) for path in ref_paths])
-    
-#     labels_paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids] 
-#     labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in labels_paths])
 
-#     df = ref_df.merge(labels_df, left_index=True, right_index=True, validate='one_to_one')
-#     df = df.rename(columns={'query_seq':'seq'}) # Need to do this for file writing, etc. to work correctly, 
-#     df = df.drop(columns=['top_hit_homolog_id', 'top_hit_homolog_seq', 'pseudo'])
-
-#     mask = df.seq.apply(len) < max_length
-#     print(f'build: Removing {(~mask).sum()} sequences exceeding the maximum length of {max_length}')
-#     df = df[mask].copy()
-
-#     if labeled:
-#         mask = (df.label != 'none')
-#         print(f'build: Removing {(~mask).sum()} which have not been assigned a label.')
-#         df = df[mask].copy()
-#         df['label'] = df.label.map({'spurious':0, 'real':1}) # Convert the remaining labels to integers. 
-    
-#     df.to_csv(output_path)
-        
 
 
 # def update(path:str, key:str, df:pd.DataFrame):

@@ -27,10 +27,10 @@ class Clusterer():
         self.scaler = StandardScaler() # I think scaling prior to clustering is important. Applying same assumption as with Classifier training. 
         self.index = None # Stores the index of the data used to fit the model. 
         
-        self.curr_cluster_label = 1
+        self.curr_cluster_id = 1
         self.tree = '0'
         self.split_order = []
-        self.cluster_labels = None
+        self.cluster_ids = None
         self.labels = None
         self.cluster_centers = [None] # Store as a list, becaue the exact number of clusters is flexible. 
         
@@ -43,23 +43,24 @@ class Clusterer():
         self.check_non_homogenous = (bisecting_strategy == 'largest_non_homogenous')
 
     def _is_homogenous(self):
-        n_classes_per_cluster = self._get_n_classes_per_cluster()
-        return np.all(n_classes_per_cluster == 1)
+        n_labels_per_cluster = self._get_n_labels_per_cluster()
+        return np.all(n_labels_per_cluster == 1)
 
     def _get_n_non_homogenous(self):
-        n_classes_per_cluster = self._get_n_classes_per_cluster()
-        return (n_classes_per_cluster > 1).sum()
+        n_labels_per_cluster = self._get_n_labels_per_cluster()
+        return (n_labels_per_cluster > 1).sum()
 
     def _get_cluster_sizes(self):
-        return np.bincount(self.cluster_labels)
+        return np.bincount(self.cluster_ids)
     
-    def _get_n_classes_per_cluster(self):
-        cluster_labels = np.arange(self.curr_cluster_label)
-        n_classes_per_cluster = [len(np.unique(self.labels[self.cluster_labels == i])) for i in cluster_labels]
-        return np.array(n_classes_per_cluster)
+    def _get_n_labels_per_cluster(self):
+        cluster_ids = np.arange(self.curr_cluster_id)
+        n_labels_per_cluster = [len(np.unique(self.labels[self.cluster_ids == i])) for i in cluster_ids]
+        return np.array(n_labels_per_cluster)
     
-    def get_cluster_label_map(self):
-        labels = [self.labels[self.cluster_labels == i][0] for i in np.arange(self.n_clusters)]
+    def get_cluster_id_to_label_map(self):
+        assert (self.labels is not None), 'Clusterer.get_cluster_id_to_label_map: Clusterer object has no stored labels.'
+        labels = [self.labels[self.cluster_ids == i][0] for i in np.arange(self.n_clusters)]
         return dict(zip(np.arange(self.n_clusters), labels))
     
     def converged(self, kmeans):
@@ -74,8 +75,8 @@ class Clusterer():
             if self._is_homogenous():
                 self.bisecting_strategy = 'largest'
             else:
-                n_classes_per_cluster = self._get_n_classes_per_cluster()
-                cluster_sizes = np.where(n_classes_per_cluster == 1, 0, cluster_sizes)
+                n_labels_per_cluster = self._get_n_labels_per_cluster()
+                cluster_sizes = np.where(n_labels_per_cluster == 1, 0, cluster_sizes)
 
         return np.argmax(cluster_sizes)
     
@@ -96,14 +97,14 @@ class Clusterer():
 
         self.labels = dataset.label if hasattr(dataset, 'label') else None 
         self.index = dataset.index 
-        self.cluster_labels = np.zeros(len(dataset), dtype=np.int64) # Initialize the cluster labels. 
+        self.cluster_ids = np.zeros(len(dataset), dtype=np.int64) # Initialize the cluster labels. 
 
         iter = 0
-        while self.curr_cluster_label < self.n_clusters:
+        while self.curr_cluster_id < self.n_clusters:
         # for _ in tqdm(desc='Clusterer.fit', total=self.n_clusters - 1):
             cluster_to_split = self._get_cluster_to_split()
             self.split_order.append(cluster_to_split)
-            cluster_idxs = np.where(self.cluster_labels == cluster_to_split)[0]
+            cluster_idxs = np.where(self.cluster_ids == cluster_to_split)[0]
 
             if self.verbose:
                 print(f'Clusterer.fit: Split {iter}, cluster {cluster_to_split} divided using bisection strategy {self.bisecting_strategy}.', flush=True)
@@ -113,19 +114,19 @@ class Clusterer():
 
             assert self.converged(kmeans), f'Clusterer.fit: The KMeans clusterer did not converge when splitting cluster {cluster_to_split}.'
 
-            cluster_labels = kmeans.labels_
+            cluster_ids = kmeans.labels_
             cluster_centers = kmeans.cluster_centers_
-            cluster_labels = np.where(cluster_labels == 0, cluster_to_split, self.curr_cluster_label)
+            cluster_ids = np.where(cluster_ids == 0, cluster_to_split, self.curr_cluster_id)
 
             self.cluster_centers[cluster_to_split] = cluster_centers[0]
             self.cluster_centers.append(cluster_centers[1])
 
-            self.cluster_labels[cluster_idxs] = cluster_labels
+            self.cluster_ids[cluster_idxs] = cluster_ids
 
             pattern = r'(?<!\d)' + str(cluster_to_split) + r'(?!\d)'
-            self.tree = re.sub(pattern, f'({cluster_to_split}, {self.curr_cluster_label})', self.tree, count=1) 
+            self.tree = re.sub(pattern, f'({cluster_to_split}, {self.curr_cluster_id})', self.tree, count=1) 
             
-            self.curr_cluster_label += 1 # Update the current cluster label. 
+            self.curr_cluster_id += 1 # Update the current cluster label. 
             iter += 1
 
         self.cluster_centers = np.array(self.cluster_centers) # Convert to a numpy array. 
@@ -151,25 +152,25 @@ class Clusterer():
 # More splits would mean it's more mixed in with opposite-labeled things. 
 class ClusterTreeNode():
 
-    def __init__(self, cluster_labels:list, index:np.ndarray=None, labels:np.ndarray=None):
+    def __init__(self, cluster_ids:list, index:np.ndarray=None, labels:np.ndarray=None):
 
         self.index = index
         self.labels = labels
-        self.cluster_labels = cluster_labels
+        self.cluster_ids = cluster_ids
 
         self.children = []
 
     def is_homogenous(self):
         return np.all(self.labels == self.labels[0])
     
-    def contains(self, cluster_label:int):
-        return (cluster_label in self.cluster_labels)
+    def contains(self, cluster_id:int):
+        return (cluster_id in self.cluster_ids)
 
     def is_terminal(self):
         return len(self.children) == 0
 
     def __len__(self):
-        return len(self.cluster_labels)
+        return len(self.cluster_ids)
 
 
 class ClusterTree():
@@ -177,27 +178,27 @@ class ClusterTree():
     def __init__(self, clusterer):
 
         self.tree = clusterer.tree 
-        self.cluster_labels = clusterer.cluster_labels
+        self.cluster_ids = clusterer.cluster_ids
         self.index = clusterer.index
         self.labels = clusterer.labels
         self.n_splits = clusterer.n_clusters - 1
         self.root_node = self._parse_tree(self.tree)
     
-    def _get_node(self, cluster_labels:list):
-        mask = np.isin(self.cluster_labels, cluster_labels)
+    def _get_node(self, cluster_ids:list):
+        mask = np.isin(self.cluster_ids, cluster_ids)
         index = self.index[mask].copy()
         labels = self.labels[mask].copy()
-        return ClusterTreeNode(cluster_labels=cluster_labels, index=index, labels=labels)
+        return ClusterTreeNode(cluster_ids=cluster_ids, index=index, labels=labels)
     
     def _merge_nodes(self, left_node, right_node):
-        cluster_labels = left_node.cluster_labels + right_node.cluster_labels
-        parent_node = self._get_node(cluster_labels)
+        cluster_ids = left_node.cluster_ids + right_node.cluster_ids
+        parent_node = self._get_node(cluster_ids)
         parent_node.children = [left_node, right_node]
         return parent_node
     
     def _parse_tree(self, tree:str):
 
-        nodes = {cluster_label:self._get_node([cluster_label]) for cluster_label in np.unique(self.cluster_labels)}
+        nodes = {cluster_id:self._get_node([cluster_id]) for cluster_id in np.unique(self.cluster_ids)}
 
         pbar = tqdm(total=self.n_splits, desc='ClusterTree._parse_tree')
         while len(tree) > 1:
@@ -220,7 +221,7 @@ class ClusterTree():
         pbar.close()
         return nodes[0]
     
-    def get_first_homogenous_node(self, cluster_label:int=None):
+    def get_first_homogenous_node(self, cluster_id:int=None):
         '''Retrieve the first node containing the specified cluster which is homogenous, as well as the depth at which
         the node is found. The number of splits required to get a homogenous cluster containing the cluster label
         should be a proxy for the cluster "difficulty."'''
@@ -229,11 +230,11 @@ class ClusterTree():
             if curr_node.is_homogenous():
                 return curr_node, n_splits 
             elif curr_node.is_terminal():
-                print(f'ClusterTree.get_first_homogenous_node: No homogenous node containing {cluster_label} was found in the tree.')
+                print(f'ClusterTree.get_first_homogenous_node: No homogenous node containing {cluster_id} was found in the tree.')
                 return None, n_splits
             else:
                 left_node, right_node = curr_node.children
-                next_node = left_node if (left_node.contains(cluster_label)) else right_node
+                next_node = left_node if (left_node.contains(cluster_id)) else right_node
                 return _get_first_homogenous_node(next_node, n_splits + 1)
             
         return _get_first_homogenous_node(self.root_node, 0)
@@ -246,15 +247,15 @@ class ClusterTree():
 #         self.kmeans = BisectingKMeans(verbose=verbose, n_clusters=n_clusters, bisecting_strategy='largest_cluster', tol=tolerance, n_init=n_init, random_state=42, max_iter=max_iter) # Will use Euclidean distance. 
 #         self.scaler = StandardScaler() # I think scaling prior to clustering is important. Applying same assumption as with Classifier training. 
 #         self.cluster_map = None
-#         self.cluster_labels = None
+#         self.cluster_ids = None
 #         self.index = None # Stores the index of the data used to fit the model. 
 
 #     def _check_homogenous(self, dataset):
 #         df = pd.DataFrame(index=dataset.index)
 #         df['label'] = dataset.label 
-#         df['cluster_label'] = self.cluster_labels
-#         for cluster_label, cluster_df in df.groupby('cluster_label'):
-#             assert cluster_df.label.nunique() == 1, f'Clusterer._check_homogenous: Cluster {cluster_label} is not homogenous.'
+#         df['cluster_id'] = self.cluster_ids
+#         for cluster_id, cluster_df in df.groupby('cluster_id'):
+#             assert cluster_df.label.nunique() == 1, f'Clusterer._check_homogenous: Cluster {cluster_id} is not homogenous.'
 
 #     def transform(self, dataset):
 #         embeddings = dataset.numpy().astype(np.float16) # Use half precision to reduce memory. 
@@ -271,8 +272,8 @@ class ClusterTree():
 #         embeddings = self.scaler.fit_transform(embeddings)
 #         self.index = dataset.index
 #         self.kmeans.fit(embeddings)
-#         self.cluster_labels = self.kmeans.labels_ 
-#         self.cluster_map = dict(list(zip(self.index, self.cluster_labels)))
+#         self.cluster_ids = self.kmeans.labels_ 
+#         self.cluster_map = dict(list(zip(self.index, self.cluster_ids)))
 #         self.cluster_centers = self.kmeans.cluster_centers_
 
 #         # if check_homogenous and (hasattr(dataset, 'label')):
