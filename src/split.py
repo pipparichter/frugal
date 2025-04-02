@@ -26,7 +26,7 @@ class ClusterStratifiedShuffleSplit():
         self.test_size = test_size
         print(f'ClusterStratifiedShuffleSplit.__init__: Adjusted training and test sizes are {self.adjusted_train_size:.3f}, {self.adjusted_test_size:.3f}.')
 
-        labels = self.cluster_df.cluster_label.values[self.non_singleton_idxs] # Stratify according to the cluster labels. 
+        labels = self.cluster_df.cluster_id.values[self.non_singleton_idxs] # Stratify according to the cluster labels. 
         splits = self.stratified_shuffle_split.split(self.non_singleton_idxs, labels)
         # Need to map the split indices back over to the original dataset indices. 
         self.splits = [(self.non_singleton_idxs[train_idxs], self.non_singleton_idxs[test_idxs]) for train_idxs, test_idxs in splits]
@@ -37,8 +37,8 @@ class ClusterStratifiedShuffleSplit():
     @staticmethod
     def _check_homogenous_clusters(cluster_df:pd.DataFrame):
         '''Verify that all clusters are homogenous, i.e. every element in the cluster is assigned the same label.'''
-        for cluster_label, df in cluster_df.groupby('cluster_label'):
-            assert df.label.nunique() == 1, f'ClusterStratifiedShuffleSplit._check_homogenous_clusters: Cluster {cluster_label} is not homogenous.'
+        for cluster_id, df in cluster_df.groupby('cluster_id'):
+            assert df.label.nunique() == 1, f'ClusterStratifiedShuffleSplit._check_homogenous_clusters: Cluster {cluster_id} is not homogenous.'
         print(f'ClusterStratifiedShuffleSplit._check_homogenous_clusters: All clusters in loaded file are homogenous.')
 
     def _load_clusters(self):
@@ -51,8 +51,8 @@ class ClusterStratifiedShuffleSplit():
         # cluster_df = ClusterStratifiedShuffleSplit._split_non_homogenous_clusters(cluster_df)
         ClusterStratifiedShuffleSplit._check_homogenous_clusters(cluster_df)
 
-        singleton = cluster_df.groupby('cluster_label', sort=False).apply(lambda df : (len(df) == 1), include_groups=False)
-        cluster_df['singleton'] = cluster_df.cluster_label.map(singleton)
+        singleton = cluster_df.groupby('cluster_id', sort=False).apply(lambda df : (len(df) == 1), include_groups=False)
+        cluster_df['singleton'] = cluster_df.cluster_id.map(singleton)
 
         self.cluster_df = cluster_df 
         self.singleton_idxs = np.where(cluster_df.singleton.values)[0]
