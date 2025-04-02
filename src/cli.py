@@ -70,8 +70,6 @@ def cluster_predict(args):
 
 def cluster():
     parser = argparse.ArgumentParser()
-
-    parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(title='cluster', dest='subcommand', required=True)
 
     cluster_parser = subparser.add_parser('fit')
