@@ -330,6 +330,7 @@ def model():
     model_parser = subparser.add_parser('tune')
     model_parser.add_argument('--input-path', type=str)
     model_parser.add_argument('--base-model-name', default=None, type=str)
+    model_parser.add_argument('--model-name', default=None, type=str)
     model_parser.add_argument('--output-dir', default='./models', type=str)
     model_parser.add_argument('--epochs', default=50, type=int)
     model_parser.add_argument('--batch-size', default=16, type=int)
