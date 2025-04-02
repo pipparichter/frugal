@@ -92,10 +92,10 @@ def cluster():
         cluster_predict(args)
 
 
-def split():
+def train_test_split():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
-    parser.add_argument('--output-dir', default='../data')
+    parser.add_argument('--output-dir', default='./data')
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     
     args = parser.parse_args()
@@ -128,7 +128,7 @@ def prune():
     dataset = pruner.prune(dataset)
     print(f'prune: Writing dereplicated Dataset to {output_path}')
     dataset.to_hdf(output_path)
-    dataset.to_csv(output_path.replace('.csv', '.h5'), metadata=True)
+    dataset.metadata().to_csv(output_path.replace('.csv', '.h5'))
 
 
 def library():
