@@ -149,11 +149,10 @@ class Classifier(torch.nn.Module):
         self._init_metrics()
 
         # To be populated during model fitting. 
-        self.best_epoch = 0
+        self.best_epoch = None
         self.epochs = None
         self.batch_size = None
         self.lr = None
-        self.metric = None 
         self.best_weights = copy.deepcopy(self.state_dict())
 
 
@@ -280,6 +279,7 @@ class Classifier(torch.nn.Module):
         sampler = Sampler(datasets.train, batch_size=batch_size, balance=True, sample_size=10 * len(datasets.train))
         dataloader = DataLoader(datasets.train, batch_sampler=sampler)
 
+        self.best_epoch = 0
         self._init_metrics()
         self._update_metrics(datasets.test) # Initialize the metrics list. 
 
