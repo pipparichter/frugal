@@ -68,7 +68,7 @@ class Dataset(torch.utils.data.Dataset):
         # I think that prepending an underscore to the attribute name makes the attribute inaccessible from outside the class. 
         if ('label' in self.attrs):
             self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
-            self._label = torch.from_numpy(self.label.copy()).type(torch.LongTensor)
+            self._label = torch.from_numpy(self.label.copy()).type(torch.LongTensor).to(DEVICE)
             self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
 
     def has_embedding(self) -> bool:

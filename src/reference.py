@@ -64,9 +64,9 @@ class Reference():
         return info
 
     def _get_hits(self, query):
-        ref_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
+        top_hits_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
         # The and stop are both inclusive, so if starts or stops are equal, it counts as an overlap.  
-        hits_df = ref_df[~(ref_df.start > query.stop) & ~(ref_df.stop < query.start)].copy() # Everything which passes this filter overlaps with the query region. 
+        hits_df = top_hits_df[~(top_hits_df.start > query.stop) & ~(top_hits_df.stop < query.start)].copy() # Everything which passes this filter overlaps with the query region. 
         
         if len(hits_df) == 0:
             return None
@@ -95,21 +95,21 @@ class Reference():
         hits_df = hits_df.merge(hits_info_df, left_index=True, right_on='subject_id', validate='one_to_one') # This will reset the index, which is no longer important. 
         return hits_df
 
-    def search(self, query_df:pd.DataFrame, verbose:bool=True):
-        ref_all_df = list()
-        for query in tqdm(list(query_df.itertuples()), desc='Reference.search', disable=(not verbose)):
+    def compare(self, query_df:pd.DataFrame, verbose:bool=True):
+        all_hits_df = list()
+        for query in tqdm(list(query_df.itertuples()), desc='Reference.compare', disable=(not verbose)):
             hits_df = self._get_hits(query) # Get the hit with the biggest overlap, with a preference for "valid" hits.
             if hits_df is not None:
-                ref_all_df.append(hits_df)
+                all_hits_df.append(hits_df)
 
-        ref_all_df = pd.concat(ref_all_df).reset_index(drop=True)
-        ref_df = Reference.summarize(query_df, ref_all_df) 
-        return ref_all_df, ref_df
+        all_hits_df = pd.concat(all_hits_df).reset_index(drop=True)
+        top_hits_df = Reference._get_top_hits(query_df, all_hits_df) 
+        return all_hits_df, top_hits_df
 
     @staticmethod
-    def summarize(query_df:pd.DataFrame, ref_all_df:pd.DataFrame):
-        ref_df = []
-        for query_id, df in ref_all_df.groupby('query_id'):
+    def _get_top_hits(query_df:pd.DataFrame, all_hits_df:pd.DataFrame):
+        top_hits_df = []
+        for query_id, df in all_hits_df.groupby('query_id'):
             row = dict()
             row['query_id'] = query_id
             row['n_hits'] = len(df)
@@ -120,20 +120,22 @@ class Reference():
             top_hit = df.sort_values(by=['overlap_length', 'in_frame'], ascending=False).iloc[0]
             top_hit = {field.replace('subject_', 'top_hit_'):value for field, value in top_hit.to_dict().items()}
             row.update(top_hit)
-            ref_df.append(row)
-        ref_df = pd.DataFrame(ref_df).set_index('query_id')
+            top_hits_df.append(row)
+        top_hits_df = pd.DataFrame(top_hits_df).set_index('query_id')
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', FutureWarning)
-            # Add the query IDs which had no search results to the summary DataFrame. 
-            index = pd.Index(name='query_id', data=[id_ for id_ in query_df.index if (id_ not in ref_df.index)])
-            ref_df = pd.concat([ref_df, pd.DataFrame(index=index, columns=ref_df.columns)])
-            ref_df = ref_df.loc[query_df.index] # Make sure the DataFrames are in the same order for convenience.
+            # Add the query IDs which had no compare hits to the DataFrame. Make sure to include the sequences.  
+            index = pd.Index(name='query_id', data=[id_ for id_ in query_df.index if (id_ not in top_hits_df.index)])
+            no_hits_df = pd.DataFrame(index=index, columns=top_hits_df.columns)
+            no_hits_df['query_seq'] = query_df['seq'].loc[no_hits_df.index].copy()
+            top_hits_df = pd.concat([top_hits_df, no_hits_df])
+            top_hits_df = top_hits_df.loc[query_df.index] # Make sure the DataFrames are in the same order for convenience.
 
-        return fillna(ref_df, rules={bool:False, str:'none', int:0, float:0}, errors='raise')
+        return fillna(top_hits_df, rules={bool:False, str:'none', int:0, float:0}, errors='raise')
     
     @staticmethod
-    def load_ref(path:str) -> pd.DataFrame:
+    def load(path:str) -> pd.DataFrame:
         dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
         dtypes.update({'top_hit_pseudo':bool, 'in_frame':bool})
         df = pd.read_csv(path, dtype=dtypes, index_col=0) # Load in the reference output. 
@@ -169,89 +171,70 @@ class ReferenceAnnotator():
         self.is_conflict = lambda df : ~self.is_intergenic(df) & ~self.is_match(df) & ~self.is_pseudogene(df)  
 
     @staticmethod
-    def _get_sequence_identity(seq:str, ref_seq:str) -> float: 
+    def _get_sequence_identity(seq:str, top_hitseq:str) -> float: 
         aligner = PairwiseAligner(match_score=1, mismatch_score=0, gap_score=0)
-        alignment = aligner.align(seq, ref_seq)[0] # I think this will get the best alignment?
+        alignment = aligner.align(seq, top_hitseq)[0] # I think this will get the best alignment?
         score = alignment.score
-        score = max(score / len(seq), score / len(ref_seq)) # Normalize the score by sequence length. 
+        score = max(score / len(seq), score / len(top_hitseq)) # Normalize the score by sequence length. 
         return score
     
-    def _check(self, ref_df:pd.DataFrame):
+    def _check(self, top_hits_df:pd.DataFrame):
 
-        ref_df['sequence_identity'] = np.where(ref_df.exact_match, 1, 0).astype(np.float64)
+        top_hits_df['sequence_identity'] = np.where(top_hits_df.exact_match, 1, 0).astype(np.float64)
         
-        mask, n_downgraded = ((ref_df.category == 'match') & ~ref_df.exact_match), 0
-        for row in tqdm(ref_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
+        mask, n_downgraded = ((top_hits_df.category == 'match') & ~top_hits_df.exact_match), 0
+        for row in tqdm(top_hits_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
             sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
-            ref_df.loc[row.Index, 'sequence_identity'] = sequence_identity
+            top_hits_df.loc[row.Index, 'sequence_identity'] = sequence_identity
             if (sequence_identity < self.min_sequence_identity):
-                ref_df.loc[row.Index, 'category'] = 'conflict' if (row.overlap_length >= self.max_overlap) else 'intergenic'
+                top_hits_df.loc[row.Index, 'category'] = 'conflict' if (row.overlap_length >= self.max_overlap) else 'intergenic'
                 n_downgraded += 1
 
 
         # I think there are some cases which are matches, but because one sequence is partial, they are not registering
         # as in-frame. These are being categorized as conflicts or intergenic depending on the overlap. 
 
-        mask, n_upgraded = ((ref_df.category.isin(['intergenic', 'conflict'])) & ref_df.same_strand & (ref_df.top_hit_feature == 'CDS')), 0
-        for row in tqdm(ref_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
+        mask, n_upgraded = ((top_hits_df.category.isin(['intergenic', 'conflict'])) & top_hits_df.same_strand & (top_hits_df.top_hit_feature == 'CDS')), 0
+        for row in tqdm(top_hits_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
             sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
-            ref_df.loc[row.Index, 'sequence_identity'] = sequence_identity
+            top_hits_df.loc[row.Index, 'sequence_identity'] = sequence_identity
             if (sequence_identity >= self.min_sequence_identity):
-                ref_df.loc[row.Index, 'category'] = 'match'
+                top_hits_df.loc[row.Index, 'category'] = 'match'
                 n_upgraded += 1
             
         print(f'ReferenceAnnotator._check: Downgraded {n_downgraded} "match" sequences to "intergenic" or "conflict".')
         print(f'ReferenceAnnotator._check: Upgraded {n_upgraded} "intergenic" or "conflict" sequences to "match.')
 
-        return ref_df 
+        return top_hits_df 
 
     def run(self, path:str):
-        ref_df = Reference.load_ref(path)
-        conditions = [self.is_match(ref_df), self.is_intergenic(ref_df), self.is_conflict(ref_df), self.is_pseudogene(ref_df)]
-        ref_df['category'] = np.select(conditions, ReferenceAnnotator.categories, default='none')
-        assert (ref_df.category == 'none').sum() == 0, 'ReferenceAnnotator.run: Some sequences were not assigned annotations.'
+        top_hits_df = Reference.load(path)
+        conditions = [self.is_match(top_hits_df), self.is_intergenic(top_hits_df), self.is_conflict(top_hits_df), self.is_pseudogene(top_hits_df)]
+        top_hits_df['category'] = np.select(conditions, ReferenceAnnotator.categories, default='none')
+        assert (top_hits_df.category == 'none').sum() == 0, 'ReferenceAnnotator.run: Some sequences were not assigned annotations.'
 
-        ref_df['sequence_identity'] = 0.0
-        ref_df = self._check(ref_df)
-        ref_df.to_csv(path) # Write the DataFrame back to the original path. 
+        top_hits_df['sequence_identity'] = 0.0
+        top_hits_df = self._check(top_hits_df)
+        top_hits_df.to_csv(path) # Write the DataFrame back to the original path. 
 
 
+def compare(query_path:str, reference_path:str, results_dir:str='../data/compare', annotate:bool=True, overwrite:bool=False, min_sequence_identity:float=0.9, max_overlap:int=50):
 
-def ref():
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', nargs='+', type=str)
-    parser.add_argument('--output-dir', default='./data/ref/', type=str)
-    parser.add_argument('--gbffs-dir', default='./data/ncbi/gbffs', type=str)
-    parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--annotate', action='store_true')
-    parser.add_argument('--min-sequence-identity', type=float, default=0.9) # Set to 0.9 to allow some wiggle room with the start codons. 
-    parser.add_argument('--max-overlap', type=int, default=50)
-    args = parser.parse_args()
+    genome_id = get_genome_id(query_path)
 
-    input_paths = args.input_path  
-    genome_ids = [get_genome_id(path, errors='raise') for path in input_paths]
-    gbff_paths = [os.path.join(args.gbffs_dir, f'{genome_id}_genomic.gbff') for genome_id in genome_ids]
-    
-    for i, (genome_id, input_path, gbff_path) in enumerate(zip(genome_ids, input_paths, gbff_paths)):
-        ref_all_output_path = os.path.join(args.output_dir, f'{genome_id}_ref_all.csv')
-        ref_output_path = os.path.join(args.output_dir, f'{genome_id}_ref.csv')
+    all_hits_output_path = os.path.join(results_dir, f'{genome_id}_all_hits.csv')
+    top_hits_output_path = os.path.join(results_dir, f'{genome_id}_top_hits.csv')
 
-        if (not os.path.exists(ref_output_path)) or args.overwrite:
-            print(f'ref: Searching reference for genome {genome_id}, {i} of {len(genome_ids)}.')
-            reference = Reference(gbff_path)
-            query_df = FASTAFile(path=input_path).to_df(prodigal_output=True)
-            ref_all_df, ref_df = reference.search(query_df, verbose=False)
-            ref_all_df.to_csv(ref_all_output_path)
-            ref_df.to_csv(ref_output_path)
-        if args.annotate:
-            print(f'ref: Annotating reference results for genome {genome_id}, {i} of {len(genome_ids)}.')
-            annotator = ReferenceAnnotator(max_overlap=args.max_overlap, min_sequence_identity=args.min_sequence_identity)
-            annotator.run(ref_output_path)
-        print()
-
-    print(f'ref: Search complete. Results written to {args.output_dir}')
-
+    if (not os.path.exists(top_hits_output_path)) or overwrite:
+        reference = Reference(reference_path)
+        query_df = FASTAFile(path=query_path).to_df(prodigal_output=True)
+        all_hits_df, top_hits_df = reference.compare(query_df, verbose=False)
+        all_hits_df.to_csv(all_hits_output_path)
+        top_hits_df.to_csv(top_hits_output_path)
+    if annotate:
+        annotator = ReferenceAnnotator(max_overlap=max_overlap, min_sequence_identity=min_sequence_identity)
+        annotator.run(top_hits_output_path)
+    print(f'compare: Reference comparison complete. Results written to {results_dir}')
 
 
 
