@@ -13,6 +13,7 @@ commands += ['ref=src.cli:ref']
 commands += ['embed=src.cli:embed']
 commands += ['model=src.cli:model']
 commands += ['cluster=src.cli:cluster']
+commands += ['split=src.cli:split']
 
 setuptools.setup(
     name='frugal',

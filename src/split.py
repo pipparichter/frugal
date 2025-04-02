@@ -3,6 +3,7 @@ from src.dataset import Dataset
 import json
 import pandas as pd
 import numpy as np
+import os
 
 # TODO: Might be nice to clean up the way cluster labels are managed, like store them as attributes in the 
 #   Dataset, and verify that the cluster label is poplated before proceeding with the split.
@@ -80,22 +81,8 @@ class ClusterStratifiedShuffleSplit():
         train_dataset = self.dataset.subset(train_idxs)
         test_dataset = self.dataset.subset(test_idxs) 
 
-        train_dataset.set_attr('cluster_label', self.cluster_df.cluster_label.iloc[train_idxs])
-        test_dataset.set_attr('cluster_label', self.cluster_df.cluster_label.iloc[test_idxs])
-
         return train_dataset, test_dataset
     
-
-    # def save(self, path:str, best_split:int=None):  
-    #     content = dict()
-    #     # Make sure everything is in the form of normal integers so it's JSON-serializable (not Numpy datatypes).
-    #     for i, (train_idxs, test_idxs) in enumerate(self.splits):
-    #         train_idxs = [int(idx) for idx in train_idxs]
-    #         test_idxs = [int(idx) for idx in test_idxs]
-    #         content[i] = {'train_idxs':list(train_idxs), 'test_idxs':list(test_idxs)}
-    #     content['best_split'] = int(best_split)
-    #     with open(path, 'w') as f:
-    #         json.dump(content, f)
 
 
     # def _check(self):

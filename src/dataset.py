@@ -98,7 +98,7 @@ class Dataset(torch.utils.data.Dataset):
         return df
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, attrs:list=['label', 'genome_id']):
+    def from_hdf(cls, path:str, feature_type:str=None, attrs:list=[]):
         embedding_df = Dataset._read_hdf(path, key=feature_type, chunk_size=100)
         metadata_df = Dataset._read_hdf(path, key='metadata')
 
@@ -113,19 +113,11 @@ class Dataset(torch.utils.data.Dataset):
         return cls(embedding, feature_type=feature_type, index=index, scaled=False, path=path, **kwargs)
     
     # @classmethod
-    # def from_df(cls, df:pd.DataFrame, feature_type:str=None, attrs:list=[]):
-
-    #     index = df.index.values 
-    #     embedding = df.values if (feature_type is not None) else None
-
-    #     kwargs = {attr:df[attr].copy() for attr in attrs}
-    #     return cls(embedding, feature_type=feature_type, index=index, scaled=False, **kwargs)
-
-    # @classmethod
-    # def from_csv(cls, path:str, feature_type:str=None, attrs:list=None):
+    # def from_csv(cls, path:str, attrs:list=None):
     #     df = pd.read_csv(path, index_col=0)
     #     attrs = list(df.columns) if (attrs is None) else attrs
-    #     return Dataset.from_df(df, feature_type=feature_type, attrs=attrs)
+    #     kwargs = {attr:df[attr].values for attr in attrs}
+    #     return cls(index=df.index.values, scaled=False, **kwargs)
 
     def shape(self):
         return self.embedding.shape if self.has_embedding() else self.index.shape

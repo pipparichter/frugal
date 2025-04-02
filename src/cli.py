@@ -92,6 +92,25 @@ def cluster():
         cluster_predict(args)
 
 
+def split():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input-path', type=str)
+    parser.add_argument('--output-dir', default='../data')
+    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    
+    args = parser.parse_args()
+
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
+    splits = ClusterStratifiedShuffleSplit(dataset, n_splits=1, test_size=0.2, train_size=0.8)
+    train_dataset, test_dataset = list(splits)[0]
+
+    train_dataset.to_hdf(os.path.join(args.output_dir, 'dataset_train.h5'))
+    test_dataset.to_hdf(os.path.join(args.output_dir, 'dataset_test.h5'))
+
+    train_dataset.metadata().to_csv(os.path.join(args.output_dir, 'dataset_train.csv'))
+    test_dataset.metadata().to_csv(os.path.join(args.output_dir, 'dataset_test.csv'))
+
+
 def prune():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
