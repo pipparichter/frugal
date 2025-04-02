@@ -349,8 +349,8 @@ def model():
         model_fit(args)
     if args.subcommand == 'predict':
         model_predict(args)
-
-
+    if args.subcommand == 'tune':
+        model_tune(args)
 
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 100GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed --input-path ./data/campylobacterota_dataset_boundary_errors.csv"
 def embed():
