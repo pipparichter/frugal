@@ -217,25 +217,40 @@ class ReferenceAnnotator():
 
 
 
+def ref():
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input-path', nargs='+', type=str)
+    parser.add_argument('--output-dir', default='./data/ref/', type=str)
+    parser.add_argument('--gbffs-dir', default='./data/ncbi/gbffs', type=str)
+    parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--annotate', action='store_true')
+    parser.add_argument('--min-sequence-identity', type=float, default=0.9) # Set to 0.9 to allow some wiggle room with the start codons. 
+    parser.add_argument('--max-overlap', type=int, default=50)
+    args = parser.parse_args()
 
-    # def load_homologs(self, dir_:str='../data/proteins/homologs/'):
+    input_paths = args.input_path  
+    genome_ids = [get_genome_id(path, errors='raise') for path in input_paths]
+    gbff_paths = [os.path.join(args.gbffs_dir, f'{genome_id}_genomic.gbff') for genome_id in genome_ids]
+    
+    for i, (genome_id, input_path, gbff_path) in enumerate(zip(genome_ids, input_paths, gbff_paths)):
+        ref_all_output_path = os.path.join(args.output_dir, f'{genome_id}_ref_all.csv')
+        ref_output_path = os.path.join(args.output_dir, f'{genome_id}_ref.csv')
 
-    #     protein_id_pattern = ['UniRef([0-9]{1,})_([0-9A-Za-z]+)', '[A-Z]P_([0-9]+).([0-9]+)']
-    #     protein_id_pattern = re.compile(f"({'|'.join(protein_id_pattern)})")
+        if (not os.path.exists(ref_output_path)) or args.overwrite:
+            print(f'ref: Searching reference for genome {genome_id}, {i} of {len(genome_ids)}.')
+            reference = Reference(gbff_path)
+            query_df = FASTAFile(path=input_path).to_df(prodigal_output=True)
+            ref_all_df, ref_df = reference.search(query_df, verbose=False)
+            ref_all_df.to_csv(ref_all_output_path)
+            ref_df.to_csv(ref_output_path)
+        if args.annotate:
+            print(f'ref: Annotating reference results for genome {genome_id}, {i} of {len(genome_ids)}.')
+            annotator = ReferenceAnnotator(max_overlap=args.max_overlap, min_sequence_identity=args.min_sequence_identity)
+            annotator.run(ref_output_path)
+        print()
 
-    #     path = os.path.join(dir_, f'{self.genome_id}_protein.faa')
-    #     if not os.path.exists(path):    
-    #         print(f'\nReference.load_homologs: No homolog file for genome {self.genome_id} was found in {dir_}')
-    #         return
-        
-    #     homologs_df = FASTAFile(path=path).to_df(prodigal_output=False)
-    #     homologs_df = homologs_df.groupby(homologs_df.index).first() # Drop any duplicates. 
-    #     print(f'\nReference.add_homologs: Loaded {len(homologs_df)} homologs; {self.df.pseudo.sum()} pseudogenes present in the genome.')
-    #     homologs_df.index.name = 'evidence_details'
-    #     homologs_df, _ = homologs_df.align(self.df.set_index('evidence_details'), axis=0, join='right', fill_value='none')
-    #     assert len(homologs_df) == len(self.df), f'Reference.load_homologs: Expected len(homologs_df) == len(self.df), but len(homologs_df) is {len(homologs_df)} and len(self.df) is {len(self.df)}.'
-    #     self.df['homolog_seq'] = homologs_df.seq.values
-    #     self.df['homolog_id'] = ['none' if (re.match(protein_id_pattern, id_) is None) else id_ for id_ in homologs_df.index]
+    print(f'ref: Search complete. Results written to {args.output_dir}')
 
 
 

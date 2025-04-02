@@ -198,42 +198,6 @@ def library_get(args):
     print(f'library_get: Embeddings of type {args.feature_type} written to {output_path}')
 
 
-def ref():
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', nargs='+', type=str)
-    parser.add_argument('--output-dir', default='./data/ref/', type=str)
-    parser.add_argument('--gbffs-dir', default='./data/ncbi/gbffs', type=str)
-    parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--annotate', action='store_true')
-    parser.add_argument('--min-sequence-identity', type=float, default=0.9) # Set to 0.9 to allow some wiggle room with the start codons. 
-    parser.add_argument('--max-overlap', type=int, default=50)
-    args = parser.parse_args()
-
-    input_paths = args.input_path  
-    genome_ids = [get_genome_id(path, errors='raise') for path in input_paths]
-    gbff_paths = [os.path.join(args.gbffs_dir, f'{genome_id}_genomic.gbff') for genome_id in genome_ids]
-    
-    for i, (genome_id, input_path, gbff_path) in enumerate(zip(genome_ids, input_paths, gbff_paths)):
-        ref_all_output_path = os.path.join(args.output_dir, f'{genome_id}_ref_all.csv')
-        ref_output_path = os.path.join(args.output_dir, f'{genome_id}_ref.csv')
-
-        if (not os.path.exists(ref_output_path)) or args.overwrite:
-            print(f'ref: Searching reference for genome {genome_id}, {i} of {len(genome_ids)}.')
-            reference = Reference(gbff_path)
-            query_df = FASTAFile(path=input_path).to_df(prodigal_output=True)
-            ref_all_df, ref_df = reference.search(query_df, verbose=False)
-            ref_all_df.to_csv(ref_all_output_path)
-            ref_df.to_csv(ref_output_path)
-        if args.annotate:
-            print(f'ref: Annotating reference results for genome {genome_id}, {i} of {len(genome_ids)}.')
-            annotator = ReferenceAnnotator(max_overlap=args.max_overlap, min_sequence_identity=args.min_sequence_identity)
-            annotator.run(ref_output_path)
-        print()
-
-    print(f'ref: Search complete. Results written to {args.output_dir}')
-
-
 # v1 1280,1024,2
 # v2 1280,1024,512,2
 # v3 1280,1024,512,256,2
@@ -276,7 +240,7 @@ def model_tune(args):
 
     # When fine-tuning, should I just use the same dataset for training and validation? Or just not use a validation set. 
     model = Classifier.load(base_model_path)
-    dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=['cluster_id', 'label'])
+    dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=['label'])
     model.scale(dataset, fit=False) # Use the existing StandardScaler without re-fitting.
     model.fit(Datasets(dataset, dataset), fit_loss_func=False, batch_size=args.batch_size, epochs=args.epochs)
     # Don't load the best model weights here. 
