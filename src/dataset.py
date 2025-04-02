@@ -14,7 +14,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def update_metadata(path:str, col:pd.Series):
-    store = pd.HDFStore(path, 'w')
+    store = pd.HDFStore(path, 'a')
     metadata_df = store.get('metadata').copy() 
     try:
         assert len(col) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are unequal lengths.'
