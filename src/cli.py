@@ -130,7 +130,7 @@ def prune():
     dataset.to_hdf(output_path)
     dataset.metadata().to_csv(output_path.replace('.h5', '.csv'))
 
-
+# sbatch --mem 200GB --time 10:00:00 --gres gpu:1 --partition gpu --wrap "library add --input-path GCF_000005845.2_protein.faa GCF_000009045.1_protein.faa GCF_000006765.1_protein.faa GCF_000195955.2_protein.faa --library-dir ../embeddings/"
 def library():
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(title='library', dest='subcommand', required=True)
