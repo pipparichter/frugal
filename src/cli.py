@@ -316,7 +316,7 @@ def model():
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(title='model', dest='subcommand', required=True)
 
-    model_parser = subparser.add('fit')
+    model_parser = subparser.add_parser('fit')
     model_parser.add_argument('--input-path', type=str)
     model_parser.add_argument('--cluster-path', type=str, default='./data/dataset_dereplicated_cluster.csv')
     model_parser.add_argument('--model-name', type=str)
@@ -327,7 +327,7 @@ def model():
     model_parser.add_argument('--batch-size', default=16, type=int)
     model_parser.add_argument('--n-splits', default=5, type=int)
 
-    model_parser = subparser.add('tune')
+    model_parser = subparser.add_parser('tune')
     model_parser.add_argument('--input-path', type=str)
     model_parser.add_argument('--base-model-name', default=None, type=str)
     model_parser.add_argument('--output-dir', default='./models', type=str)
@@ -336,7 +336,7 @@ def model():
     model_parser.add_argument('--n-splits', default=5, type=int)
 
 
-    model_parser = subparser.add('predict')
+    model_parser = subparser.add_parser('predict')
     model_parser.add_argument('--input-path', type=str)
     model_parser.add_argument('--model-path', nargs='+', type=str, default=None)
     model_parser.add_argument('--output-dir', default='./data/', type=str)
