@@ -60,7 +60,7 @@ def cluster_predict(args):
 
     top_n_cluster_ids = np.argsort(dists, axis=1)[:, :args.n]
     print(top_n_cluster_ids.shape)
-    top_n_dists = dists[:, top_n_cluster_ids].reshape(top_n_cluster_ids.shape)
+    top_n_dists = np.array([dists[i, top_n_cluster_ids[i]] for i in range(top_n_cluster_ids.shape[0])])
     print(top_n_dists.shape)
 
 
