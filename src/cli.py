@@ -45,25 +45,31 @@ def cluster_fit(args):
     
     base_output_path = args.input_path.replace('.h5', '')
     clusterer.save(base_output_path + '_cluster.pkl') # Save the Clusterer object.
-    write_predict(df, base_output_path + '_cluster_predict.csv') # Write the cluster predictions to a separate file. 
+    write_predict(df, base_output_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
     update_metadata(args.input_path, df.cluster_id) # Add the cluster ID to dataset file metadata. 
 
 
      
 def cluster_predict(args):
 
-    output_path = args.input_path.replace('.h5', '_predict.csv') if (args.output_path is None) else args.output_path
+    output_path = args.input_path.replace('.h5', '_cluster_predict.csv') if (args.output_path is None) else args.output_path
     attrs = ['label'] if ((args.bisecting_strategy == 'largest_non_homogenous') and (args.cluster_path is None)) else []
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=attrs)
 
     clusterer = Clusterer.load(args.cluster_path)
-
-    df = pd.DataFrame(index=dataset.index)
-    df.index.name = 'id'
     dists = clusterer.transform(dataset)
-    df['cluster_id'] = np.argmin(dists, axis=1)
-    df['cluster_distance_to_center'] = dists[:, df.cluster_id]
-    df['cluster_label'] = df.cluster_id.map(clusterer.get_cluster_id_map())
+
+    top_n_cluster_ids = np.argsort(dists, axis=1)[:, :args.n]
+    top_n_dists = dists[top_n_cluster_ids]
+
+    df = pd.DataFrame(index=pd.Index(dataset.index, name='id'))
+    df['top_cluster_id'] = top_n_cluster_ids[:, 0]
+    df['top_cluster_distance'] = top_n_dists[:, 0]
+    df['top_cluster_label'] = df['top_cluster_id'].map(clusterer.get_cluster_id_map())
+    for i in range(2, args.n):
+        df[f'rank_{i}_cluster_id'] = top_n_cluster_ids[:, i]
+        df[f'rank_{i}_cluster_distance'] = top_n_dists[:, i] 
+        df[f'rank_{i}_cluster_label'] = df[f'rank_{i}_cluster_id'].map(clusterer.get_cluster_id_map())
 
     write_predict(df, output_path)
 
@@ -83,6 +89,7 @@ def cluster():
     cluster_parser.add_argument('--input-path', type=str)
     cluster_parser.add_argument('--output-path', default=None, type=str)
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
+    cluster_parser.add_argument('--n', default=10, type=int)
 
     args = parser.parse_args()
     

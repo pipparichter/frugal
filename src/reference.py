@@ -15,6 +15,10 @@ import re
 
 class Reference():
 
+    query_fields = ['start', 'stop', 'partial', 'strand', 'seq', 'gc_content', 'rbs_motif', 'rbs_spacer', 'start_type']
+    subject_fields = ['start', 'stop', 'partial', 'strand', 'seq']
+
+
     def __init__(self, path:str):
 
         self.genome_id = get_genome_id(path)
@@ -75,8 +79,8 @@ class Reference():
 
         for subject in hits_df.itertuples():
             hit = {'query_id':query.Index, 'subject_id':subject.Index}
-            hit.update({f'query_{field}':getattr(query, field) for field in ['start', 'stop', 'partial', 'strand', 'seq']})
-            hit.update({f'subject_{field}':getattr(subject, field) for field in ['start', 'stop', 'partial', 'strand', 'seq']})  
+            hit.update({f'query_{field}':getattr(query, field, None) for field in Reference.query_fields})
+            hit.update({f'subject_{field}':getattr(subject, field) for field in Reference.subject_fields})  
             hit['subject_length'] = (subject.stop - subject.start) + 1
             hit['query_length'] = (query.stop - query.start) + 1
             hit['same_strand'] = (subject.strand == query.strand) 
