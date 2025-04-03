@@ -258,9 +258,6 @@ class Classifier(torch.nn.Module):
     def __gt__(self, model):
         return self.get_best_metric('test_accuracy') > model.get_best_metric('test_accuracy')
 
-    def _improved(self, epoch:int):
-        return self.get_latest_metric('test_accuracy') > self.get_best_metric('test_accuracy')
-
     def load_best_weights(self):
         self.load_state_dict(self.best_weights) # Load the best model weights. 
 
@@ -297,7 +294,7 @@ class Classifier(torch.nn.Module):
             
             metrics = self._update_metrics(datasets.test, losses=losses)
 
-            if self._improved(epoch=epoch):
+            if self.get_latest_metric('test_accuracy') > self.get_best_metric('test_accuracy'):
                 self.best_epoch = epoch + 1
                 self.best_weights = copy.deepcopy(self.state_dict())
                 print(f'Classifier.fit: New best model weights found after epoch {epoch}. {metrics}', flush=True)
