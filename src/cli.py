@@ -60,7 +60,8 @@ def cluster_predict(args):
 
     top_n_cluster_ids = np.argsort(dists, axis=1)[:, :args.n]
     print(top_n_cluster_ids.shape)
-    top_n_dists = dists[top_n_cluster_ids]
+    top_n_dists = dists[:, top_n_cluster_ids]
+    print(top_n_dists.shape)
 
 
     df = pd.DataFrame(index=pd.Index(dataset.index, name='id'))
