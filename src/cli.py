@@ -228,7 +228,6 @@ def model_fit(args):
         model.scale(train_dataset, fit=True)
         model.scale(test_dataset, fit=False)
         model.fit(Datasets(train_dataset, test_dataset), batch_size=args.batch_size, epochs=args.epochs)
-        model.load_best_weights()
 
         if (best_model is None) or (model > best_model):
             best_model = model.copy()
@@ -263,6 +262,7 @@ def model_predict(args):
     for model_path in args.model_path:
         model_name = os.path.basename(model_path).replace('.pkl', '')
         model = Classifier.load(model_path)
+        model.load_best_weights()
 
         attrs = ['label'] if args.load_labels else []
         dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=attrs)
