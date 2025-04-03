@@ -137,7 +137,7 @@ class MMSeqs():
     def load_cluster(path:str, add_prefix:bool=True):
         df = pd.read_csv(path, delimiter='\t', names=MMSeqs.cluster_fields)
         cluster_ids = {rep:i for i, rep in enumerate(df.cluster_rep.unique())} # Add integer IDs for each cluster. 
-        df['cluster_label'] = [cluster_ids[rep] for rep in df.cluster_rep]
+        df['cluster_id'] = [cluster_ids[rep] for rep in df.cluster_rep]
         df = df.set_index('id')
         if add_prefix:
             df.columns = [f'{MMSeqs.prefix}_{col}' for col in df.columns]

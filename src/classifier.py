@@ -123,7 +123,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
 class Classifier(torch.nn.Module):
 
-    copy_attrs = ['loss_func', 'scaler', 'epochs', 'metric', 'metrics', 'best_epoch', 'batch_size', 'lr', 'best_weights'] # Attributes to port over when copying. 
+    copy_attrs = ['loss_func', 'scaler', 'epochs', 'metrics', 'best_epoch', 'batch_size', 'lr', 'best_weights'] # Attributes to port over when copying. 
 
     def __init__(self, dims:tuple=(1024, 512, 256, 128, 2), loss_func_weights:list=None, feature_type:str=None):
 
