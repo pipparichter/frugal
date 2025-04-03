@@ -59,7 +59,7 @@ def cluster_predict(args):
     dists = clusterer.transform(dataset)
 
     top_n_cluster_ids = np.argsort(dists, axis=1)[:, :args.n]
-    top_n_dists = dists[top_n_cluster_ids]
+    top_n_dists = dists[:, top_n_cluster_ids]
 
     df = pd.DataFrame(index=pd.Index(dataset.index, name='id'))
     df['top_cluster_id'] = top_n_cluster_ids[:, 0]
