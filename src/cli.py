@@ -59,19 +59,16 @@ def cluster_predict(args):
     dists = clusterer.transform(dataset)
 
     top_n_cluster_ids = np.argsort(dists, axis=1)[:, :args.n]
-    print(top_n_cluster_ids.shape)
     top_n_dists = np.array([dists[i, top_n_cluster_ids[i]] for i in range(top_n_cluster_ids.shape[0])])
-    print(top_n_dists.shape)
-
 
     df = pd.DataFrame(index=pd.Index(dataset.index, name='id'))
     df['top_cluster_id'] = top_n_cluster_ids[:, 0]
     df['top_cluster_distance'] = top_n_dists[:, 0]
-    df['top_cluster_label'] = df['top_cluster_id'].map(clusterer.get_cluster_id_map())
+    df['top_cluster_label'] = df['top_cluster_id'].map(clusterer.get_cluster_id_to_label_map())
     for i in range(2, args.n):
         df[f'rank_{i}_cluster_id'] = top_n_cluster_ids[:, i]
         df[f'rank_{i}_cluster_distance'] = top_n_dists[:, i] 
-        df[f'rank_{i}_cluster_label'] = df[f'rank_{i}_cluster_id'].map(clusterer.get_cluster_id_map())
+        df[f'rank_{i}_cluster_label'] = df[f'rank_{i}_cluster_id'].map(clusterer.get_cluster_id_to_label_map())
 
     write_predict(df, output_path)
 
