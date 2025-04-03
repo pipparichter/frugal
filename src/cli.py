@@ -53,8 +53,7 @@ def cluster_fit(args):
 def cluster_predict(args):
 
     output_path = args.input_path.replace('.h5', '_cluster_predict.csv') if (args.output_path is None) else args.output_path
-    attrs = ['label'] if ((args.bisecting_strategy == 'largest_non_homogenous') and (args.cluster_path is None)) else []
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=attrs)
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=[])
 
     clusterer = Clusterer.load(args.cluster_path)
     dists = clusterer.transform(dataset)
