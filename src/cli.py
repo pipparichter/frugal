@@ -210,7 +210,7 @@ def library_get(args):
 # v3 1280,1024,512,256,2
 
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v1"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v2"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v1"
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "train --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v3"
 def model_fit(args):
 
@@ -236,13 +236,13 @@ def model_fit(args):
         print()
 
     best_model.save(model_path)
-    print(f'model_fit: Saved best model to {output_path}')
+    print(f'model_fit: Saved best model to {model_path}')
 
 
 def model_tune(args):
 
     base_model_path = os.path.join(args.output_dir, args.base_model_name + '.pkl')
-    output_path = os.path.join(args.output_dir, args.model_name + '.pkl')
+    model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
 
     # When fine-tuning, should I just use the same dataset for training and validation? Or just not use a validation set. 
     model = Classifier.load(base_model_path)
@@ -251,8 +251,8 @@ def model_tune(args):
     model.fit(Datasets(dataset, dataset), fit_loss_func=False, batch_size=args.batch_size, epochs=args.epochs)
     # Don't load the best model weights here. 
 
-    model.save(output_path)
-    print(f'model_fit: Saved best model to {output_path}')
+    model.save(model_path)
+    print(f'model_fit: Saved best model to {model_path}')
 
 
 def model_predict(args):
