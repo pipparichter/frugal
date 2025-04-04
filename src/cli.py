@@ -102,20 +102,24 @@ def cluster():
 def train_test_split():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-path', type=str)
-    parser.add_argument('--output-dir', default='./data')
+    parser.add_argument('--output-dir', default=None)
     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     
     args = parser.parse_args()
+    output_dir = os.path.dirname(args.input_path) if (args.output_dir is None) else args.output_dir
+    output_base_path = os.path.join(output_dir, os.path.basename(args.input_path).replace('.h5', '.'))
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
     splits = ClusterStratifiedShuffleSplit(dataset, n_splits=1, test_size=0.2, train_size=0.8)
     train_dataset, test_dataset = list(splits)[0]
 
-    train_dataset.to_hdf(os.path.join(args.output_dir, 'dataset_train.h5'))
-    test_dataset.to_hdf(os.path.join(args.output_dir, 'dataset_test.h5'))
+    print(f'train_test_split: Writing split datasets to {output_dir}.')
+    train_dataset.to_hdf(output_base_path + '_train.h5')
+    test_dataset.to_hdf(output_base_path + '_test.h5')
 
-    train_dataset.metadata().to_csv(os.path.join(args.output_dir, 'dataset_train.csv'))
-    test_dataset.metadata().to_csv(os.path.join(args.output_dir, 'dataset_test.csv'))
+    print(f'train_test_split: Writing dataset metadata to output directory {output_dir}.')
+    train_dataset.metadata().to_csv(output_base_path + '_train.h5')
+    test_dataset.metadata().to_csv(output_base_path + '_test.h5')
 
 
 def prune():
@@ -239,20 +243,20 @@ def model_fit(args):
     print(f'model_fit: Saved best model to {model_path}')
 
 
-def model_tune(args):
+# def model_tune(args):
 
-    base_model_path = os.path.join(args.output_dir, args.base_model_name + '.pkl')
-    model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
+#     base_model_path = os.path.join(args.output_dir, args.base_model_name + '.pkl')
+#     model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
 
-    # When fine-tuning, should I just use the same dataset for training and validation? Or just not use a validation set. 
-    model = Classifier.load(base_model_path)
-    dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=['label'])
-    model.scale(dataset, fit=False) # Use the existing StandardScaler without re-fitting.
-    model.fit(Datasets(dataset, dataset), fit_loss_func=False, batch_size=args.batch_size, epochs=args.epochs)
-    # Don't load the best model weights here. 
+#     # When fine-tuning, should I just use the same dataset for training and validation? Or just not use a validation set. 
+#     model = Classifier.load(base_model_path)
+#     dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=['label'])
+#     model.scale(dataset, fit=False) # Use the existing StandardScaler without re-fitting.
+#     model.fit(Datasets(dataset, dataset), fit_loss_func=False, batch_size=args.batch_size, epochs=args.epochs)
+#     # Don't load the best model weights here. 
 
-    model.save(model_path)
-    print(f'model_fit: Saved best model to {model_path}')
+#     model.save(model_path)
+#     print(f'model_fit: Saved best model to {model_path}')
 
 
 def model_predict(args):
@@ -298,14 +302,14 @@ def model():
     model_parser.add_argument('--batch-size', default=16, type=int)
     model_parser.add_argument('--n-splits', default=5, type=int)
 
-    model_parser = subparser.add_parser('tune')
-    model_parser.add_argument('--input-path', type=str)
-    model_parser.add_argument('--base-model-name', default=None, type=str)
-    model_parser.add_argument('--model-name', default=None, type=str)
-    model_parser.add_argument('--output-dir', default='./models', type=str)
-    model_parser.add_argument('--epochs', default=50, type=int)
-    model_parser.add_argument('--batch-size', default=16, type=int)
-    model_parser.add_argument('--n-splits', default=5, type=int)
+    # model_parser = subparser.add_parser('tune')
+    # model_parser.add_argument('--input-path', type=str)
+    # model_parser.add_argument('--base-model-name', default=None, type=str)
+    # model_parser.add_argument('--model-name', default=None, type=str)
+    # model_parser.add_argument('--output-dir', default='./models', type=str)
+    # model_parser.add_argument('--epochs', default=50, type=int)
+    # model_parser.add_argument('--batch-size', default=16, type=int)
+    # model_parser.add_argument('--n-splits', default=5, type=int)
 
 
     model_parser = subparser.add_parser('predict')
@@ -320,8 +324,8 @@ def model():
         model_fit(args)
     if args.subcommand == 'predict':
         model_predict(args)
-    if args.subcommand == 'tune':
-        model_tune(args)
+    # if args.subcommand == 'tune':
+    #     model_tune(args)
 
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 100GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed --input-path ./data/campylobacterota_dataset_boundary_errors.csv"
 def embed():
