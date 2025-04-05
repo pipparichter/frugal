@@ -107,7 +107,7 @@ def train_test_split():
     
     args = parser.parse_args()
     output_dir = os.path.dirname(args.input_path) if (args.output_dir is None) else args.output_dir
-    output_base_path = os.path.join(output_dir, os.path.basename(args.input_path).replace('.h5', '.'))
+    output_base_path = os.path.join(output_dir, os.path.basename(args.input_path).replace('.h5', ''))
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
     splits = ClusterStratifiedShuffleSplit(dataset, n_splits=1, test_size=0.2, train_size=0.8)
@@ -118,8 +118,8 @@ def train_test_split():
     test_dataset.to_hdf(output_base_path + '_test.h5')
 
     print(f'train_test_split: Writing dataset metadata to output directory {output_dir}.')
-    train_dataset.metadata().to_csv(output_base_path + '_train.h5')
-    test_dataset.metadata().to_csv(output_base_path + '_test.h5')
+    train_dataset.metadata().to_csv(output_base_path + '_train.csv')
+    test_dataset.metadata().to_csv(output_base_path + '_test.csv')
 
 
 def prune():
