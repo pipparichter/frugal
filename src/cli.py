@@ -32,20 +32,25 @@ def write_predict(df:pd.DataFrame, path:str):
 
 
 def cluster_fit(args):
-
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
-
-    clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisecting_strategy)
-    clusterer.fit(dataset)
-    print(f'cluster_fit: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
-
-    # Too computationally-intensive to compute the entire distance matrix when clustering on a big dataset.
-    df = pd.DataFrame(index=pd.Series(dataset.index, name='id'))
-    df['cluster_id'] = clusterer.cluster_ids
     
     base_output_path = args.input_path.replace('.h5', '')
-    clusterer.save(base_output_path + '_cluster.pkl') # Save the Clusterer object.
-    write_predict(df, base_output_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
+
+    if not os.path.exists(base_output_path + '_cluster.csv'):
+        dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
+
+        clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisecting_strategy)
+        clusterer.fit(dataset)
+        print(f'cluster_fit: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
+
+        # Too computationally-intensive to compute the entire distance matrix when clustering on a big dataset.
+        df = pd.DataFrame(index=pd.Series(dataset.index, name='id'))
+        df['cluster_id'] = clusterer.cluster_ids
+        
+        clusterer.save(base_output_path + '_cluster.pkl') # Save the Clusterer object.
+        write_predict(df, base_output_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
+    else: 
+        print(f'cluster_fit: Loading existing cluster results from {base_output_path + '_cluster.csv'}')
+
     update_metadata(args.input_path, df.cluster_id) # Add the cluster ID to dataset file metadata. 
 
 
