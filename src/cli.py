@@ -49,6 +49,7 @@ def cluster_fit(args):
         clusterer.save(base_output_path + '_cluster.pkl') # Save the Clusterer object.
         write_predict(df, base_output_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
     else: 
+        df = pd.read_csv(base_output_path + '_cluster.csv', index_col=0)
         print(f'cluster_fit: Loading existing cluster results from {base_output_path + '_cluster.csv'}')
 
     update_metadata(args.input_path, df.cluster_id) # Add the cluster ID to dataset file metadata. 
