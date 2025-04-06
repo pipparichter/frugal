@@ -261,7 +261,7 @@ class Classifier(torch.nn.Module):
     def load_best_weights(self):
         self.load_state_dict(self.best_weights) # Load the best model weights. 
 
-    def fit(self, datasets:tuple, epochs:int=100, lr:float=1e-8, batch_size:int=16, fit_loss_func:bool=False):
+    def fit(self, datasets:tuple, epochs:int=100, lr:float=1e-7, batch_size:int=16, fit_loss_func:bool=False):
 
         assert datasets.test.scaled, 'Classifier.fit: The input test Dataset has not been scaled.' 
         assert datasets.train.scaled, 'Classifier.fit: The input train Dataset has not been scaled.'
