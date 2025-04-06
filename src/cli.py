@@ -327,7 +327,7 @@ def model():
 
     model_parser = subparser.add_parser('predict')
     model_parser.add_argument('--input-path', type=str)
-    model_parser.add_argument('--model-path', nargs='+', type=str, default=None)
+    model_parser.add_argument('--model-path', nargs='+', type=str, default='./models/*pkl')
     model_parser.add_argument('--output-dir', default='./data/results/', type=str)
     model_parser.add_argument('--load-labels', action='store_true')
 
