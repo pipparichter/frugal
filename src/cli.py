@@ -309,9 +309,9 @@ def model():
     model_parser.add_argument('--output-dir', default='./models', type=str)
     model_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     model_parser.add_argument('--dims', type=str, default='1280,1024,512,2')
-    model_parser.add_argument('--epochs', default=50, type=int)
+    model_parser.add_argument('--epochs', default=100, type=int)
     model_parser.add_argument('--batch-size', default=16, type=int)
-    model_parser.add_argument('--n-splits', default=5, type=int)
+    model_parser.add_argument('--n-splits', default=1, type=int)
     model_parser.add_argument('--include-viruses', action='store_true')
 
 
