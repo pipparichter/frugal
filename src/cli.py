@@ -229,7 +229,7 @@ def model_fit(args):
 
     if not args.include_viruses:
         subset_idxs = np.where(dataset.domain != 'Viruses')[0]
-        print(f'model_fit: Excluding {len(subset_idxs)} viral proteins from the training data.')
+        print(f'model_fit: Excluding {len(dataset) - len(subset_idxs)} viral proteins from the training data.')
         dataset = dataset.subset(subset_idxs)
 
     dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
@@ -328,7 +328,7 @@ def model():
     model_parser = subparser.add_parser('predict')
     model_parser.add_argument('--input-path', type=str)
     model_parser.add_argument('--model-path', nargs='+', type=str, default=None)
-    model_parser.add_argument('--output-dir', default='./data/', type=str)
+    model_parser.add_argument('--output-dir', default='./data/results/', type=str)
     model_parser.add_argument('--load-labels', action='store_true')
 
     args = parser.parse_args()
