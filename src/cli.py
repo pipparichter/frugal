@@ -225,7 +225,12 @@ def library_get(args):
 def model_fit(args):
 
     model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['cluster_id', 'label'])
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['cluster_id', 'label', 'domain'])
+
+    if not args.include_viruses:
+        subset_idxs = np.where(dataset.domain != 'Viruses')[0]
+        print(f'model_fit: Excluding {len(subset_idxs)} viral proteins from the training data.')
+        dataset = dataset.subset(subset_idxs)
 
     dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
     assert dims[0] == dataset.n_features, f'model_fit: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
@@ -307,6 +312,8 @@ def model():
     model_parser.add_argument('--epochs', default=50, type=int)
     model_parser.add_argument('--batch-size', default=16, type=int)
     model_parser.add_argument('--n-splits', default=5, type=int)
+    model_parser.add_argument('--include-viruses', action='store_true')
+
 
     # model_parser = subparser.add_parser('tune')
     # model_parser.add_argument('--input-path', type=str)

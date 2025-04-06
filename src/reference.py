@@ -12,7 +12,7 @@ import re
 #   pseudogenes are being entered as misc_features.  
 # TODO: Check to make sure that the sequences I have predicted as conflicts are actually conflicts. I am worried that there are some cases where
 #   there are overlapping genes, and the Prodigal-predicted sequence is in-frame with one of the genes, but because of mis-predicted gene boundaries,
-#   it shares the most overlap with the wrong gene. 
+#   it shares the most overlap with the wrong gene. Update: This does seem to happen in some cases, e.g. NP_214608.1
 
 class Reference():
 
@@ -122,7 +122,8 @@ class Reference():
             row['n_hits_opposite_strand'] = len(df) - row['n_hits_same_strand']
             row['n_hits_in_frame'] = df.in_frame.sum()
             # Sort values on a boolean will put False (0) first, and True (1) last if ascending is True. 
-            top_hit = df.sort_values(by=['overlap_length', 'in_frame'], ascending=False).iloc[0]
+            # Want to prioritize hits that are in-frame. 
+            top_hit = df.sort_values(by=['in_frame', 'overlap_length'], ascending=False).iloc[0]
             top_hit = {field.replace('subject_', 'top_hit_'):value for field, value in top_hit.to_dict().items()}
             row.update(top_hit)
             top_hits_df.append(row)

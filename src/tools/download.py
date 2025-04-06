@@ -31,13 +31,13 @@ class NCBI():
     def _get_metadata(ids:list, cmd:str=None, path:str=None, chunk_size:int=20) -> pd.DataFrame:
 
         df = list()
-        if os.path.exists(path):
+        if (path is not None) and os.path.exists(path):
             df_ = pd.read_csv(path, sep='\t')
             print(f'NCBI._get_metadata: Found metadata entries for {len(df_)} IDs already in {path}.')
             ids = [id_ for id_ in ids if id_ not in df_.iloc[:, 0].values] # Don't repeatedly download the same ID.
             df.append(df_)
 
-        n_chunks = 0 if (len(ids) == 0) else len((ids) // chunk_size + 1) # Handle case where ID list is empty.
+        n_chunks = 0 if (len(ids) == 0) else len(ids) // chunk_size + 1 # Handle case where ID list is empty.
         ids = [str(id_) for id_ in ids] # Convert the IDs to strings for joining, needed for the taxonomy IDs. 
         ids = [','.join(ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
 
@@ -55,12 +55,15 @@ class NCBI():
 
         return pd.concat(df)
 
-    def get_taxonomy_metadata(self, taxonomy_ids:list, path:str='../data/ncbi_taxonomy_metadata.tsv'):
-        
+    def get_taxonomy_metadata(self, taxonomy_ids:list, path:str=None):
+
         cmd = 'datasets summary taxonomy taxon {id_} --as-json-lines | dataformat tsv taxonomy --template tax-summary'
         df = NCBI._get_metadata(taxonomy_ids, cmd=cmd, path=path)
-        df = df.set_index('Taxid') 
-        df.to_csv(path, sep='\t')
+        df = df.set_index('Taxid')
+
+        if path is not None:
+            df.to_csv(path, sep='\t')
+        return df
     
     def get_genome_metadata(self, genome_ids:list, path:str='../data/ncbi_genome_metadata.tsv'):
 
