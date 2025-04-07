@@ -121,9 +121,9 @@ def dataset():
     
     args = parser.parse_args()
     
-    if args.subcommand == 'fit':
+    if args.subcommand == 'update':
         dataset_update(args)
-    if args.subcommand == 'predict':
+    if args.subcommand == 'split':
         dataset_split(args)
 
 def dataset_update(args):
