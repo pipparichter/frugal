@@ -105,13 +105,36 @@ def cluster():
         cluster_predict(args)
 
 
-def train_test_split():
+def dataset():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', type=str)
-    parser.add_argument('--output-dir', default=None)
-    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    subparser = parser.add_subparsers(title='dataset', dest='subcommand', required=True)
+
+    dataset_parser = subparser.add_parser('update')
+    dataset_parser.add_argument('--dataset-path', type=str)
+    dataset_parser.add_argument('--input-path', type=str)
+    dataset_parser.add_argument('--columns', type=str, default=None)
+    
+    dataset_parser = subparser.add_parser('split')
+    dataset_parser.add_argument('--input-path', type=str)
+    dataset_parser.add_argument('--output-dir', default=None)
+    dataset_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     
     args = parser.parse_args()
+    
+    if args.subcommand == 'fit':
+        dataset_update(args)
+    if args.subcommand == 'predict':
+        dataset_split(args)
+
+def dataset_update(args):
+
+    df = pd.read_csv(args.input_path, index_col=0)
+    columns = args.columns.split(',') if (args.columns is not None) else df.columns 
+    for col in columns:
+        update_metadata(args.dataset_path, col)
+
+def dataset_split(args):
+
     output_dir = os.path.dirname(args.input_path) if (args.output_dir is None) else args.output_dir
     output_base_path = os.path.join(output_dir, os.path.basename(args.input_path).replace('.h5', ''))
 

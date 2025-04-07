@@ -12,7 +12,7 @@ commands += ['library=src.cli:library']
 commands += ['embed=src.cli:embed']
 commands += ['model=src.cli:model']
 commands += ['cluster=src.cli:cluster']
-commands += ['train_test_split=src.cli:train_test_split']
+commands += ['dataset=src.cli:dataset']
 
 setuptools.setup(
     name='frugal',
