@@ -64,9 +64,6 @@ class ClusterStratifiedShuffleSplit():
         self.n_singleton = len(self.singleton_idxs)
         self.n_non_singleton = len(self.non_singleton_idxs)
 
-        n_non_singleton_clusters = cluster_df[~cluster_df.singleton].cluster_id.nunique()
-        print(f'ClusterStratifiedShuffleSplit._load_clusters: {self.n_non_singleton} sequences belonging to {n_non_singleton_clusters} non-singleton clusters.')
-        
         singleton_labels = cluster_df.label[cluster_df.singleton]
         print(f'ClusterStratifiedShuffleSplit._load_clusters: Found {(singleton_labels == 1).sum()} singleton clusters with label 1.')
         print(f'ClusterStratifiedShuffleSplit._load_clusters: Found {(singleton_labels == 0).sum()} singleton clusters with label 0.')
