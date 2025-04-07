@@ -131,7 +131,7 @@ def dataset_update(args):
     df = pd.read_csv(args.input_path, index_col=0)
     columns = args.columns.split(',') if (args.columns is not None) else df.columns 
     for col in columns:
-        update_metadata(args.dataset_path, col)
+        update_metadata(args.dataset_path, df[col])
 
 def dataset_split(args):
 
