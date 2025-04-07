@@ -90,7 +90,7 @@ def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata
     col_names['assembly_stats_total_sequence_length'] = 'total_sequence_length'
     col_names['assembly_stats_number_of_contigs'] = 'n_contigs'
     col_names['taxid'] = 'taxonomy_id'
-    levels = ['phylum', 'superkingdom', 'kingdom', 'class', 'order', 'genus', 'species']
+    levels = ['phylum', 'superkingdom', 'kingdom', 'class', 'order', 'genus', 'species', 'family']
     col_names.update({f'{level}_taxid':f'{level}_taxonomy_id' for level in levels})
     col_names.update({f'{level}_name':f'{level}' for level in levels})
     col_names['phylum_taxid'] = 'phylum_taxonomy_id'
@@ -98,6 +98,7 @@ def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata
     col_names['order_taxid'] = 'order_taxonomy_id'
     col_names['genus_taxid'] = 'genus_taxonomy_id'
     col_names['species_taxid'] = 'species_taxonomy_id'
+    col_names['family_taxid'] = 'family_taxonomy_id'
     col_names['kingdom_taxid'] = 'kingdom_taxonomy_id'
     col_names['assembly_accession'] = 'genome_id'
 

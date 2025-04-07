@@ -33,8 +33,8 @@ class NCBI():
         df = list()
         if (path is not None) and os.path.exists(path):
             df_ = pd.read_csv(path, sep='\t')
-            print(f'NCBI._get_metadata: Found metadata entries for {len(df_)} IDs already in {path}.')
-            ids = [id_ for id_ in ids if id_ not in df_.iloc[:, 0].values] # Don't repeatedly download the same ID.
+            ids = [id_ for id_ in ids if (id_ not in df_.iloc[:, 0].values)] # Don't repeatedly download the same ID.
+            print(f'NCBI._get_metadata: Found metadata entries for {len(df_)} IDs already in {path}. Downloading metadata for {len(ids)} entries.')
             df.append(df_)
 
         n_chunks = 0 if (len(ids) == 0) else len(ids) // chunk_size + 1 # Handle case where ID list is empty.
@@ -52,7 +52,6 @@ class NCBI():
                 print(f'NCBI._get_metadata: Failed on query {id_}. NCBI returned the following error message.')
                 print(output.stderr.decode('utf-8'))
                 return pd.concat(df) # Return everything that has been downloaded already to not lose progress.
-
         return pd.concat(df)
 
     def get_taxonomy_metadata(self, taxonomy_ids:list, path:str=None):
@@ -60,8 +59,10 @@ class NCBI():
         cmd = 'datasets summary taxonomy taxon {id_} --as-json-lines | dataformat tsv taxonomy --template tax-summary'
         df = NCBI._get_metadata(taxonomy_ids, cmd=cmd, path=path)
         df = df.set_index('Taxid')
+        df = df[~df.index.duplicated(keep='first')].copy()
 
         if path is not None:
+            print(f'NCBI.get_taxonomy_metadata: Writing metadata for {len(df)} taxa to {path}')
             df.to_csv(path, sep='\t')
         return df
     
