@@ -24,7 +24,7 @@ class ClusterStratifiedShuffleSplit():
         train_size = self.n_non_singleton - test_size # Does not include singletons. 
 
         self.stratified_shuffle_split = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, train_size=train_size, random_state=42)
-        splits = self.stratified_shuffle_split(self.non_singleton_idxs, cluster_ids)
+        splits = self.stratified_shuffle_split.split(self.non_singleton_idxs, cluster_ids)
         # Need to map the split indices back over to the original dataset indices. Splits only contain non-singletons. 
         self.splits = [(self.non_singleton_idxs[train_idxs], self.non_singleton_idxs[test_idxs]) for train_idxs, test_idxs in splits]
 
