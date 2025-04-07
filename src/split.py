@@ -18,18 +18,22 @@ class ClusterStratifiedShuffleSplit():
         self.dataset = dataset
         self._load_clusters()
 
+        cluster_ids = self.cluster_df.cluster_id.values[self.non_singleton_idxs] # Stratify non-singletons according to the cluster labels. 
+        min_test_size = len(np.unique(cluster_ids)) # Test size cannot be smaller than the number of non-singleton clusters. 
+        test_size = max(min_test_size, int(self.n_non_singleton * test_size))
+        train_size = self.n_non_singleton - self.test_size # Does not include singletons. 
+
         self.stratified_shuffle_split = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, train_size=train_size, random_state=42)
-
-        self.adjusted_test_size = (test_size * self.n_non_singleton) / len(dataset)
-        self.adjusted_train_size = (train_size * self.n_non_singleton + self.n_singleton) / len(dataset)
-        self.train_size = train_size 
-        self.test_size = test_size
-        print(f'ClusterStratifiedShuffleSplit.__init__: Adjusted training and test sizes are {self.adjusted_train_size:.3f}, {self.adjusted_test_size:.3f}.')
-
-        labels = self.cluster_df.cluster_id.values[self.non_singleton_idxs] # Stratify according to the cluster labels. 
-        splits = self.stratified_shuffle_split.split(self.non_singleton_idxs, labels)
-        # Need to map the split indices back over to the original dataset indices. 
+        # Need to map the split indices back over to the original dataset indices. Splits only contain non-singletons. 
         self.splits = [(self.non_singleton_idxs[train_idxs], self.non_singleton_idxs[test_idxs]) for train_idxs, test_idxs in splits]
+
+        self.test_size = test_size
+        self.train_size = self.n_singleton + train_size
+        
+        assert (self.train_size + self.test_size) == len(dataset), f'ClusterStratifiedShuffleSplit.__init__: The train and test sizes ({self.train_size}, {self.test_size}) do not equal the Dataset size ({len(dataset)}).'
+
+        print(f'ClusterStratifiedShuffleSplit.__init__: Adjusted training set fraction is {self.train_size / len(dataset):.2f}.')
+        print(f'ClusterStratifiedShuffleSplit.__init__: Adjusted testing set fraction is {self.test_size / len(dataset):.2f}.')
 
         self.i = 0
         self.n_splits = n_splits 
