@@ -38,11 +38,12 @@ def get_cluster_metadata(dataset, clusterer):
     cluster_df = dataset.metadata(attrs=['cluster_id', 'label'])
     embeddings = dataset.numpy().astype(np.float16) # Half-precision to reduce memory. 
     embeddings = clusterer.scaler.transform(embeddings)
+    embeddings_df = pd.DataFrame(embeddings, index=pd.Index(dataset.index, name='id'))
 
     pbar = tqdm(list(cluster_df.groupby('cluster_id')), desc='get_cluster_metadata')
     for cluster_id, df in pbar:
         cluster_center = np.expand_dims(clusterer.cluster_centers[cluster_id], axis=0)
-        cluster_embeddings = embeddings.loc[df.index]
+        cluster_embeddings = embeddings_df.loc[df.index].values
 
         row = dict()
         row['cluster_id'] = cluster_id 
@@ -51,7 +52,7 @@ def get_cluster_metadata(dataset, clusterer):
 
         if len(df) > 1:
             idxs = np.triu_indices(len(df), k=1)
-            intra_cluster_distances = pairwise_distances(cluster_embeddings.values, metric='euclidean')[idxs]
+            intra_cluster_distances = pairwise_distances(cluster_embeddings, metric='euclidean')[idxs]
             row['cluster_radius'] = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean').max(axis=None)
             row['intra_cluster_max_distance'] = intra_cluster_distances.max(axis=None)
             row['intra_cluster_min_distance'] = intra_cluster_distances.min(axis=None)
