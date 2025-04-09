@@ -63,7 +63,8 @@ def get_cluster_metadata(dataset, clusterer):
         row['inter_cluster_mean_distance'] = inter_cluster_distances.mean(axis=None)
 
         cluster_metadata_df.append(row)
-
+    pbar.close()
+    
     cluster_metadata_df = pd.DataFrame(cluster_metadata_df).set_index('cluster_id')
     cluster_metadata_df = cluster_metadata_df.fillna(0.0)
     return cluster_metadata_df

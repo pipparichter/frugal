@@ -4,7 +4,7 @@ from src.dataset import Dataset, Datasets, Pruner, update_metadata
 from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
 import argparse
-from src.clusterer import Clusterer
+from src.clusterer import Clusterer, get_cluster_metadata
 from src.reference import Reference, ReferenceAnnotator
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
@@ -31,6 +31,15 @@ def write_predict(df:pd.DataFrame, path:str):
     print(f'write_predict: Added new predictions to file at {path}.')
 
 
+def cluster_metadata(args):
+
+    output_path = args.input_path.replace('.h5', 'cluster_metadata.csv') if (args.output_path is None) else args.output_path
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
+    clusterer = Clusterer.load(args.cluster_path)
+    cluster_metadata_df = get_cluster_metadata(dataset, clusterer)
+    print(f'cluster_metadata: Cluster metadata written to {output_path}')
+
+
 def cluster_fit(args):
     
     base_output_path = args.input_path.replace('.h5', '')
@@ -47,7 +56,7 @@ def cluster_fit(args):
         df['cluster_id'] = clusterer.cluster_ids
         
         clusterer.save(base_output_path + '_cluster.pkl') # Save the Clusterer object.
-        write_predict(df, base_output_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
+        df.to_csv(base_output_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
     else: 
         df = pd.read_csv(base_output_path + '_cluster.csv', index_col=0)
         print(f'cluster_fit: Loading existing cluster results from {base_output_path + '_cluster.csv'}')
@@ -97,12 +106,20 @@ def cluster():
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
     cluster_parser.add_argument('--n', default=10, type=int)
 
+    cluster_parser = subparser.add_parser('metadata')
+    cluster_parser.add_argument('--input-path', type=str, default=None)
+    cluster_parser.add_argument('--output-path', default=None, type=str)
+    cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    cluster_parser.add_argument('--cluster-path', default=None, type=str)
+
     args = parser.parse_args()
     
     if args.subcommand == 'fit':
         cluster_fit(args)
     if args.subcommand == 'predict':
         cluster_predict(args)
+    if args.subcommand == 'metadata':
+        cluster_metadata(args)
 
 
 def dataset():
@@ -126,12 +143,14 @@ def dataset():
     if args.subcommand == 'split':
         dataset_split(args)
 
+
 def dataset_update(args):
 
     df = pd.read_csv(args.input_path, index_col=0)
     columns = args.columns.split(',') if (args.columns is not None) else df.columns 
     for col in columns:
         update_metadata(args.dataset_path, df[col])
+
 
 def dataset_split(args):
 
@@ -151,24 +170,24 @@ def dataset_split(args):
     test_dataset.metadata().to_csv(output_base_path + '_test.csv')
 
 
-def prune():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input-path', type=str)
-    parser.add_argument('--output-path', default=None, type=str)
-    parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--radius', default=2, type=float)
-    args = parser.parse_args()
+# def prune():
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--input-path', type=str)
+#     parser.add_argument('--output-path', default=None, type=str)
+#     parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+#     parser.add_argument('--overwrite', action='store_true')
+#     parser.add_argument('--radius', default=2, type=float)
+#     args = parser.parse_args()
 
-    output_path = args.input_path.replace('.h5', '_dereplicated.h5') if (args.output_path is None) else args.output_path
+#     output_path = args.input_path.replace('.h5', '_dereplicated.h5') if (args.output_path is None) else args.output_path
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Load all attributes into the Dataset. 
-    pruner = Pruner(radius=args.radius)
-    pruner.fit(dataset)
-    dataset = pruner.prune(dataset)
-    print(f'prune: Writing dereplicated Dataset to {output_path}')
-    dataset.to_hdf(output_path)
-    dataset.metadata().to_csv(output_path.replace('.h5', '.csv'))
+#     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Load all attributes into the Dataset. 
+#     pruner = Pruner(radius=args.radius)
+#     pruner.fit(dataset)
+#     dataset = pruner.prune(dataset)
+#     print(f'prune: Writing dereplicated Dataset to {output_path}')
+#     dataset.to_hdf(output_path)
+#     dataset.metadata().to_csv(output_path.replace('.h5', '.csv'))
 
 # sbatch --mem 200GB --time 10:00:00 --gres gpu:1 --partition gpu --wrap "library add --input-path GCF_000005845.2_protein.faa GCF_000009045.1_protein.faa GCF_000006765.1_protein.faa GCF_000195955.2_protein.faa --library-dir ../embeddings/"
 def library():
