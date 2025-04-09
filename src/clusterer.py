@@ -36,8 +36,8 @@ def get_cluster_metadata(dataset, clusterer):
     cluster_metadata_df = list()
 
     cluster_df = dataset.metadata(attrs=['cluster_id', 'label'])
-    embeddings = dataset.numpy().astype(np.float16) # Half-precision to reduce memory. 
-    embeddings = clusterer.scaler.transform(embeddings)
+    embeddings = dataset.numpy() 
+    embeddings = clusterer.scaler.transform(embeddings).astype(np.float16) # Half-precision to reduce memory. 
     embeddings_df = pd.DataFrame(embeddings, index=pd.Index(dataset.index, name='id'))
 
     pbar = tqdm(list(cluster_df.groupby('cluster_id')), desc='get_cluster_metadata')
