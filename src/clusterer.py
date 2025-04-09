@@ -42,7 +42,7 @@ def get_cluster_metadata(dataset, clusterer):
 
     pbar = tqdm(list(cluster_df.groupby('cluster_id')), desc='get_cluster_metadata')
     for cluster_id, df in pbar:
-        cluster_center = np.expand_dims(clusterer.cluster_centers[cluster_id], axis=0)
+        cluster_center = np.expand_dims(clusterer.cluster_centers[cluster_id], axis=0).astype(np.float16)
         cluster_embeddings = embeddings_df.loc[df.index].values
 
         row = dict()
@@ -52,18 +52,17 @@ def get_cluster_metadata(dataset, clusterer):
 
         if len(df) > 1:
             idxs = np.triu_indices(len(df), k=1)
-            intra_cluster_distances = pairwise_distances(cluster_embeddings, metric='euclidean')[idxs]
-            row['cluster_radius'] = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean').max(axis=None)
+            intra_cluster_distances = pairwise_distances(cluster_embeddings, metric='euclidean')[idxs].astype(np.float16)
+            row['cluster_radius'] = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean').astype(np.float16).max(axis=None)
             row['intra_cluster_max_distance'] = intra_cluster_distances.max(axis=None)
             row['intra_cluster_min_distance'] = intra_cluster_distances.min(axis=None)
             row['intra_cluster_mean_distance'] = intra_cluster_distances.mean(axis=None)
         
         idxs = np.array([i for i in range(clusterer.n_clusters) if (i != cluster_id)])
-        inter_cluster_distances = pairwise_distances(cluster_center, np.array(clusterer.cluster_centers), metric='euclidean')[:, idxs]
+        inter_cluster_distances = pairwise_distances(cluster_center, np.array(clusterer.cluster_centers), metric='euclidean')[:, idxs].astype(np.float16)
         row['inter_cluster_max_distance'] = inter_cluster_distances.max(axis=None)
         row['inter_cluster_min_distance'] = inter_cluster_distances.min(axis=None)
         row['inter_cluster_mean_distance'] = inter_cluster_distances.mean(axis=None)
-        print(row)
         cluster_metadata_df.append(row)
     pbar.close()
 
