@@ -221,7 +221,7 @@ def library():
 def library_add(args):
 
     lib = EmbeddingLibrary(dir_=args.library_dir, feature_type=args.feature_type, max_length=args.max_length)
-    paths = args.input_path if (args.input_path is not None) else glob.glob(os.path.join(args.input_dir, '*'))
+    paths = args.input_path
     random.shuffle(paths) # Shuffle so starting multiple processes works better. 
 
     if args.parallelize:
