@@ -61,7 +61,7 @@ def get_cluster_metadata(dataset, clusterer):
         row['inter_cluster_max_distance'] = inter_cluster_distances.max(axis=None)
         row['inter_cluster_min_distance'] = inter_cluster_distances.min(axis=None)
         row['inter_cluster_mean_distance'] = inter_cluster_distances.mean(axis=None)
-
+        print(row)
         cluster_metadata_df.append(row)
     pbar.close()
 
