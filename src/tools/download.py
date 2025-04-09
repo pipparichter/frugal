@@ -11,6 +11,7 @@ import requests
 import json
 import re 
 
+
 # TODO: Update AntiFam class to access sequences from InterPro instead of UniProt. 
 
 # datasets summary genome taxon 2 --reference --annotated --assembly-level complete --mag exclude --assembly-source RefSeq --exclude-atypical --report sequence --as-json-lines | dataformat tsv genome-seq --fields accession,genbank-seq-acc,refseq-seq-acc,chr-name,seq-length,gc-percent
@@ -135,32 +136,19 @@ class AntiFam():
     def __init__(self):
         pass 
 
-    def get_antifams(self, path:str='../data/antifam.json'):
-        antifams = []
+    def get_antifam_ids(self, path:str='../data/antifam_ids.json'):
+        antifam_ids = []
         result = json.loads(requests.get('https://www.ebi.ac.uk/interpro/api/entry/antifam/').text)
         pbar = tqdm(total=result['count'], desc='AntiFam.get_antifams')
         while True: # Only returns 20 hits at a time, so need to paginate using the 'next' field. 
-            antifams += [{'id':entry['metadata']['accession'], 'name':entry['metadata']['name']} for entry in result['results']]
+            antifam_ids += [{'id':entry['metadata']['accession'], 'description':entry['metadata']['name']} for entry in result['results']]
             pbar.update(len(result['results']))
             if result['next'] is None:
                 break
             result = json.loads(requests.get(result['next']).text)
         with open(path, 'w') as f:
-            json.dump(antifams, f)
-        print(f'AntiFam.get_antifams: AntiFam data written to {path}')
-
-    @staticmethod
-    def _get_taxonomy_metadata(taxonomy_ids:list):
-        lineages = dict()
-        for taxonomy_id in tqdm(taxonomy_ids, 'AntiFam._get_taxonomy_metadata'):
-            try:
-                url = f'https://www.ebi.ac.uk/interpro/api/taxonomy/uniprot/{taxonomy_id}?'
-                result = json.loads(requests.get(url).text)
-                lineages[taxonomy_id] = result['metadata']['lineage']
-            except Exception as err:
-                print(f'AntiFam._get_taxonomy_metadata: Failed on taxonomy id {taxonomy_id}. Returned error message "{err}"')
-                lineages[taxonomy_id] = 'none'
-        return lineages
+            json.dump(antifam_ids, f)
+        print(f'AntiFam.get_antifams: IDs for {len(antifam_ids)} AntiFam families written to {path}')
 
     @staticmethod
     def _get_protein_info(entry:dict, antifam_id:str='none') -> dict:
@@ -171,32 +159,16 @@ class AntiFam():
         info['antifam_id'] = antifam_id
         info['product'] = metadata['name']
         info['ncbi_taxonomy_id'] = metadata['source_organism']['taxId']
-        info['organism'] = metadata['source_organism']['fullName']
+        # info['organism'] = metadata['source_organism']['fullName']
         return info
     
-    @staticmethod
-    def _get_sequences(protein_ids:str) -> dict:
-        failures = list()
-        seqs = dict()
-        for id_ in tqdm(protein_ids, desc='AntiFam._get_sequences.'):
-            try:
-                result = requests.get(f'https://rest.uniprot.org/uniprotkb/{id_}.fasta')
-                seq = result.text.split('\n')[1:] # First entry is the latest version of the sequence. 
-                seq = ''.join(seq)
-                seqs[id_] = seq
-            except:
-                print(f'AntiFam._get_sequences: Failed on sequence {id_}.')
-                failures.append(id_)
-                seqs.append('none')
-        return seqs 
-    
-    def get_proteins(self, antifam_ids:list, path:str=None, get_sequences:bool=True, get_taxonomy_metadata:bool=True) -> pd.DataFrame:
-
+    def get_proteins(self, antifam_ids:list, path:str=None) -> pd.DataFrame:
+        '''Obtain the UniProt IDs for the protein entries associated with each AntiFam in the InterPro database.'''
         df = []
         for id_ in antifam_ids:
-            url = 'https://www.ebi.ac.uk/interpro/api/protein/unreviewed/entry/antifam/{antifam}?'.format(antifam=antifam['id'])
+            url = 'https://www.ebi.ac.uk/interpro/api/protein/unreviewed/entry/antifam/{antifam}?'.format(antifam=id_)
             result = json.loads(requests.get(url).text)
-            pbar = tqdm(total=result['count'], desc='Downloading sequences for AntiFam family {antifam}.'.format(antifam=antifam['id']))
+            pbar = tqdm(total=result['count'], desc='Downloading sequences for AntiFam family {antifam}.'.format(antifam=id_))
             while True:
                 pbar.update(len(result['results']))
                 df += [AntiFam._get_protein_info(entry, antifam_id=id_) for entry in result['results']]
@@ -207,19 +179,57 @@ class AntiFam():
 
         df = pd.DataFrame(df).set_index('id')
         df.to_csv(path)
-
-        if get_sequences:
-            seqs = AntiFam._get_sequences(list(df.index))
-            df['seq'] = df.index.map(seqs)
-            df.to_csv(path)
-        
-        if get_taxonomy_metadata:
-            lineages = AntiFam._get_taxonomy_metadata(list(df.ncbi_taxonomy_id.unique()))
-            df['lineage'] = df.ncbi_taxonomy_id.map(lineages)
-            df.to_csv(path)
-        
-        print(f'AntiFam.get_proteins: AntiFam protein data written to {path}')
+        print(f'AntiFam.get_proteins: AntiFam protein data for {len(df)} sequences written to {path}')
         return df 
+
+
+class UniProt():
+
+    xml_id_pattern = re.compile('<accession>([^<]+)</accession>')
+    fasta_id_pattern = re.compile(r'>([^\s]+)')
+    url = 'https://rest.uniprot.org/uniprotkb/stream?format={format_}&query=' # '%28%28accession%3AA0A0S2IWG5%29+OR+%28accession%3AA0A1T1DM31%29%29'
+    
+    def __init__(self):
+        pass 
+
+    @staticmethod
+    def get_proteins(protein_ids:list, format_:str='xml', path:str=None, chunk_size:int=10):
+
+        existing_protein_ids = UniProt._get_existing_ids(path)
+        protein_ids = [id_ for id_ in protein_ids if (id_ not in existing_protein_ids)]
+        
+        print(f'UniProt.get_proteins: {len(existing_protein_ids)} sequences already present in {path}. Downloading {len(protein_ids)} new sequences.')
+        
+        f = open(path, 'a')
+
+        n_chunks = len(protein_ids) // chunk_size + 1
+        chunks = [protein_ids[i:i + chunk_size] for i in range(0, n_chunks * chunk_size, chunk_size)]
+        pbar = tqdm(desc='UniProt.get_proteins', total=len(protein_ids))
+
+        for chunk in chunks:
+            url = UniProt.url + '+OR+'.join([f'%28accession%3A{id_}%29' for id_ in chunk])
+            url = url.format(format_=format_)
+            # text = requests.get(f'https://rest.uniprot.org/uniprotkb/{id_}.{format_}').text 
+            text = requests.get(url).text 
+            if '<errorInfo>' in text:
+                print(text)
+                raise Exception(f'UniProt.get_proteins: Failure on URL {url}')
+            f.write(text + '\n')
+            # except:
+            #     print(f'UniProt.get_proteins: Failed to download {len(chunk)} sequences.')
+            #     failure_protein_ids += chunk
+            pbar.update(len(chunk))
+        pbar.close()
+        f.close()
+    
+    def _get_existing_ids(path:str, format_:str='xml'):
+        ids = []
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                content = f.read()
+            id_pattern = UniProt.xml_id_pattern if (format_ == 'xml') else UniProt.fasta_id_pattern
+            ids = re.findall(id_pattern, content)
+        return ids
 
 
 

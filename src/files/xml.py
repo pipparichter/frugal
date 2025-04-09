@@ -5,9 +5,12 @@ from tqdm import tqdm
 from lxml import etree 
 import pandas as pd 
 
-# TODO: Read more about namespaces
+# TODO: Read more about namespaces.
 
 class XMLFile():
+
+    databases = ['Pfam', 'InterPro', 'NCBIfam', 'PANTHER', 'SUPFAM', 'Gene3D', 'KEGG', 'GO', 'AntiFam']
+    # features = ['region of interest', 'lipid moiety-binding region', 'binding site', 'transmembrane region', 'domain', 'compositionally biased region', 'active site']
 
     def find(self, elem, name:str, attrs:Dict[str, str]=None):
         '''Find the first tag in the entry element which has the specified names and attributes.'''
@@ -16,7 +19,6 @@ class XMLFile():
             for attr, value in attrs.items():
                 xpath += f'[@{attr}=\'{value}\']'
         return elem.find(xpath)
-
 
     def findall(self, elem, name:str, attrs:Dict[str, str]=None):
         '''Find all tags in the entry element which have the specified names and attributes.'''
@@ -28,22 +30,38 @@ class XMLFile():
 
     @staticmethod
     def get_tag(elem) -> str:
-        # Namespaces look like [EXAMPLE] specify the location in the tree. 
         namespace, tag = elem.tag.split('}') # Remove the namespace from the tag. 
         namespace = namespace + '}'
         return namespace, tag 
+    
+    def get_references(self, entry):
+        references = dict()
+        for database in XMLFile.databases:
+            property_type = 'term' if (database == 'GO') else 'entry name' # Type of the tag to extract from the database entry. 
+            database_entries = self.findall(entry, 'dbReference', attrs={'type':database})
+            if len(database_entries) == 0:
+                references[database.lower() + '_description'] = 'none'
+                references[database.lower() + '_id'] = 'none'
+            else:
+                database_descriptions = [self.find(entry, 'property', attrs={'type':property_type}) for entry in database_entries]
+                database_descriptions = [description.attrib['value'] if (description is not None) else 'no description' for description in database_descriptions]
+                database_ids = [entry.attrib['id'] for entry in database_entries] # Every database reference should have an ID. 
+                references[database.lower() + '_description'] = ';'.join(database_descriptions)
+                references[database.lower() + '_id'] = ';'.join(database_ids)
+        return references 
+    
+    def get_product(self, entry):
+        product = {'product':'none'}
+        # This should get the first fullName, which is the recommended name. 
+        product['product'] = self.find(entry, 'fullName').text
+        return product
 
-    def get_annotation(self, entry) -> Dict[str, str]:
-        '''Grab the functional description and KEGG ortho group (if they exist) for the entry.'''
-        annotation = dict()
-        kegg_entry = self.find(entry, 'dbReference', attrs={'type':'KEGG'}) 
-        if kegg_entry is not None:
-            annotation['kegg'] = kegg_entry.attrib['id']
+    def get_function(self, entry) -> dict:
+        function = {'function':'none'}
         function_entry = self.find(entry, 'comment', attrs={'type':'function'}) 
-        if function_entry is not None:
-            # Need to look at the "text" tag stored under the function entry.
-            annotation['function'] = self.find(function_entry, 'text').text 
-        return annotation
+        if function_entry is not None: # Need to look at the "text" tag stored under the function entry.
+           function['function'] = self.find(function_entry, 'text').text
+        return function
 
     def get_taxonomy(self, entry) -> Dict[str, str]:
         '''Extract the taxonomy information from the organism tag group.'''
@@ -63,8 +81,8 @@ class XMLFile():
             refseq['refseq_protein_id'] = refseq_entry.attrib['id']
             refseq['refseq_nucleotide_id'] = self.find(refseq_entry, 'property', attrs={'type':'nucleotide sequence ID'}).attrib['value']
         else:
-            refseq['refseq_protein_id'] = None
-            refseq['refseq_nucleotide_id'] = None
+            refseq['refseq_protein_id'] = 'none'
+            refseq['refseq_nucleotide_id'] = 'none'
         return refseq
 
     def get_post_translational_modification(self, entry) -> Dict[str, str]:
@@ -75,16 +93,14 @@ class XMLFile():
             text = ';'.join(text)
             ptm['post_translational_modification'] = text
         else:
-            ptm['post_translational_modification'] = None
-        return ptm 
-            
+            ptm['post_translational_modification'] = 'none'
+        return ptm    
 
     def get_non_terminal_residue(self, entry) -> Dict[str, str]:
         '''If the entry passed into the function has a non-terminal residue(s), find the position(s) where it occurs; 
         there can be two non-terminal residues, one at the start of the sequence, and one at the end.'''
         # Figure out of the sequence is a fragment, i.e. if it has a non-terminal residue. 
         non_terminal_residue_entries = self.findall(entry, 'feature', attrs={'type':'non-terminal residue'})
-        # assert len(non_terminal_residues) < 2, f'XMLFile.__init__: Found more than one ({len(non_terminal_residue)}) non-terminal residue, which is unexpected.'
         if len(non_terminal_residue_entries) > 0:
             positions = []
             for non_terminal_residue_entry in non_terminal_residue_entries:
@@ -93,7 +109,7 @@ class XMLFile():
                 positions.append(position)
             positions = ','.join(positions)
         else:
-            positions = None
+            positions = 'none'
         return {'non_terminal_residue':positions}
                     
     def __init__(self, path:str, load_seqs:bool=True, chunk_size:int=100):
@@ -112,15 +128,15 @@ class XMLFile():
                 row = self.get_taxonomy(entry) 
                 row.update(self.get_refseq(entry))
                 row.update(self.get_non_terminal_residue(entry))
-                row.update(self.get_annotation(entry))
+                row.update(self.get_function(entry))
                 row.update(self.get_post_translational_modification(entry))
+                row.update(self.get_references(entry))
+                row.update(self.get_product(entry))
 
-                if load_seqs:
-                    # Why am I using findall here instead of just find?
-                    seq = self.findall(entry, 'sequence')[-1]
-                    row['seq'] = seq.text
-                    # NOTE: It seems as though not all fragmented sequences are tagged with a fragment attribute.
-                    # row['fragment'] = 'fragment' in seq.attrib
+                # Why am I using findall here instead of just find? Maybe to get the latest version?
+                row['seq'] = self.findall(entry, 'sequence')[-1].text
+                # NOTE: It seems as though not all fragmented sequences are tagged with a fragment attribute.
+                # row['fragment'] = 'fragment' in seq.attrib
                 row['existence'] = self.find(entry, 'proteinExistence').attrib['type']
                 row['name'] = self.find(entry, 'name').text 
 
@@ -134,8 +150,28 @@ class XMLFile():
 
         self.df = pd.DataFrame(df).set_index('id')
 
-
     def to_df(self):
         df = self.df.copy()
         df['file_name'] = os.path.basename(self.path)
         return df
+    
+    @staticmethod
+    def get_features(path:str):
+        
+        features = set()
+        feature_pattern = re.compile('<feature type="([^"]+)".{1,}description="([^"]+)".{1,}>')
+
+        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc=f'XMLFile.get_features: Parsing XML file.')
+
+        f = open(path, 'r')
+        for line in f:
+            feature = re.search(feature_pattern, line)
+            if (feature is not None) and (feature.group(1) != 'chain'):
+                feature = (feature.group(1), feature.group(2))
+                features.add(feature)
+            pbar.update(1)
+        f.close()
+        pbar.close()
+        return list(features)
+
+

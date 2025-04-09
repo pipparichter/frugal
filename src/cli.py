@@ -179,7 +179,6 @@ def library():
     library_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     library_parser.add_argument('--max-length', default=2000, type=int)
     library_parser.add_argument('--input-path', nargs='+', default=None)
-    library_parser.add_argument('--input-dir', type=str, default='./data/proteins/')
     library_parser.add_argument('--library-dir', type=str, default='./data/embeddings')
     library_parser.add_argument('--parallelize', action='store_true')
     library_parser.add_argument('--n-processes', default=4, type=int)

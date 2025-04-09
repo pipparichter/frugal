@@ -18,7 +18,7 @@ import Bio.Seq
 
 class GBFFFile():
 
-    fields = ['feature', 'contig_id', 'product', 'note', 'pseudo', 'locus_tag', 'inference', 'experiment', 'ribosomal_slippage'] # Basic fields. 
+    fields = ['feature', 'contig_id', 'product', 'note', 'pseudo', 'locus_tag', 'inference', 'experiment', 'ribosomal_slippage', 'go_function', 'go_process'] # Basic fields. 
     
     coordinate_fields = ['strand', 'start', 'stop', 'partial', 'continuous'] # Fields extracted from the feature coordinates. 
     cds_fields = ['seq', 'translation_table', 'codon_start', 'protein_id'] # Fields which should be populated for every CDS feature. 
@@ -94,7 +94,8 @@ class GBFFFile():
             except ValueError:
                 start, stop = range_, range_
             partial = ('1' if ('<' in start) else '0') + ('1' if ('>' in stop) else '0')
-            start, stop = int(start.replace('<', '')), int(stop.replace('>', ''))
+            start = int(start.replace('<', '').replace('>', ''))
+            stop = int(stop.replace('<', '').replace('>', ''))
             parsed_coordinate.append({'start':start, 'stop':stop, 'continuous':continuous, 'strand':strand, 'partial':partial})
 
         return parsed_coordinate
@@ -132,7 +133,7 @@ class GBFFFile():
         qualifiers = GBFFFile.parse_qualifiers(qualifiers) # Convert the qualifiers to a dictionary. 
 
         parsed_feature = list()
-        for parsed_coordinate in GBFFFile.parse_coordinate(coordinate):
+        for parsed_coordinate in GBFFFile.parse_coordinate(coordinate): # There can be multiple coordinates when there are joins involved. 
             parsed_feature_ = dict()
             parsed_feature_['coordinate'] = coordinate
             parsed_feature_['translation_table'] = translation_table
@@ -147,6 +148,8 @@ class GBFFFile():
             parsed_feature_['product'] = qualifiers.get('product', 'none')
             parsed_feature_['protein_id'] = qualifiers.get('protein_id', 'none')
             parsed_feature_['locus_tag'] = qualifiers.get('locus_tag', 'none')
+            parsed_feature_['go_process'] = qualifiers.get('GO_process', 'none')
+            parsed_feature_['go_function'] = qualifiers.get('GO_function', 'none')
             parsed_feature_.update(parsed_coordinate)
             parsed_feature.append(parsed_feature_)
 

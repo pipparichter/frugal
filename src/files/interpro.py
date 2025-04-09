@@ -7,7 +7,7 @@ import numpy as np
 class InterProScanFile():
 
     fields = ['id', 'md5', 'length', 'analysis', 'signature', 'signature_description', 'start', 'stop', 'e_value', 'status', 'date', 'annotation', 'description', 'go_annotation', 'pathways_annotation']
-    minimal_fields = ['analysis', 'signature_description', 'e_value', 'annotation', 'description']
+    minimal_fields = ['analysis', 'signature', 'signature_description', 'e_value', 'annotation', 'description']
     
     dtypes = {'e_value':float, 'status':bool, 'start':int, 'stop':int, 'length':int}
     analyses = ['Pfam', 'NCBIfam' 'TIGRFAM', 'Funfam', 'SFLD', 'PANTHER', 'Hamap', 'ProSiteProfiles', 'SMART', 'CDD', 'PRINTS', 'PIRSIR', 'ProSitePatterns', 'Antifam', 'MobiDBLite', 'Gene3D']

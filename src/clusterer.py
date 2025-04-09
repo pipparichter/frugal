@@ -17,6 +17,57 @@ import re
 # https://www.biorxiv.org/content/10.1101/2024.11.13.623527v1.full
 # TODO: Can and should probably make tree parsing recursive.
 
+# What cluster metrics do I care about? I think I will focus on per-cluster metrics to make analysis slightly more tractable. 
+# For each cluster... 
+# (1) Intra-cluster distances, the minimum, maximum, mean. 
+# (2) Cluster radius (max distance of any cluster element to the cluster center). Can use this to create 
+#   a radius neighbors graph, if I want. 
+# (3) Distance to nearest cluster (based on cluster centers). 
+# (4) Distance to furthest cluster (based on cluster centers).
+# (5) Cluster size. 
+# (6) Cluster label. 
+
+
+def get_cluster_metadata(dataset, clusterer):
+
+    assert hasattr(dataset, 'cluster_id'), 'get_cluster_distances: There are no cluster IDs associated with the dataset.'
+    assert hasattr(dataset, 'label'), 'get_cluster_distances: There are no labels associated with the dataset.'
+
+    cluster_metadata_df = list()
+
+    cluster_df = dataset.metadata(attrs=['cluster_id', 'label'])
+    embeddings = pd.DataFrame(dataset.numpy(), index=pd.Index(dataset.index, name='id'))
+
+    pbar = tqdm(list(cluster_df.groupby('cluster_id')), desc='get_cluster_metadata')
+    for cluster_id, df in pbar:
+        cluster_center = clusterer.cluster_centers[cluster_id].reshape(shape=(1, len(cluster_center)))
+        cluster_embeddings = embeddings.loc[df.index]
+
+        row = dict()
+        row['cluster_id'] = cluster_id 
+        row['cluster_size'] = len(df)
+        row['cluster_label'] = df['label'].values[0]
+
+        if len(df) > 1:
+            idxs = np.triu_indices(len(df), k=1)
+            intra_cluster_distances = pairwise_distances(cluster_embeddings.values, metric='euclidean')[idxs]
+            row['cluster_radius'] = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean').max(axis=None)
+            row['intra_cluster_max_distance'] = intra_cluster_distances.max(axis=None)
+            row['intra_cluster_min_distance'] = intra_cluster_distances.min(axis=None)
+            row['intra_cluster_mean_distance'] = intra_cluster_distances.mean(axis=None)
+        
+        idxs = np.array([i for i in range(clusterer.n_clusters) if (i != cluster_id)])
+        inter_cluster_distances = pairwise_distances(cluster_center, np.array(clusterer.cluster_centers), metric='euclidean')[:, idxs]
+        row['inter_cluster_max_distance'] = inter_cluster_distances.max(axis=None)
+        row['inter_cluster_min_distance'] = inter_cluster_distances.min(axis=None)
+        row['inter_cluster_mean_distance'] = inter_cluster_distances.mean(axis=None)
+
+        cluster_metadata_df.append(row)
+
+    cluster_metadata_df = pd.DataFrame(cluster_metadata_df).set_index('cluster_id')
+    cluster_metadata_df = cluster_metadata_df.fillna(0.0)
+    return cluster_metadata_df
+
 
 
 class Clusterer():
@@ -114,13 +165,11 @@ class Clusterer():
 
             assert self.converged(kmeans), f'Clusterer.fit: The KMeans clusterer did not converge when splitting cluster {cluster_to_split}.'
 
-            cluster_ids = kmeans.labels_
+            cluster_ids = np.where(kmeans.labels_ == 0, cluster_to_split, self.curr_cluster_id)
             cluster_centers = kmeans.cluster_centers_
-            cluster_ids = np.where(cluster_ids == 0, cluster_to_split, self.curr_cluster_id)
 
-            self.cluster_centers[cluster_to_split] = cluster_centers[0]
-            self.cluster_centers.append(cluster_centers[1])
-
+            self.cluster_centers[cluster_to_split] = cluster_centers[0] # Update the center of the split cluster. 
+            self.cluster_centers.append(cluster_centers[1]) # Add the cluster center of the new cluster. 
             self.cluster_ids[cluster_idxs] = cluster_ids
 
             pattern = r'(?<!\d)' + str(cluster_to_split) + r'(?!\d)'
