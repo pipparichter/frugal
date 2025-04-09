@@ -40,7 +40,7 @@ def get_cluster_metadata(dataset, clusterer):
 
     pbar = tqdm(list(cluster_df.groupby('cluster_id')), desc='get_cluster_metadata')
     for cluster_id, df in pbar:
-        cluster_center = clusterer.cluster_centers[cluster_id].reshape(shape=(1, len(cluster_center)))
+        cluster_center = np.expand_dims(clusterer.cluster_centers[cluster_id], axis=0)
         cluster_embeddings = embeddings.loc[df.index]
 
         row = dict()
@@ -64,7 +64,7 @@ def get_cluster_metadata(dataset, clusterer):
 
         cluster_metadata_df.append(row)
     pbar.close()
-    
+
     cluster_metadata_df = pd.DataFrame(cluster_metadata_df).set_index('cluster_id')
     cluster_metadata_df = cluster_metadata_df.fillna(0.0)
     return cluster_metadata_df

@@ -37,6 +37,7 @@ def cluster_metadata(args):
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
     clusterer = Clusterer.load(args.cluster_path)
     cluster_metadata_df = get_cluster_metadata(dataset, clusterer)
+    cluster_metadata_df.to_csv(output_path)
     print(f'cluster_metadata: Cluster metadata written to {output_path}')
 
 
