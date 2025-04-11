@@ -100,7 +100,7 @@ def get_silhouette_index(dataset, clusterer):
     
     s_tilde = list()
     for idx in tqdm(range(len(dataset)), desc='get_silhouette_index'):
-        x = np.expand_dims(embeddings_df.iloc[idx].values)
+        x = np.expand_dims(embeddings_df.iloc[idx].values, axis=0)
         i = clusterer.cluster_ids[idx]
         s_tilde.append(s(x, i))
 
