@@ -12,6 +12,7 @@ from tqdm import tqdm
 import pickle
 import re 
 import math 
+import sys 
 import itertools
 
 # TODO: Is there any data leakage by fitting a StandardScaler before clustering? I don't think any more so
@@ -27,8 +28,10 @@ class PackedDistanceMatrix():
         self.n = n
         self.dtype = dtype
         self.size = math.comb(n, 2)
+
+        mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
+        print(f'PackedDistanceMatrix.__init__: Allocating {mem:.3f}GB of memory.', flush=True)
         self.matrix = np.zeros(self.size, dtype=dtype)
-        print(f'PackedDistanceMatrix.__init__: Allocated {self.matrix.nbytes / (1024 ** 3):.3f}GB of memory.')
 
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
@@ -49,7 +52,7 @@ class PackedDistanceMatrix():
     def from_embeddings(cls, embeddings:np.ndarray):
         n = len(embeddings)
         matrix = cls(n)
-        pbar = tqdm(list(itertools.combinations(np.arange(n), 2)), desc='PackedDistanceMatrix.from_embeddings')
+        pbar = tqdm(list(itertools.combinations(np.arange(n), 2)), desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout)
         for i, j in pbar:
             matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
         pbar.close()
@@ -72,11 +75,11 @@ def get_silhouette_index(dataset, clusterer):
     cluster_idxs = {i:np.where(clusterer.cluster_ids == i)[0] for i in range(n)}
     cluster_sizes = np.bincount(clusterer.cluster_ids)
 
-    # D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
+    D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
 
     def a(x, i:int):
-        # d = np.array([D.get(x, y) for y in cluster_idxs[i]])
-        d = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[i]])
+        d = np.array([D.get(x, y) for y in cluster_idxs[i]])
+        # d = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[i]])
         return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
 
     def b(x, i:int):
@@ -86,8 +89,8 @@ def get_silhouette_index(dataset, clusterer):
         for j in range(n):
             if i == j:
                 continue 
-            # d_ = np.array(D.get(x, y) for y in cluster_idxs[j]).mean(axis=None)
-            d_ = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[j]]).mean(axis=None)
+            d_ = np.array([D.get(x, y) for y in cluster_idxs[j]]).mean(axis=None)
+            # d_ = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[j]]).mean(axis=None)
             d = min(d_, d)
         return d
     
@@ -99,9 +102,9 @@ def get_silhouette_index(dataset, clusterer):
             return (b_x - a_x) / max(a_x, b_x)
     
     s_tilde = list()
-    for idx in tqdm(range(len(dataset)), desc='get_silhouette_index'):
-        x = np.expand_dims(embeddings_df.iloc[idx].values, axis=0)
-        i = clusterer.cluster_ids[idx]
+    for x in tqdm(range(len(dataset)), desc='get_silhouette_index', file=sys.stdout):
+        # x = np.expand_dims(embeddings_df.iloc[idx].values, axis=0)
+        i = clusterer.cluster_ids[x]
         s_tilde.append(s(x, i))
 
     return np.mean(s_tilde)
