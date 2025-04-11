@@ -72,14 +72,12 @@ def get_silhouette_index(dataset, clusterer, sample_size:int=None):
     # Will be far more efficient to pre-compute all distances, but will take a lot of memory.   
     embeddings_df = get_scaled_embeddings(dataset, clusterer)
     cluster_ids = clusterer.cluster_ids 
-    n = len(np.unique(cluster_ids))
 
     if (sample_size is not None):
         sample_idxs = np.random.choice(len(dataset), sample_size, replace=False)
         embeddings_df = embeddings_df.iloc[sample_idxs].copy()
         cluster_ids = cluster_ids[sample_idxs].copy()
-        n = len(np.unique(cluster_ids))
-    
+
     cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in cluster_ids}
     cluster_sizes = np.bincount(cluster_ids)
 
@@ -94,7 +92,7 @@ def get_silhouette_index(dataset, clusterer, sample_size:int=None):
         '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
         Then, return the minimum of these mean distances over all clusters i != j.'''
         d = np.inf 
-        for j in range(n):
+        for j in cluster_ids:
             if i == j:
                 continue 
             d_ = np.array([D.get(x, y) for y in cluster_idxs[j]]).mean(axis=None)
