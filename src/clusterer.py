@@ -27,7 +27,8 @@ class PackedDistanceMatrix():
         self.n = n
         self.dtype = dtype
         self.size = math.comb(n, 2)
-        self.matrix = np.zeros(self.size, type=dtype)
+        self.matrix = np.zeros(self.size, dtype=dtype)
+        print(f'PackedDistanceMatrix.__init__: Allocated {self.matrix.nbytes / (1024 ** 3):.3f}GB of memory.')
 
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''

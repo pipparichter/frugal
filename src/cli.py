@@ -134,7 +134,6 @@ def cluster():
 
     cluster_parser = subparser.add_parser('metric')
     cluster_parser.add_argument('--input-path', type=str, default=None)
-    cluster_parser.add_argument('--output-path', default=None, type=str)
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
     cluster_parser.add_argument('--metric', default='silhouette', type=str)
