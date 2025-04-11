@@ -80,7 +80,7 @@ def get_silhouette_index(dataset, clusterer, sample_size:int=None):
         cluster_ids = cluster_ids[sample_idxs].copy()
         n = len(np.unique(cluster_ids))
     
-    cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in range(n)}
+    cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in cluster_ids}
     cluster_sizes = np.bincount(cluster_ids)
 
     D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
