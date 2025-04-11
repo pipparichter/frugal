@@ -72,24 +72,26 @@ def get_silhouette_index(dataset, clusterer):
     cluster_idxs = {i:np.where(clusterer.cluster_ids == i)[0] for i in range(n)}
     cluster_sizes = np.bincount(clusterer.cluster_ids)
 
-    D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
+    # D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
 
-    def a(x:int, i:int):
-        d = np.array([D.get(x, y) for y in cluster_idxs[i]])
+    def a(x, i:int):
+        # d = np.array([D.get(x, y) for y in cluster_idxs[i]])
+        d = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[i]])
         return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
 
-    def b(x:int, i:int):
+    def b(x, i:int):
         '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
         Then, return the minimum of these mean distances over all clusters i != j.'''
         d = np.inf 
         for j in range(n):
             if i == j:
                 continue 
-            d_ = np.array(D.get(x, y) for y in cluster_idxs[j]).mean(axis=None)
+            # d_ = np.array(D.get(x, y) for y in cluster_idxs[j]).mean(axis=None)
+            d_ = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[j]]).mean(axis=None)
             d = min(d_, d)
         return d
     
-    def s(x:np.ndarray, i:int):
+    def s(x, i:int):
         if cluster_sizes[i] == 1:
             return 0
         else:
@@ -97,8 +99,9 @@ def get_silhouette_index(dataset, clusterer):
             return (b_x - a_x) / max(a_x, b_x)
     
     s_tilde = list()
-    for x in tqdm(range(len(dataset)), desc='get_silhouette_index'):
-        i = clusterer.cluster_ids[x]
+    for idx in tqdm(range(len(dataset)), desc='get_silhouette_index'):
+        x = np.expand_dims(embeddings_df.iloc[idx].values)
+        i = clusterer.cluster_ids[idx]
         s_tilde.append(s(x, i))
 
     return np.mean(s_tilde)
