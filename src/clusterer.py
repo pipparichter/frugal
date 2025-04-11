@@ -67,13 +67,21 @@ def get_scaled_embeddings(dataset, clusterer):
     return embeddings_df
 
 
-def get_silhouette_index(dataset, clusterer):
-
+def get_silhouette_index(dataset, clusterer, sample_size:int=None):
+    
     # Will be far more efficient to pre-compute all distances, but will take a lot of memory.   
     embeddings_df = get_scaled_embeddings(dataset, clusterer)
-    n = clusterer.n_clusters 
-    cluster_idxs = {i:np.where(clusterer.cluster_ids == i)[0] for i in range(n)}
-    cluster_sizes = np.bincount(clusterer.cluster_ids)
+    cluster_ids = clusterer.cluster_ids 
+    n = len(np.unique(cluster_ids))
+
+    if (sample_size is not None):
+        sample_idxs = np.random.choice(len(dataset), sample_size, replace=False)
+        embeddings_df = embeddings_df.iloc[sample_idxs].copy()
+        cluster_ids = cluster_ids[sample_idxs].copy()
+        n = len(np.unique(cluster_ids))
+    
+    cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in range(n)}
+    cluster_sizes = np.bincount(cluster_ids)
 
     D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
 
@@ -102,9 +110,9 @@ def get_silhouette_index(dataset, clusterer):
             return (b_x - a_x) / max(a_x, b_x)
     
     s_tilde = list()
-    for x in tqdm(range(len(dataset)), desc='get_silhouette_index', file=sys.stdout):
+    for x in tqdm(range(len(embeddings_df)), desc='get_silhouette_index', file=sys.stdout):
         # x = np.expand_dims(embeddings_df.iloc[idx].values, axis=0)
-        i = clusterer.cluster_ids[x]
+        i = cluster_ids[x]
         s_tilde.append(s(x, i))
 
     return np.mean(s_tilde)

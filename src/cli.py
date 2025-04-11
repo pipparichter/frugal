@@ -38,7 +38,7 @@ def cluster_metric(args):
     clusterer = Clusterer.load(args.cluster_path)
 
     if args.metric == 'silhouette':
-        result = get_silhouette_index(dataset, clusterer) 
+        result = get_silhouette_index(dataset, clusterer, sample_size=args.sample_size) 
         print('cluster_metric: Silhouette index is', result)
 
     if args.metric == 'dunn':
@@ -137,6 +137,7 @@ def cluster():
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
     cluster_parser.add_argument('--metric', default='silhouette', type=str)
+    cluster_parser.add_argument('--sample-size', default=5000, type=int)
 
 
     args = parser.parse_args()
