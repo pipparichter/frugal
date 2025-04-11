@@ -4,7 +4,7 @@ from src.dataset import Dataset, Datasets, Pruner, update_metadata
 from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
 import argparse
-from src.clusterer import Clusterer, get_cluster_metadata
+from src.clusterer import Clusterer, get_cluster_metadata, get_davies_bouldin_index, get_silhouette_index
 from src.reference import Reference, ReferenceAnnotator
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
@@ -31,9 +31,28 @@ def write_predict(df:pd.DataFrame, path:str):
     print(f'write_predict: Added new predictions to file at {path}.')
 
 
+
+def cluster_metric(args):
+
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
+    clusterer = Clusterer.load(args.cluster_path)
+
+    if args.metric == 'silhouette':
+        result = get_silhouette_index(dataset, clusterer) 
+        print('cluster_metric: Silhouette index is', result)
+
+    if args.metric == 'dunn':
+        pass 
+
+    if args.metric == 'davis-bouldin':
+        result = get_davies_bouldin_index(dataset, clusterer) 
+        print('cluster_metric: Davis-Bouldin index is', result)
+
+
+
 def cluster_metadata(args):
 
-    output_path = args.input_path.replace('.h5', 'cluster_metadata.csv') if (args.output_path is None) else args.output_path
+    output_path = args.input_path.replace('.h5', '_cluster_metadata.csv') if (args.output_path is None) else args.output_path
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
     clusterer = Clusterer.load(args.cluster_path)
     cluster_metadata_df = get_cluster_metadata(dataset, clusterer)
@@ -72,7 +91,7 @@ def cluster_predict(args):
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=[])
 
     clusterer = Clusterer.load(args.cluster_path)
-    dists = clusterer.transform(dataset)
+    dists = clusterer.transform(dataset) # This handles the embedding scaling. 
 
     top_n_cluster_ids = np.argsort(dists, axis=1)[:, :args.n]
     top_n_dists = np.array([dists[i, top_n_cluster_ids[i]] for i in range(top_n_cluster_ids.shape[0])])
@@ -113,6 +132,14 @@ def cluster():
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
 
+    cluster_parser = subparser.add_parser('metric')
+    cluster_parser.add_argument('--input-path', type=str, default=None)
+    cluster_parser.add_argument('--output-path', default=None, type=str)
+    cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    cluster_parser.add_argument('--cluster-path', default=None, type=str)
+    cluster_parser.add_argument('--metric', default='silhouette', type=str)
+
+
     args = parser.parse_args()
     
     if args.subcommand == 'fit':
@@ -121,6 +148,8 @@ def cluster():
         cluster_predict(args)
     if args.subcommand == 'metadata':
         cluster_metadata(args)
+    if args.subcommand == 'metric':
+        cluster_metric(args)
 
 
 def dataset():
@@ -261,9 +290,9 @@ def library_get(args):
 # v2 1280,1024,512,2
 # v3 1280,1024,512,256,2
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v1"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v2"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 300GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name campylobacterota_v3"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name model_v1"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name model_v2"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name model_v3"
 def model_fit(args):
 
     model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
@@ -351,7 +380,7 @@ def model():
     model_parser.add_argument('--output-dir', default='./models', type=str)
     model_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     model_parser.add_argument('--dims', type=str, default='1280,1024,512,2')
-    model_parser.add_argument('--epochs', default=100, type=int)
+    model_parser.add_argument('--epochs', default=50, type=int)
     model_parser.add_argument('--batch-size', default=16, type=int)
     model_parser.add_argument('--n-splits', default=1, type=int)
     model_parser.add_argument('--include-viruses', action='store_true')

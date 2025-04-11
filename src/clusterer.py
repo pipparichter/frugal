@@ -6,10 +6,13 @@ from sklearn.preprocessing import StandardScaler
 import warnings 
 import torch 
 from scipy.spatial import distance_matrix
-from sklearn.metrics import pairwise_distances
+from scipy.spatial.distance import euclidean
+from sklearn.metrics import pairwise_distances, euclidean_distances
 from tqdm import tqdm
 import pickle
 import re 
+import math 
+import itertools
 
 # TODO: Is there any data leakage by fitting a StandardScaler before clustering? I don't think any more so
 #   than caused by clustering the training and testing dataset together. 
@@ -17,15 +20,113 @@ import re
 # https://www.biorxiv.org/content/10.1101/2024.11.13.623527v1.full
 # TODO: Can and should probably make tree parsing recursive.
 
-# What cluster metrics do I care about? I think I will focus on per-cluster metrics to make analysis slightly more tractable. 
-# For each cluster... 
-# (1) Intra-cluster distances, the minimum, maximum, mean. 
-# (2) Cluster radius (max distance of any cluster element to the cluster center). Can use this to create 
-#   a radius neighbors graph, if I want. 
-# (3) Distance to nearest cluster (based on cluster centers). 
-# (4) Distance to furthest cluster (based on cluster centers).
-# (5) Cluster size. 
-# (6) Cluster label. 
+class PackedDistanceMatrix():
+    def __init__(self, n:int, dtype=np.float16):
+        # Because I am ignoring the diagonal, basically have a situation with (n - 1) rows, and each column 
+        # decreases by one element. So row 0 has (n - 1) elements, row 1 has (n - 2) elements, etc. 
+        self.n = n
+        self.dtype = dtype
+        self.size = math.comb(n, 2)
+        self.matrix = np.zeros(self.size, type=dtype)
+
+    def _get_index(self, i:int, j:int):
+        '''Convert a two-dimensional index to a one-dimensional index.'''
+        # Number of elements in row i is (n - (i + 1)). Because j > i, j is always greater than 0. 
+        return int(i * (self.n - (i + 1)) + (j - 1))
+
+    def get(self, i:int, j:int):
+        if i == j:
+            return 0
+        return self.matrix[self._get_index(min(i, j), max(i, j))]
+    
+    def put(self, i:int, j:int, value:np.float16):
+        if i == j:
+            return 
+        self.matrix[self._get_index(min(i, j), max(i, j))] = value.astype(np.float16)
+
+    @classmethod
+    def from_embeddings(cls, embeddings:np.ndarray):
+        n = len(embeddings)
+        matrix = cls(n)
+        pbar = tqdm(list(itertools.combinations(np.arange(n), 2)), desc='PackedDistanceMatrix.from_embeddings')
+        for i, j in pbar:
+            matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
+        pbar.close()
+        return matrix
+
+
+def get_scaled_embeddings(dataset, clusterer):
+    '''Extract the embeddings from the Dataset and apply the StandardScaler stored in the Clusterer object.'''
+    embeddings = dataset.numpy() 
+    embeddings = clusterer.scaler.transform(embeddings).astype(np.float16) # Half-precision to reduce memory. 
+    embeddings_df = pd.DataFrame(embeddings, index=pd.Index(dataset.index, name='id'))
+    return embeddings_df
+
+
+def get_silhouette_index(dataset, clusterer):
+
+    # Will be far more efficient to pre-compute all distances, but will take a lot of memory.   
+    embeddings_df = get_scaled_embeddings(dataset, clusterer)
+    n = clusterer.n_clusters 
+    cluster_idxs = {i:np.where(clusterer.cluster_ids == i)[0] for i in range(n)}
+    cluster_sizes = np.bincount(clusterer.cluster_ids)
+
+    D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
+
+    def a(x:int, i:int):
+        d = np.array([D.get(x, y) for y in cluster_idxs[i]])
+        return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
+
+    def b(x:int, i:int):
+        '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
+        Then, return the minimum of these mean distances over all clusters i != j.'''
+        d = np.inf 
+        for j in range(n):
+            if i == j:
+                continue 
+            d_ = np.array(D.get(x, y) for y in cluster_idxs[j]).mean(axis=None)
+            d = min(d_, d)
+        return d
+    
+    def s(x:np.ndarray, i:int):
+        if cluster_sizes[i] == 1:
+            return 0
+        else:
+            a_x, b_x = a(x, i), b(x, i)
+            return (b_x - a_x) / max(a_x, b_x)
+    
+    s_tilde = list()
+    for x in tqdm(range(len(dataset)), desc='get_silhouette_index'):
+        i = clusterer.cluster_ids[x]
+        s_tilde.append(s(x, i))
+
+    return np.mean(s_tilde)
+
+
+def get_dunn_index(dataset):
+    pass 
+
+def get_davies_bouldin_index(dataset, clusterer):
+
+    embeddings_df = get_scaled_embeddings(dataset, clusterer)
+    n = clusterer.n_clusters 
+    cluster_idxs = {i:np.where(clusterer.cluster_ids == i)[0] for i in range(n_clusters)}
+
+    def get_sigma(c, i:int):
+        '''Compute the average distance between all elements in cluster i to c_i.'''
+        distances = pairwise_distances(np.expand_dims(c[i]), embeddings_df.iloc[cluster_idxs[i]], metric='euclidean')
+        return distances.mean(axis=None)
+    
+    c = clusterer.cluster_centers
+    d = pairwise_distances(c, c, metric='euclidean') # Might need to do this one at a time if memory is a problem. 
+    sigma = np.array([get_sigma(c, i) for i in range(n)])
+
+    sum_ = 0
+    for i in range(n):
+        sum_ += max([(sigma[i] + sigma[j]) / d[i, j] for j in range(n_clusters) if (i != j)])
+
+    return sum_ / n
+
 
 
 def get_cluster_metadata(dataset, clusterer):
@@ -36,9 +137,7 @@ def get_cluster_metadata(dataset, clusterer):
     cluster_metadata_df = list()
 
     cluster_df = dataset.metadata(attrs=['cluster_id', 'label'])
-    embeddings = dataset.numpy() 
-    embeddings = clusterer.scaler.transform(embeddings).astype(np.float16) # Half-precision to reduce memory. 
-    embeddings_df = pd.DataFrame(embeddings, index=pd.Index(dataset.index, name='id'))
+    embeddings_df = get_scaled_embeddings(dataset, clusterer)
 
     pbar = tqdm(list(cluster_df.groupby('cluster_id')), desc='get_cluster_metadata')
     for cluster_id, df in pbar:
