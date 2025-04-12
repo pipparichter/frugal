@@ -12,20 +12,20 @@ from sklearn.preprocessing import StandardScaler
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-
-def update_metadata(path:str, col:pd.Series):
+def update_metadata(path:str, cols:list=None):
     store = pd.HDFStore(path, 'a', table=True)
     metadata_df = store.get('metadata').copy() 
-    try:
-        assert len(col) == len(metadata_df), f'update_metadata: Index of the stored metadata and the column being added are unequal lengths. Metadata has length {len(metadata_df)} and column has length {len(col)}.'
-        assert len(np.intersect1d(metadata_df.index, col.index)) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are do not contain the same values.'
 
-        col = col.loc[metadata_df.index] # Make sure the ordering is the same as in the stored metadata. 
-        metadata_df[col.name] = col 
-        store.put('metadata', metadata_df, format='table')
-        print(f'update_metadata: Successfully added column {col.name} to the metadata.', flush=True)
-    except AssertionError as err:
-        print(f'update_metadata: Failed with error "{err}". Closing file {path}', flush=True)
+    for col in cols:
+        try:
+            assert len(col) == len(metadata_df), f'update_metadata: Index of the stored metadata and the column being added are unequal lengths. Metadata has length {len(metadata_df)} and column has length {len(col)}.'
+            assert len(np.intersect1d(metadata_df.index, col.index)) == len(metadata_df), 'update_metadata: Index of the stored metadata and the column being added are do not contain the same values.'
+            col = col.loc[metadata_df.index] # Make sure the ordering is the same as in the stored metadata. 
+            metadata_df[col.name] = col 
+            store.put('metadata', metadata_df, format='table')
+            print(f'update_metadata: Successfully added column {col.name} to the metadata.', flush=True)
+        except AssertionError as err:
+            print(f'update_metadata: Failed with error "{err}". Closing file {path}', flush=True)
     store.close() # Make sure to close the file, even in the case of an error. 
 
 
@@ -172,154 +172,3 @@ class Dataset(torch.utils.data.Dataset):
         store.close()
 
 
-class Pruner():
-
-    def __init__(self, radius:float=2):
-        
-        self.radius = radius # Radius is inclusive. 
-        self.graph = None 
-        self.neighbor_idxs = None
-        self.remove_ids = None
-        self.keep_ids = None
-        self.remove_idxs = None
-        self.keep_idxs = None
-
-    def _get_row(self, i:int):
-        return np.array([self.graph[i, j] for j in self.neighbor_idxs[i]])
-    
-    def _adjust_graph_weights(self, dataset):
-
-        for i in range(len(dataset)):
-            self.graph[i, i] = np.nan # Don't want to consider distance to self. 
-
-        # Don't want to prune nodes which are radius neighbors, but have opposite labels. 
-        row_idxs = np.repeat(np.arange(self.graph.shape[0]), np.diff(self.graph.indptr)) # Extract row indices from the graph and convert out of CSR format. 
-        col_idxs = self.graph.indices # Extract column indices graph and convert. 
-        row_labels = dataset.label[row_idxs]
-        col_labels = dataset.label[col_idxs]
-        mask = (row_labels != col_labels)
-        if mask.sum() > 0:
-            print(f'Pruner._adjust_graph_weights: Removing {mask.sum()} edges where the endpoint nodes do not have the same label.')
-        for i, j in zip(row_idxs[mask], col_idxs[mask]):
-            # Set distances of opposite-labeled neighboring nodes to be NaNs.
-            self.graph[i, j] = np.nan
-            self.graph[j, i] = np.nan
-
-    def fit(self, dataset):
-
-        embeddings = dataset.numpy() 
-        embeddings = StandardScaler().fit_transform(embeddings) # Make sure the embeddings are scaled. 
-
-        print(f'Pruner.fit: Fitting the NearestNeighbors object with radius {self.radius}.')
-        nearest_neighbors = NearestNeighbors(metric='euclidean', radius=self.radius)
-        nearest_neighbors.fit(embeddings)
-        
-        print(f'Pruner.fit: Building the radius neighborhs graph.')
-        self.graph = nearest_neighbors.radius_neighbors_graph(X=embeddings, radius=self.radius, mode='distance', sort_results=True)
-        self.neighbor_idxs = nearest_neighbors.radius_neighbors(embeddings, return_distance=False, radius=self.radius)
-        n_neighbors = np.array([len(idxs) for idxs in self.neighbor_idxs])
-        self._adjust_graph_weights(dataset)
-
-        idxs = np.arange(len(dataset))[np.argsort(n_neighbors)][::-1]
-        remove_idxs = []
-        for i in tqdm(idxs, desc='Pruner.fit: Pruning radius neighbors graph.'):
-            # Want to nullify every point in the graph which has an edge to the node represented by i. 
-            values = self._get_row(i)
-            if np.any(~np.isnan(values)):
-                remove_idxs.append(i.item())
-                for j in self.neighbor_idxs[i]:
-                    self.graph[i, j] = np.nan # Use nan instead of zero so that identical sequences also get removed.
-                    self.graph[j, i] = np.nan 
-        remove_idxs = np.array(remove_idxs)
-
-        assert np.all(np.isnan(self.graph.data.ravel())), 'Pruner.fit: There are still non-NaN elements in the graph.'
-        
-        self.remove_idxs = remove_idxs
-        self.remove_ids = dataset.index[remove_idxs]
-        self.keep_ids = dataset.index[~np.isin(dataset.index, self.remove_ids)]
-        self.keep_idxs = np.array([idx for idx in range(len(dataset)) if (idx not in remove_idxs)])
-
-    def prune(self, dataset):
-        print(f'Pruner.prune: Removing {len(self.remove_ids)} sequences from the input Dataset.')
-        print(f'Pruner.prune: {len(self.keep_ids)} sequences remaining.')
-        return dataset.subset(self.keep_idxs)
-    
-
-    def update_metadata(self, col:pd.Series):
-        assert (self.path is not None), 'Dataset.update_metadata: The Dataset has no stored path.'
-        update_metadata(self.path, col)
-        
-
-
-
-
-
-
-
-# def update(path:str, key:str, df:pd.DataFrame):
-
-#     store = pd.HDFStore(path)
-#     existing_df = store.get(key) # Get the data currently stored in the DataFrame. 
-#     assert len(df) == len(existing_df), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
-#     assert np.all(df.index == existing_df.index), f'update: The indices of the existing and update DataFrames stored in {key} do not match.'
-    
-#     store.put(key, df, format='table')
-#     store.close()
-        
-
-
-# def build(name:str, genome_ids:list, output_dir:str='../data', ref_dir:str='../data/ref', labels_dir='../data/labels', spurious_ids:list=None, version:str=None, max_length:int=2000):
-
-#     suffix = f'_{version}' if (version is not None) else ''
-
-#     print(f'build: Loading data from {len(genome_ids)} genomes.')
-
-#     # Can't rely on the top_hit_genome_id column for the genome IDs, because if there is no hit it is not populated.
-#     ref_paths = [os.path.join(ref_dir, f'{genome_id}_summary.csv') for genome_id in genome_ids]
-#     ref_dtypes = {'top_hit_partial':str, 'query_partial':str, 'top_hit_translation_table':str, 'top_hit_codon_start':str}
-#     ref_df = pd.concat([pd.read_csv(path, index_col=0, dtype=ref_dtypes).assign(genome_id=get_genome_id(path)) for path in ref_paths])
-    
-#     labels_paths = [os.path.join(labels_dir, f'{genome_id}_label.csv') for genome_id in genome_ids] 
-#     labels_df = pd.concat([pd.read_csv(path, index_col=0) for path in labels_paths])
-
-#     df = ref_df.merge(labels_df, left_index=True, right_index=True, validate='one_to_one')
-#     df = df.rename(columns={'query_seq':'seq'}) # Need to do this for file writing, etc. to work correctly, 
-#     df = df.drop(columns=['top_hit_homolog_id', 'top_hit_homolog_seq', 'pseudo'])
-
-#     lengths = df.seq.apply(len)
-#     print(f'Removing {(lengths >= max_length).sum()} sequences exceeding the maximum length of {max_length}')
-#     df = df[lengths < max_length]
-
-#     if spurious_ids is not None:
-#         df.loc[spurious_ids, 'label'] = 'spurious' # Update the labels according to the new output. 
-
-#     all_df = df.copy()
-
-#     df = df[df.label != 'none'].copy() # Filter out all of the hypothetical proteins with only ab initio evidence. 
-#     df['label'] = [0 if (label == 'spurious') else 1 for label in df.label] # Convert labels to integers. 
-#     print(f'build: Loaded {len(df)} sequences, {(df.label == 0).sum()} labeled spurious and {(df.label == 1).sum()} labeled real.')
-
-#     real_df, spurious_df = df[df.label == 1].copy(), df[df.label == 0].copy()
-#     n_real = len(real_df)
-#     # Cluster only the real sequences at 50 percent similarity in hopes of better balancing the classes. 
-#     mmseqs = MMseqs()
-#     real_df = mmseqs.cluster(real_df, job_name=name, sequence_identity=0.50, reps_only=True, overwrite=False)
-#     print(f'build: Clustering at 50 percent similarity removed {n_real - len(real_df)} sequences.')
-#     mmseqs.cleanup()
-
-#     df = pd.concat([spurious_df, real_df], ignore_index=False)
-
-#     gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-#     train_idxs, test_idxs = list(gss.split(df, groups=df.genome_id))[0]
-#     train_df, test_df = df.iloc[train_idxs], df.iloc[test_idxs]
-#     print(f'build: {(train_df.label == 0).sum()} negative instances and {(train_df.label == 1).sum()} positive instances in the training dataset.')
-#     print(f'build: {(test_df.label == 0).sum()} negative instances and {(test_df.label == 1).sum()} positive instances in the testing dataset.')
-
-#     all_df['in_test_dataset'] = all_df.index.isin(test_df.index)
-#     all_df['in_train_dataset'] = all_df.index.isin(train_df.index)
-    
-#     train_df.to_csv(os.path.join(output_dir, f'{name}_dataset_train{suffix}.csv'))
-#     test_df.to_csv(os.path.join(output_dir, f'{name}_dataset_test{suffix}.csv'))
-#     all_df.to_csv(os.path.join(output_dir, f'{name}_dataset_{suffix}.csv'))
-
-#     return train_df, test_df, all_df 
