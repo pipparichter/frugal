@@ -7,7 +7,10 @@ import pandas as pd
 
 # TODO: Add checks for setting metadata. 
 
-# Decided to use a radius neighbor graph in leiu of cluster-based analysis, as I was finding that the 
+# Decided to use a radius neighbor graph in leiu of cluster-based analysis, as I was finding that sometimes the nearest spurious cluster was not
+# the most informative (sometimes the rank 2 or 3 cluster had the results that made the most sense). I think this is related to the fact that
+# I was using distance to cluster centroids as a proxy for "closeness", but because the cluster radii can be somewhat large, I think it
+# is a better idea to just use the actual distances between embeddings. 
 
 class RadiusNeighborsGraph():
 
@@ -72,13 +75,13 @@ class RadiusNeighborsGraph():
         self.id_to_index_map = {id_:i for i, id_ in enumerate(dataset.index)}
         self.index_to_id_map = {i:id_ for i, id_ in enumerate(dataset.index)}
 
-        print(f'Pruner.fit: Fitting the NearestNeighbors object with radius {self.radius}.')
+        print(f'RadiusNeighborsGraph.fit: Fitting the NearestNeighbors object with radius {self.radius}.')
         nearest_neighbors = NearestNeighbors(metric='euclidean', radius=self.radius)
         nearest_neighbors.fit(embeddings)
         
-        print(f'Pruner.fit: Building the radius neighbors graph.')
+        print(f'RadiusNeighborsGraph.fit: Building the radius neighbors graph.')
         self.graph = nearest_neighbors.radius_neighbors_graph(X=embeddings, radius=self.radius, mode='distance', sort_results=True) # Output is a CSR sparse matrix. 
-        self.neighbor_idxs = nearest_neighbors.radius_neighbors(embeddings, return_distance=False, radius=self.radius, sort_results=True)
+        _, self.neighbor_idxs = nearest_neighbors.radius_neighbors(embeddings, return_distance=True, radius=self.radius, sort_results=True)
 
     def save(self, path:str):
         with open(path, 'wb') as f:
