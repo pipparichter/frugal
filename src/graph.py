@@ -1,11 +1,13 @@
 import numpy as np 
-from sklearn import StandardScaler 
+from sklearn.preprocessing import StandardScaler 
 from sklearn.neighbors import NearestNeighbors
 import pickle
 from tqdm import tqdm
 import pandas as pd
 
 # TODO: Add checks for setting metadata. 
+
+# Decided to use a radius neighbor graph in leiu of cluster-based analysis, as I was finding that the 
 
 class RadiusNeighborsGraph():
 
