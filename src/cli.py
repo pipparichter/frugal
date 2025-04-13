@@ -77,7 +77,7 @@ def cluster_metric(args):
     clusterer = Clusterer.load(args.cluster_path)
 
     if args.silhouette:
-        sample_size = min(len(dataset), args.sample_size)
+        sample_size = min(len(dataset) - 1, args.sample_size)
         silhouette_index, cluster_metadata_df = clusterer.get_silhouette_index(dataset, sample_size=sample_size) 
         print('cluster_metric: Silhouette index is', silhouette_index)
 
