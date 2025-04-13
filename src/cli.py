@@ -87,7 +87,7 @@ def cluster_metric(args):
 
     if args.dunn:
         dunn_index, cluster_metadata_df = clusterer.get_dunn_index(dataset) 
-        print('cluster_metric: Dunn index is', silhouette_index)
+        print('cluster_metric: Dunn index is', dunn_index)
 
     if args.davies_bouldin:
         davies_bouldin_index, cluster_metadata_df = clusterer.get_davies_bouldin(dataset) 

@@ -218,6 +218,10 @@ class Clusterer():
             obj = pickle.load(f)
         return obj
     
+    def _check_dataset(self, dataset):
+        assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
+        assert np.all(dataset.cluster_id == self.cluster_ids), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
+    
     def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
         cluster_embeddings = embeddings[self.cluster_idxs[i]]
         if method == 'center':
@@ -243,6 +247,7 @@ class Clusterer():
             return distances.max(axis=None)
         
     def get_silhouette_index(self, dataset):
+        self._check_dataset(dataset)
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         cluster_sizes = np.bincount(self.cluster_ids)
@@ -272,7 +277,7 @@ class Clusterer():
             silhouette_index[i].append(s(x, i))
         
         for i in silhouette_index.keys():
-            cluster_metadata_df.loc[i, 'silhouette_index'] = silhouette_index[i].mean()
+            cluster_metadata_df.loc[i, 'silhouette_index'] = np.mean(silhouette_index[i])
             cluster_metadata_df.loc[i, 'silhouette_index_weight'] = len(silhouette_index[i])
         silhouette_index = list(silhouette_index.values())
         silhouette_index = np.array(silhouette_index).mean(axis=None)
@@ -281,6 +286,7 @@ class Clusterer():
 
     def get_dunn_index(self, dataset, inter_method:str='center', intra_method:str='center'):
         '''https://en.wikipedia.org/wiki/Dunn_index'''
+        self._check_dataset(dataset)
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_{intra_method}', f'min_inter_cluster_distance_{inter_method}'])
 
@@ -295,7 +301,7 @@ class Clusterer():
         return dunn_index, cluster_metadata_df
     
     def get_davies_bouldin_index(self, dataset):
-
+        self._check_dataset(dataset)
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_center', 'davies_bouldin_index'])
  
