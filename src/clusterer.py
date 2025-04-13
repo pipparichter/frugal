@@ -8,8 +8,10 @@ import torch
 from scipy.spatial import distance_matrix
 from scipy.spatial.distance import euclidean
 from sklearn.metrics import pairwise_distances, euclidean_distances
+from sklearn.model_selection import StratifiedShuffleSplit
 from tqdm import tqdm
 import pickle
+from scipy.sparse import lil_matrix, lil_array
 import re 
 import math 
 import sys 
@@ -21,31 +23,24 @@ from sklearn.metrics import silhouette_score
 # TODO: Why does KMeans need to use Euclidean distance? Other distance metrics also have a concept of closeness. 
 # https://www.biorxiv.org/content/10.1101/2024.11.13.623527v1.full
 # TODO: Can and should probably make tree parsing recursive.
-
-# TODO: Add check to make sure Dataset and Clusterer indices match. 
-
-
-# Can choose to calculate intra-cluster distance in one of three ways: mean distance between all pairs, the 
-# mean distance of all points from the mean, and the maximum distance between any two points in the cluster. 
-
-# Can choose to calculate inter-cluster distance in one of three ways: the closest two points between clusters, 
-# the farthest two points between clusters, or the distance between centroids. 
-
-# The Dunn index is then computed as the minimum inter-cluster distance between any two clusters divided by the maximum
-# intra-cluster distance of any cluster. 
+# TODO: Clustering with 50,000 clusters results in a clustering with a pretty low silhouette index, I think in part because of
+#   how many clusters there are. This is not necessarily concerning (because the goal is even sampling of the space, not strong clusters), 
+#   but I am curious if setting fewer n_clusters results in a better clustering.
+# TODO: Make sure sub-sample for silhouette score is stratified by cluster. 
             
 
 class PackedDistanceMatrix():
-    def __init__(self, n:int, dtype=np.float64):
+    def __init__(self, n:int, dtype=np.float16):
         # Because I am ignoring the diagonal, basically have a situation with (n - 1) rows, and each column 
         # decreases by one element. So row 0 has (n - 1) elements, row 1 has (n - 2) elements, etc. 
         self.n = n
-        self.dtype = np.float64
+        self.dtype = dtype
         self.size = math.comb(n, 2)
 
         mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
-        print(f'PackedDistanceMatrix.__init__: Allocating {mem:.3f}GB of memory.', flush=True)
-        self.matrix = np.zeros(self.size, dtype=dtype)
+        print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
+        # self.matrix = np.zeros(self.size, dtype=dtype)
+        self.matrix = lil_array((1, n), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
 
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
@@ -56,33 +51,43 @@ class PackedDistanceMatrix():
     def get(self, i:int, j:int):
         if i == j:
             return 0
-        return self.matrix[self._get_index(min(i, j), max(i, j))]
+        return self.matrix[0, self._get_index(min(i, j), max(i, j))]
     
     def put(self, i:int, j:int, value:np.float16):
         if i == j:
             return 
-        self.matrix[self._get_index(min(i, j), max(i, j))] = value
+        self.matrix[0, self._get_index(min(i, j), max(i, j))] = value
 
     @classmethod
-    def from_embeddings(cls, embeddings:np.ndarray):
+    def from_embeddings(cls, embeddings:np.ndarray, sample_idxs:list=None):
         n = len(embeddings)
         matrix = cls(n)
-        pbar = tqdm(list(itertools.combinations(np.arange(n), 2)), desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout)
-        for i, j in pbar:
+
+        # When computing the silhouette index, it is going to be necessary to subset the dataset. In this case, I only want to 
+        # compute distances between the sampled elements versus all other entries in the dataset. However, I still want to take
+        # advantage of symmetry to avoid computing a full (sample_size, n) distance matrix, so I decided to 
+        # make the PackedDistanceMatrix sparse. 
+        idxs = list(itertools.combinations(np.arange(n), 2))
+        if sample_idxs is not None: # Only compute distances relative to an index in the sample subset.
+            idxs = [(i, j) for (i, j) in idxs if ((i in sample_idxs) or (j in sample_idxs))] 
+
+        mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
+        print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
+        
+        for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout):
             matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
-            # matrix.put(i, j, pairwise_distances(np.expand_dims(embeddings[i], axis=0), np.expand_dims(embeddings[j], axis=0), metric='euclidean'))
-        pbar.close()
+
         return matrix
     
 
-# def check_packed_distance_matrix(embeddings):
-#     D_ = pairwise_distances(embeddings, metric='euclidean')
-#     D = PackedDistanceMatrix.from_embeddings(embeddings)
-#     n = len(embeddings)
-#     for i in range(n):
-#         for j in range(n):
-#             assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
-#             # print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
+def check_packed_distance_matrix(embeddings):
+    D_ = pairwise_distances(embeddings, metric='euclidean')
+    D = PackedDistanceMatrix.from_embeddings(embeddings)
+    n = len(embeddings)
+    for i in range(n):
+        for j in range(n):
+            assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
+            # print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
     
 
 class Clusterer():
@@ -105,6 +110,7 @@ class Clusterer():
         self.bisecting_strategy = bisecting_strategy
 
         self.max_iter = max_iter
+        # Setting a consistent random state and keeping all other parameters the same results in reproducible clustering output. 
         self.kmeans_kwargs = {'max_iter':max_iter, 'n_clusters':2, 'n_init':n_init, 'random_state':42}
 
         self.verbose = verbose 
@@ -133,10 +139,6 @@ class Clusterer():
     
     def converged(self, kmeans):
         return kmeans.n_iter_ < self.max_iter
-    
-    def fitted(self):
-        '''Return whether or not the Clusterer has been fitted.'''
-        return (self.cluster_ids is not None)
         
     def _get_cluster_to_split(self):
 
@@ -151,23 +153,6 @@ class Clusterer():
                 cluster_sizes = np.where(n_labels_per_cluster == 1, 0, cluster_sizes)
 
         return np.argmax(cluster_sizes)
-    
-    def subset(self, idxs:np.ndarray):
-
-        cluster_ids = self.cluster_ids[idxs].copy()
-        labels = self.labels[idxs].copy()
-        index = self.index[idxs].copy()
-        cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in np.unique(cluster_ids)}
-        n_clusters = len(np.unique(cluster_ids))
-
-        clusterer = Clusterer(n_clusters=n_clusters, bisecting_strategy=self.bisecting_strategy)
-        clusterer.scaler = self.scaler 
-        clusterer.cluster_idxs = cluster_idxs
-        clusterer.cluster_ids = cluster_ids
-        clusterer.labels = labels
-        clusterer.index = index
-
-        return clusterer
 
     def transform(self, dataset):
         embeddings = dataset.numpy().astype(np.float16)
@@ -233,6 +218,20 @@ class Clusterer():
             obj = pickle.load(f)
         return obj
     
+    # Functions for computing cluster metrics. 
+
+    def _get_sample_idxs(self, sample_size:int=None, stratified:bool=True):
+        '''Get indices for a sub-sample. If stratified is set to true, ensures the sample contains an even spread of the clusters.'''
+        if stratified:
+            if sample_size < self.n_clusters:
+                print(f'Clusterer._get_sample_idxs: Sample size is too small. Using the minimum sample size of {self.n_clusters}.')
+            sample_size = max(self.n_clusters, sample_size) # Can't sample fewer than the number of clusters. 
+            stratified_shuffle_split = StratifiedShuffleSplit(n_splits=1, test_size=sample_size, random_state=42)
+            sample_idxs, _ = stratified_shuffle_split.split(self.index, groups=self.cluster_ids)
+        else:
+            sample_idxs = np.random.choice(np.arange(len(self.index)), size=sample_size, replace=False)
+        return sample_idxs
+    
     def _check_dataset(self, dataset):
         assert len(dataset.index) == len(self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
         assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
@@ -262,43 +261,52 @@ class Clusterer():
         if method == 'furthest':
             return distances.max(axis=None)
         
-    def get_silhouette_index(self, dataset, exclude_singletons:bool=True):
+    def get_silhouette_index(self, dataset, sample_size:int=None):
+        '''A silhouette index for a particular point x in cluster i is essentially the "closeness" of point x to the nearest cluster i != j minus the
+        "closeness" of x to its own cluster i, normalized according to the maximum of the two closeness metrics. A negative silhoutte index therefore
+        implies that x is closer to another cluster than its own cluster, while a score close to zero indicates that a point is equidistant between
+        two clusters. Silhouette indices range from -1 to 1. https://en.wikipedia.org/wiki/Silhouette_(clustering)'''
+        
         self._check_dataset(dataset)
-        embeddings = self.scaler.transform(dataset.numpy()) # .astype(np.float16)
+        
+        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
+        
         cluster_sizes = np.bincount(self.cluster_ids)
-        cluster_ids = np.where(cluster_sizes > 1)[0] if exclude_singletons else np.unique(self.cluster_ids)
-        # print(silhouette_score(embeddings, self.cluster_ids))
+        cluster_ids = np.unique(self.cluster_ids) 
+        sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size, stratified=True)
+        check_packed_distance_matrix(embeddings)
 
-        # check_packed_distance_matrix(embeddings)
-        D = PackedDistanceMatrix.from_embeddings(embeddings)
+        D = PackedDistanceMatrix.from_embeddings(embeddings, sample_idxs=sample_idxs)
 
         def a(x, i:int):
+            '''For a datapoint in cluster i, compute the mean distance from all elements in cluster i.'''
             d = np.array([D.get(x, y) for y in self.cluster_idxs[i]])
             return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
 
         def b(x, i:int):
-            '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
-            Then, return the minimum of these mean distances over all clusters i != j.'''
+            '''For a datapoint x in cluster i, compute the mean distance from all elements in cluster j, and return the minimum.'''
             d = lambda j : np.array([D.get(x, y) for y in self.cluster_idxs[j]]).mean(axis=None)
             return min([d(j) for j in cluster_ids if (j != i)])
         
         def s(x, i:int):
             if cluster_sizes[i] == 1:
-                return 0
-            else:
-                a_x, b_x = a(x, i), b(x, i)
-                return (b_x - a_x) / max(a_x, b_x)
+                return 0 # Silhouette index is not well-defined for singleton clusters. 
+            a_x, b_x = a(x, i), b(x, i)
+            return (b_x - a_x) / max(a_x, b_x)
         
-        silhouette_index = {i:list() for i in cluster_ids}
-        for x in tqdm(range(len(embeddings)), desc='Clusterer.get_silhouette_index', file=sys.stdout):
+        silhouette_index = {i:list() for i in cluster_ids} # Store silhouette score computations by cluster. 
+        for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
             i = self.cluster_ids[x]
             if i in cluster_ids:
                 silhouette_index[i].append(s(x, i))
         
         for i in silhouette_index.keys():
-            cluster_metadata_df.loc[i, 'silhouette_index'] = np.mean(silhouette_index[i])
+            cluster_metadata_df.loc[i, 'silhouette_index_mean'] = np.mean(silhouette_index[i])
             cluster_metadata_df.loc[i, 'silhouette_index_weight'] = len(silhouette_index[i])
+            cluster_metadata_df.loc[i, 'silhouette_index_min'] = np.min(silhouette_index[i])
+            cluster_metadata_df.loc[i, 'silhouette_index_max'] = np.max(silhouette_index[i])
+            cluster_metadata_df.loc[i, 'silhouette_index_n_negative'] = (np.array(silhouette_index[i]) < 0).sum()
         silhouette_index = [value for values in silhouette_index.values() for value in values] # Unravel the silhouette values. 
         silhouette_index = np.array(silhouette_index).mean(axis=None)
 
@@ -424,6 +432,21 @@ class ClusterTree():
             
         return _get_first_homogenous_node(self.root_node, 0)
         
+
+
+    # def subset(self, idxs:np.ndarray):
+
+    #     cluster_ids = self.cluster_ids[idxs].copy() # Get the subset new cluster ID array. 
+    #     n_clusters = len(np.unique(cluster_ids))
+    #     print(f'Clusterer.subset: {n_clusters} of the {self.n_clusters} original clusters are represented in the subset.')
+
+    #     clusterer = Clusterer(n_clusters=n_clusters, bisecting_strategy=self.bisecting_strategy, max_iter=self.max_iter, n_int=self.n_init)
+    #     clusterer.scaler = self.scaler # Copy over the fitted scaler. 
+    #     clusterer.cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in np.unique(cluster_ids)} # Re-compute the cluster-to-index map with the new subset.
+    #     clusterer.cluster_ids = cluster_ids
+    #     clusterer.labels = self.labels[idxs].copy()
+    #     clusterer.index = self.index[idxs].copy()
+    #     return clusterer
 
 
 

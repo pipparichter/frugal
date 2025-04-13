@@ -78,11 +78,7 @@ def cluster_metric(args):
 
     if args.silhouette:
         sample_size = min(len(dataset), args.sample_size)
-        sample_idxs = np.random.choice(len(dataset), sample_size, replace=False)
-
-        dataset = dataset.subset(sample_idxs)
-        clusterer = clusterer.subset(sample_idxs)
-        silhouette_index, cluster_metadata_df = clusterer.get_silhouette_index(dataset) 
+        silhouette_index, cluster_metadata_df = clusterer.get_silhouette_index(dataset, sample_sizes=sample_size) 
         print('cluster_metric: Silhouette index is', silhouette_index)
 
     if args.dunn:
