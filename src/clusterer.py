@@ -289,11 +289,12 @@ class Clusterer():
             a_x, b_x = a(x, i), b(x, i)
             return (b_x - a_x) / max(a_x, b_x)
         
-        silhouette_index = {i:list() for i in cluster_ids} # Store silhouette score computations by cluster. 
+        silhouette_index = dict() # Store silhouette score computations by cluster. 
         for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
             i = self.cluster_ids[x]
-            if i in cluster_ids:
-                silhouette_index[i].append(s(x, i))
+            if i not in silhouette_index:
+                silhouette_index[i] = []
+            silhouette_index[i].append(s(x, i))
         
         for i in silhouette_index.keys():
             cluster_metadata_df.loc[i, 'silhouette_index_mean'] = np.mean(silhouette_index[i])
