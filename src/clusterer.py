@@ -40,7 +40,7 @@ class PackedDistanceMatrix():
         mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
         # self.matrix = np.zeros(self.size, dtype=dtype)
-        self.matrix = lil_array((1, n), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
+        self.matrix = lil_array((1, self.size), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
 
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
