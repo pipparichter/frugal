@@ -15,6 +15,7 @@ import pickle
 from scipy.sparse import lil_matrix, lil_array
 import re 
 import math 
+from scipy.special import comb
 import sys 
 import itertools
 from sklearn.metrics import silhouette_score
@@ -36,7 +37,7 @@ class PackedDistanceMatrix():
         # decreases by one element. So row 0 has (n - 1) elements, row 1 has (n - 2) elements, etc. 
         self.n = n
         self.dtype = dtype
-        self.size = math.comb(n, 2)
+        self.size = int(comb(n, 2, exact=False, repetition=False))
         mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
         self.matrix = lil_array((1, self.size), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
