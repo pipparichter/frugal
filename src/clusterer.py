@@ -30,7 +30,7 @@ from sklearn.metrics import silhouette_score
             
 
 class PackedDistanceMatrix():
-    def __init__(self, n:int, dtype=np.float16):
+    def __init__(self, n:int, dtype=np.float32):
         # Because I am ignoring the diagonal, basically have a situation with (n - 1) rows, and each column 
         # decreases by one element. So row 0 has (n - 1) elements, row 1 has (n - 2) elements, etc. 
         self.n = n
@@ -166,7 +166,7 @@ class Clusterer():
     
     def fit(self, dataset):
 
-        embeddings = dataset.numpy().astype(np.float16)
+        embeddings = dataset.numpy().astype(np.float32)
         embeddings = self.scaler.fit_transform(embeddings)
 
         self.labels = dataset.label if hasattr(dataset, 'label') else None 
@@ -269,7 +269,7 @@ class Clusterer():
         
         self._check_dataset(dataset)
         
-        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
+        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float32)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         
         cluster_sizes = np.bincount(self.cluster_ids)
