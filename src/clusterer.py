@@ -262,7 +262,7 @@ class Clusterer():
         
     def get_silhouette_index(self, dataset):
         self._check_dataset(dataset)
-        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
+        embeddings = self.scaler.transform(dataset.numpy()) # .astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         cluster_sizes = np.bincount(self.cluster_ids)
         print(silhouette_score(embeddings, self.cluster_ids))
