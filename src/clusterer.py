@@ -14,6 +14,7 @@ import re
 import math 
 import sys 
 import itertools
+from sklearn.metrics import silhouette_score
 
 # TODO: Is there any data leakage by fitting a StandardScaler before clustering? I don't think any more so
 #   than caused by clustering the training and testing dataset together. 
@@ -254,6 +255,7 @@ class Clusterer():
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         cluster_sizes = np.bincount(self.cluster_ids)
+        print(silhouette_score(embeddings, self.cluster_ids))
 
         D = PackedDistanceMatrix.from_embeddings(embeddings)
 
