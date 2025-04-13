@@ -143,6 +143,7 @@ class Clusterer():
 
         cluster_ids = self.cluster_ids[idxs].copy()
         labels = self.labels[idxs].copy()
+        index = self.index[idxs].copy()
         cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in np.unique(cluster_ids)}
         n_clusters = len(np.unique(cluster_ids))
 
@@ -151,6 +152,7 @@ class Clusterer():
         clusterer.cluster_idxs = cluster_idxs
         clusterer.cluster_ids = cluster_ids
         clusterer.labels = labels
+        clusterer.index = index
 
         return clusterer
 
@@ -219,7 +221,8 @@ class Clusterer():
         return obj
     
     def _check_dataset(self, dataset):
-        assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
+        assert len(dataset.index) == len(self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
+        assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
         assert np.all(dataset.cluster_id == self.cluster_ids), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
     
     def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
