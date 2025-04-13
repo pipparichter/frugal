@@ -220,16 +220,11 @@ class Clusterer():
     
     # Functions for computing cluster metrics. 
 
-    def _get_sample_idxs(self, dataset, sample_size:int=None, stratified:bool=True):
+    def _get_sample_idxs(self, sample_size:int=None):
         '''Get indices for a sub-sample. If stratified is set to true, ensures the sample contains an even spread of the clusters.'''
-        if stratified:
-            if sample_size < self.n_clusters:
-                print(f'Clusterer._get_sample_idxs: Sample size is too small. Using the minimum sample size of {self.n_clusters}.')
-                sample_size = self.n_clusters # Can't sample fewer than the number of clusters. 
-            splits = ClusterStratifiedShuffleSplit(dataset, n_splits=1, train_size=(sample_size / len(dataset)))
-            sample_idxs, _ = list(splits)[0]
-        else:
-            sample_idxs = np.random.choice(np.arange(len(self.index)), size=sample_size, replace=False)
+
+        sample_idxs = np.random.choice(np.arange(len(self.index)), size=sample_size, replace=False)
+        print(f'Clusterer._get_sample_idxs: {len(np.unique(self.cluster_ids[sample_idxs]))} out of {self.n_clusters} represented in the sample.')
         return sample_idxs
     
     def _check_dataset(self, dataset):
@@ -274,7 +269,7 @@ class Clusterer():
         
         cluster_sizes = np.bincount(self.cluster_ids)
         cluster_ids = np.unique(self.cluster_ids) 
-        sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(dataset, sample_size=sample_size, stratified=True)
+        sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
         check_packed_distance_matrix(embeddings)
 
         D = PackedDistanceMatrix.from_embeddings(embeddings, sample_idxs=sample_idxs)
@@ -450,6 +445,12 @@ class ClusterTree():
 
 
 
-
+        # if stratified:
+        #     if sample_size < self.n_clusters:
+        #         print(f'Clusterer._get_sample_idxs: Sample size is too small. Using the minimum sample size of {self.n_clusters}.')
+        #         sample_size = self.n_clusters # Can't sample fewer than the number of clusters. 
+        #     splits = ClusterStratifiedShuffleSplit(dataset, n_splits=1, train_size=(sample_size / len(dataset)))
+        #     sample_idxs, _ = list(splits)[0]
+        # else:
 
 
