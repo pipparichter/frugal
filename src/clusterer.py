@@ -86,7 +86,7 @@ class PackedDistanceMatrix():
         #     matrix.put(i, j, d)
         for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings', total=len(idxs), file=sys.stdout):
             # matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
-            matrix.put(i, j, norm(embeddings[i], embeddings[j]))
+            matrix.put(i, j, norm(embeddings[i] - embeddings[j]))
 
         return matrix
     
