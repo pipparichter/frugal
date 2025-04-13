@@ -282,8 +282,7 @@ class Clusterer():
         for i in silhouette_index.keys():
             cluster_metadata_df.loc[i, 'silhouette_index'] = np.mean(silhouette_index[i])
             cluster_metadata_df.loc[i, 'silhouette_index_weight'] = len(silhouette_index[i])
-        silhouette_index = list(silhouette_index.values())
-        silhouette_index = [value for values in silhouette_index for value in values]
+        silhouette_index = [value for values in silhouette_index.values() for value in values] # Unravel the silhouette values. 
         silhouette_index = np.array(silhouette_index).mean(axis=None)
 
         return silhouette_index, cluster_metadata_df
