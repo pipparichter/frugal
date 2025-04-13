@@ -77,7 +77,9 @@ def cluster_metric(args):
     clusterer = Clusterer.load(args.cluster_path)
 
     if args.silhouette:
-        sample_idxs = np.random.choice(len(dataset), args.sample_size, replace=False)
+        sample_size = min(len(dataset), args.sample_size)
+        sample_idxs = np.random.choice(len(dataset), sample_size, replace=False)
+
         dataset = dataset.subset(sample_idxs)
         clusterer = clusterer.subset(sample_idxs)
         silhouette_index, cluster_metadata_df = clusterer.get_silhouette_index(dataset) 
