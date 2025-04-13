@@ -267,7 +267,7 @@ class Clusterer():
         embeddings = self.scaler.transform(dataset.numpy()) # .astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         cluster_sizes = np.bincount(self.cluster_ids)
-        cluster_ids = np.where(cluster_sizes > 0)[0] if exclude_singletons else np.unique(self.cluster_ids)
+        cluster_ids = np.where(cluster_sizes > 1)[0] if exclude_singletons else np.unique(self.cluster_ids)
         print(silhouette_score(embeddings, self.cluster_ids))
 
         # check_packed_distance_matrix(embeddings)
