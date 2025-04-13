@@ -265,7 +265,7 @@ class Clusterer():
             '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
             Then, return the minimum of these mean distances over all clusters i != j.'''
             d = lambda j : np.array([D.get(x, y) for y in self.cluster_idxs[j]]).mean(axis=None)
-            return min([d(j) for j in self.cluster_ids if (j != i)])
+            return min([d(j) for j in np.unique(self.cluster_ids) if (j != i)])
         
         def s(x, i:int):
             if cluster_sizes[i] == 1:
@@ -274,7 +274,7 @@ class Clusterer():
                 a_x, b_x = a(x, i), b(x, i)
                 return (b_x - a_x) / max(a_x, b_x)
         
-        silhouette_index = {i:list() for i in np.arange(self.n_clusters)}
+        silhouette_index = {i:list() for i in np.unique(self.cluster_ids)}
         for x in tqdm(range(len(embeddings)), desc='Clusterer.get_silhouette_index', file=sys.stdout):
             i = self.cluster_ids[x]
             silhouette_index[i].append(s(x, i))
