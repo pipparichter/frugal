@@ -36,11 +36,11 @@ from sklearn.metrics import silhouette_score
             
 
 class PackedDistanceMatrix():
-    def __init__(self, n:int, dtype=np.float16):
+    def __init__(self, n:int, dtype=np.float64):
         # Because I am ignoring the diagonal, basically have a situation with (n - 1) rows, and each column 
         # decreases by one element. So row 0 has (n - 1) elements, row 1 has (n - 2) elements, etc. 
         self.n = n
-        self.dtype = dtype
+        self.dtype = np.float64
         self.size = math.comb(n, 2)
 
         mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
@@ -60,7 +60,7 @@ class PackedDistanceMatrix():
     def put(self, i:int, j:int, value:np.float16):
         if i == j:
             return 
-        self.matrix[self._get_index(min(i, j), max(i, j))] = value.astype(np.float16)
+        self.matrix[self._get_index(min(i, j), max(i, j))] = value
 
     @classmethod
     def from_embeddings(cls, embeddings:np.ndarray):
