@@ -67,14 +67,14 @@ class PackedDistanceMatrix():
         # compute distances between the sampled elements versus all other entries in the dataset. However, I still want to take
         # advantage of symmetry to avoid computing a full (sample_size, n) distance matrix, so I decided to 
         # make the PackedDistanceMatrix sparse. 
-        idxs = list(itertools.combinations(np.arange(n), 2))
+        idxs = itertools.combinations(np.arange(n), 2)
         if sample_idxs is not None: # Only compute distances relative to an index in the sample subset.
-            idxs = [(i, j) for (i, j) in idxs if ((i in sample_idxs) or (j in sample_idxs))] 
+            idxs = [(i, j) for (i, j) in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings: Filtering indices.') if ((i in sample_idxs) or (j in sample_idxs))] 
 
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
         
-        for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout):
+        for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings', total=len(idxs), file=sys.stdout):
             matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
 
         return matrix
@@ -224,7 +224,7 @@ class Clusterer():
         '''Get indices for a sub-sample. If stratified is set to true, ensures the sample contains an even spread of the clusters.'''
 
         sample_idxs = np.random.choice(np.arange(len(self.index)), size=sample_size, replace=False)
-        print(f'Clusterer._get_sample_idxs: {len(np.unique(self.cluster_ids[sample_idxs]))} out of {self.n_clusters} represented in the sample.')
+        print(f'Clusterer._get_sample_idxs: {len(np.unique(self.cluster_ids[sample_idxs]))} out of {self.n_clusters} clusters represented in the sample.')
         return sample_idxs
     
     def _check_dataset(self, dataset):
