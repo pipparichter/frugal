@@ -80,7 +80,8 @@ def check_packed_distance_matrix(embeddings):
     n = len(embeddings)
     for i in range(n):
         for j in range(n):
-            assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree. Expected {D_[i, j]}, got {D.get(i, j)}.'
+            assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
+            print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
     
 
 class Clusterer():
