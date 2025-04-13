@@ -74,6 +74,15 @@ class PackedDistanceMatrix():
         return matrix
     
 
+def check_packed_distance_matrix(embeddings):
+    D_ = pairwise_distances(embeddings, metric='euclidean')
+    D = PackedDistanceMatrix.from_embeddings(embeddings)
+    n = len(embeddings)
+    for i in range(n):
+        for j in range(n):
+            assert D.get(i, j) == D_[i, j], f'check_packed_distance_matrix: Distances do not agree. Expected {D_[i, j]}, got {D.get(i, j)}.'
+    
+
 class Clusterer():
 
     def __init__(self, verbose:bool=True, n_clusters:int=1000, n_init:int=10, max_iter:int=1000, bisecting_strategy:str='largest_non_homogenous'):
@@ -258,6 +267,7 @@ class Clusterer():
         cluster_sizes = np.bincount(self.cluster_ids)
         print(silhouette_score(embeddings, self.cluster_ids))
 
+        check_packed_distance_matrix(embeddings)
         D = PackedDistanceMatrix.from_embeddings(embeddings)
 
         def a(x, i:int):
