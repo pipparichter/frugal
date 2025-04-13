@@ -227,7 +227,7 @@ class Clusterer():
                 print(f'Clusterer._get_sample_idxs: Sample size is too small. Using the minimum sample size of {self.n_clusters}.')
             sample_size = max(self.n_clusters, sample_size) # Can't sample fewer than the number of clusters. 
             stratified_shuffle_split = StratifiedShuffleSplit(n_splits=1, test_size=sample_size, random_state=42)
-            sample_idxs, _ = stratified_shuffle_split.split(self.index, groups=self.cluster_ids)
+            sample_idxs, _ = stratified_shuffle_split.split(self.index, self.cluster_ids)
         else:
             sample_idxs = np.random.choice(np.arange(len(self.index)), size=sample_size, replace=False)
         return sample_idxs
