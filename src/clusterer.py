@@ -36,9 +36,9 @@ class PackedDistanceMatrix():
         # decreases by one element. So row 0 has (n - 1) elements, row 1 has (n - 2) elements, etc. 
         self.n = n
         self.dtype = dtype
-        # self.size = math.comb(n, 2)
-        # mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
-        # print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
+        self.size = math.comb(n, 2)
+        mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
+        print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
         self.matrix = lil_array((1, self.size), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
 
     def _get_index(self, i:int, j:int):
