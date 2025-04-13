@@ -1,6 +1,7 @@
 import pandas as pd 
 import numpy as np 
 from sklearn.cluster import BisectingKMeans, KMeans # , OPTICS
+from src.split import ClusterStratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
 # from sklearn.neighbors import NearestNeighbors
 import warnings 
@@ -8,7 +9,6 @@ import torch
 from scipy.spatial import distance_matrix
 from scipy.spatial.distance import euclidean
 from sklearn.metrics import pairwise_distances, euclidean_distances
-from sklearn.model_selection import StratifiedShuffleSplit
 from tqdm import tqdm
 import pickle
 from scipy.sparse import lil_matrix, lil_array
@@ -220,14 +220,14 @@ class Clusterer():
     
     # Functions for computing cluster metrics. 
 
-    def _get_sample_idxs(self, sample_size:int=None, stratified:bool=True):
+    def _get_sample_idxs(self, dataset, sample_size:int=None, stratified:bool=True):
         '''Get indices for a sub-sample. If stratified is set to true, ensures the sample contains an even spread of the clusters.'''
         if stratified:
             if sample_size < self.n_clusters:
                 print(f'Clusterer._get_sample_idxs: Sample size is too small. Using the minimum sample size of {self.n_clusters}.')
-            sample_size = max(self.n_clusters, sample_size) # Can't sample fewer than the number of clusters. 
-            stratified_shuffle_split = StratifiedShuffleSplit(n_splits=1, test_size=sample_size, random_state=42)
-            sample_idxs, _ = stratified_shuffle_split.split(self.index, self.cluster_ids)
+                sample_size = self.n_clusters # Can't sample fewer than the number of clusters. 
+            split = ClusterStratifiedShuffleSplit(dataset, n_splits=1, train_size=(sample_size / len(dataset)))
+            sample_idxs, _ = split.split(self.index, groups=self.cluster_ids)
         else:
             sample_idxs = np.random.choice(np.arange(len(self.index)), size=sample_size, replace=False)
         return sample_idxs
