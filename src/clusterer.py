@@ -69,7 +69,7 @@ class PackedDistanceMatrix():
         pbar = tqdm(list(itertools.combinations(np.arange(n), 2)), desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout)
         for i, j in pbar:
             # matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
-            matrix.put(i, j, pairwise_distances(np.expand_dims(embeddings[i]), np.expand_dims(embeddings[j]), metric='euclidean'))
+            matrix.put(i, j, pairwise_distances(np.expand_dims(embeddings[i], axis=0), np.expand_dims(embeddings[j], axis=0), metric='euclidean'))
         pbar.close()
         return matrix
     
@@ -230,7 +230,7 @@ class Clusterer():
     def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
         cluster_embeddings = embeddings[self.cluster_idxs[i]]
         if method == 'center':
-            cluster_center = np.expand_dims(self.cluster_centers[i])
+            cluster_center = np.expand_dims(self.cluster_centers[i], axis=0)
             distances = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean')
             return distances.mean()
         distances = pairwise_distances(cluster_embeddings, metric='euclidean')
