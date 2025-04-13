@@ -5,7 +5,7 @@ from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
 from src.graph import RadiusNeighborsGraph
 import argparse
-from src.clusterer import Clusterer, get_cluster_metadata, get_davies_bouldin_index, get_silhouette_index
+from src.clusterer import Clusterer
 from src.reference import Reference, ReferenceAnnotator
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary
@@ -50,14 +50,9 @@ def cluster():
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
     cluster_parser.add_argument('--n', default=10, type=int)
 
-    cluster_parser = subparser.add_parser('metadata')
-    cluster_parser.add_argument('--input-path', type=str, default=None)
-    cluster_parser.add_argument('--output-path', default=None, type=str)
-    cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    cluster_parser.add_argument('--cluster-path', default=None, type=str)
-
     cluster_parser = subparser.add_parser('metric')
     cluster_parser.add_argument('--input-path', type=str, default=None)
+    cluster_parser.add_argument('--output-path', type=str, default=None)
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
     cluster_parser.add_argument('--silhouette', action='store_true')
@@ -65,41 +60,39 @@ def cluster():
     cluster_parser.add_argument('--davies-bouldin', action='store_true')
     cluster_parser.add_argument('--sample-size', default=5000, type=int)
 
-
     args = parser.parse_args()
     
     if args.subcommand == 'fit':
         cluster_fit(args)
     if args.subcommand == 'predict':
         cluster_predict(args)
-    if args.subcommand == 'metadata':
-        cluster_metadata(args)
     if args.subcommand == 'metric':
         cluster_metric(args)
 
 
 def cluster_metric(args):
-
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
-    clusterer = Clusterer.load(args.cluster_path)
-    if args.silhouette:
-        result = get_silhouette_index(dataset, clusterer, sample_size=args.sample_size) 
-        print('cluster_metric: Silhouette index is', result)
-    if args.dunn:
-        pass 
-    if args.davies_bouldin:
-        result = get_davies_bouldin_index(dataset, clusterer) 
-        print('cluster_metric: Davis-Bouldin index is', result)
-
-
-def cluster_metadata(args):
-
     output_path = args.input_path.replace('.h5', '_cluster_metadata.csv') if (args.output_path is None) else args.output_path
+
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
     clusterer = Clusterer.load(args.cluster_path)
-    cluster_metadata_df = get_cluster_metadata(dataset, clusterer)
+
+    if args.silhouette:
+        sample_idxs = np.random.choice(len(dataset), args.sample_size, replace=False)
+        dataset = dataset.subset(sample_idxs)
+        clusterer = clusterer.subset(sample_idxs)
+        silhouette_index, cluster_metadata_df = clusterer.get_silhouette_index(dataset) 
+        print('cluster_metric: Silhouette index is', silhouette_index)
+
+    if args.dunn:
+        dunn_index, cluster_metadata_df = clusterer.get_dunn_index(dataset) 
+        print('cluster_metric: Dunn index is', silhouette_index)
+
+    if args.davies_bouldin:
+        davies_bouldin_index, cluster_metadata_df = clusterer.get_davies_bouldin(dataset) 
+        print('cluster_metric: Davies-Bouldin index is', davies_bouldin_index)
+    
+    print(f'cluster_metric: Writing cluster metadata to {output_path}')
     cluster_metadata_df.to_csv(output_path)
-    print(f'cluster_metadata: Cluster metadata written to {output_path}')
 
 
 def cluster_fit(args):
@@ -123,7 +116,7 @@ def cluster_fit(args):
         df = pd.read_csv(base_output_path + '_cluster.csv', index_col=0)
         print(f'cluster_fit: Loading existing cluster results from {base_output_path + '_cluster.csv'}')
 
-    update_metadata(args.input_path, cols=[df.cluster_id]) # Add the cluster ID to dataset file metadata. 
+    # update_metadata(args.input_path, cols=[df.cluster_id]) # Add the cluster ID to dataset file metadata. 
 
 
 def cluster_predict(args):
@@ -146,7 +139,7 @@ def cluster_predict(args):
         df[f'rank_{i}_cluster_distance'] = top_n_dists[:, i] 
         df[f'rank_{i}_cluster_label'] = df[f'rank_{i}_cluster_id'].map(clusterer.get_cluster_id_to_label_map())
 
-    dt.to_csv(output_path)
+    df.to_csv(output_path)
 
 
 def dataset():

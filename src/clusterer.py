@@ -21,6 +21,19 @@ import itertools
 # https://www.biorxiv.org/content/10.1101/2024.11.13.623527v1.full
 # TODO: Can and should probably make tree parsing recursive.
 
+# TODO: Add check to make sure Dataset and Clusterer indices match. 
+
+
+# Can choose to calculate intra-cluster distance in one of three ways: mean distance between all pairs, the 
+# mean distance of all points from the mean, and the maximum distance between any two points in the cluster. 
+
+# Can choose to calculate inter-cluster distance in one of three ways: the closest two points between clusters, 
+# the farthest two points between clusters, or the distance between centroids. 
+
+# The Dunn index is then computed as the minimum inter-cluster distance between any two clusters divided by the maximum
+# intra-cluster distance of any cluster. 
+            
+
 class PackedDistanceMatrix():
     def __init__(self, n:int, dtype=np.float16):
         # Because I am ignoring the diagonal, basically have a situation with (n - 1) rows, and each column 
@@ -57,132 +70,7 @@ class PackedDistanceMatrix():
             matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
         pbar.close()
         return matrix
-
-
-def get_scaled_embeddings(dataset, clusterer):
-    '''Extract the embeddings from the Dataset and apply the StandardScaler stored in the Clusterer object.'''
-    embeddings = dataset.numpy() 
-    embeddings = clusterer.scaler.transform(embeddings).astype(np.float16) # Half-precision to reduce memory. 
-    embeddings_df = pd.DataFrame(embeddings, index=pd.Index(dataset.index, name='id'))
-    return embeddings_df
-
-
-def get_silhouette_index(dataset, clusterer, sample_size:int=None):
     
-    # Will be far more efficient to pre-compute all distances, but will take a lot of memory.   
-    embeddings_df = get_scaled_embeddings(dataset, clusterer)
-    cluster_ids = clusterer.cluster_ids 
-
-    if (sample_size is not None):
-        sample_idxs = np.random.choice(len(dataset), sample_size, replace=False)
-        embeddings_df = embeddings_df.iloc[sample_idxs].copy()
-        cluster_ids = cluster_ids[sample_idxs].copy()
-
-    cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in cluster_ids}
-    cluster_sizes = np.bincount(cluster_ids)
-
-    D = PackedDistanceMatrix.from_embeddings(embeddings_df.values)
-
-    def a(x, i:int):
-        d = np.array([D.get(x, y) for y in cluster_idxs[i]])
-        # d = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[i]])
-        return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
-
-    def b(x, i:int):
-        '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
-        Then, return the minimum of these mean distances over all clusters i != j.'''
-        d = np.inf 
-        for j in cluster_ids:
-            if i == j:
-                continue 
-            d_ = np.array([D.get(x, y) for y in cluster_idxs[j]]).mean(axis=None)
-            # d_ = pairwise_distances(x, embeddings_df.iloc[cluster_idxs[j]]).mean(axis=None)
-            d = min(d_, d)
-        return d
-    
-    def s(x, i:int):
-        if cluster_sizes[i] == 1:
-            return 0
-        else:
-            a_x, b_x = a(x, i), b(x, i)
-            return (b_x - a_x) / max(a_x, b_x)
-    
-    s_tilde = list()
-    for x in tqdm(range(len(embeddings_df)), desc='get_silhouette_index', file=sys.stdout):
-        # x = np.expand_dims(embeddings_df.iloc[idx].values, axis=0)
-        i = cluster_ids[x]
-        s_tilde.append(s(x, i))
-
-    return np.mean(s_tilde)
-
-
-def get_dunn_index(dataset):
-    pass 
-
-def get_davies_bouldin_index(dataset, clusterer):
-
-    embeddings_df = get_scaled_embeddings(dataset, clusterer)
-    n = clusterer.n_clusters 
-    cluster_idxs = {i:np.where(clusterer.cluster_ids == i)[0] for i in range(n_clusters)}
-
-    def get_sigma(c, i:int):
-        '''Compute the average distance between all elements in cluster i to c_i.'''
-        distances = pairwise_distances(np.expand_dims(c[i]), embeddings_df.iloc[cluster_idxs[i]], metric='euclidean')
-        return distances.mean(axis=None)
-    
-    c = clusterer.cluster_centers
-    d = pairwise_distances(c, c, metric='euclidean') # Might need to do this one at a time if memory is a problem. 
-    sigma = np.array([get_sigma(c, i) for i in range(n)])
-
-    sum_ = 0
-    for i in range(n):
-        sum_ += max([(sigma[i] + sigma[j]) / d[i, j] for j in range(n_clusters) if (i != j)])
-
-    return sum_ / n
-
-
-
-def get_cluster_metadata(dataset, clusterer):
-
-    assert hasattr(dataset, 'cluster_id'), 'get_cluster_distances: There are no cluster IDs associated with the dataset.'
-    assert hasattr(dataset, 'label'), 'get_cluster_distances: There are no labels associated with the dataset.'
-
-    cluster_metadata_df = list()
-
-    cluster_df = dataset.metadata(attrs=['cluster_id', 'label'])
-    embeddings_df = get_scaled_embeddings(dataset, clusterer)
-
-    pbar = tqdm(list(cluster_df.groupby('cluster_id')), desc='get_cluster_metadata')
-    for cluster_id, df in pbar:
-        cluster_center = np.expand_dims(clusterer.cluster_centers[cluster_id], axis=0).astype(np.float16)
-        cluster_embeddings = embeddings_df.loc[df.index].values
-
-        row = dict()
-        row['cluster_id'] = cluster_id 
-        row['cluster_size'] = len(df)
-        row['cluster_label'] = df['label'].values[0]
-
-        if len(df) > 1:
-            idxs = np.triu_indices(len(df), k=1)
-            intra_cluster_distances = pairwise_distances(cluster_embeddings, metric='euclidean')[idxs].astype(np.float16)
-            row['cluster_radius'] = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean').astype(np.float16).max(axis=None)
-            row['intra_cluster_max_distance'] = intra_cluster_distances.max(axis=None)
-            row['intra_cluster_min_distance'] = intra_cluster_distances.min(axis=None)
-            row['intra_cluster_mean_distance'] = intra_cluster_distances.mean(axis=None)
-        
-        idxs = np.array([i for i in range(clusterer.n_clusters) if (i != cluster_id)])
-        inter_cluster_distances = pairwise_distances(cluster_center, np.array(clusterer.cluster_centers), metric='euclidean')[:, idxs].astype(np.float16)
-        row['inter_cluster_max_distance'] = inter_cluster_distances.max(axis=None)
-        row['inter_cluster_min_distance'] = inter_cluster_distances.min(axis=None)
-        row['inter_cluster_mean_distance'] = inter_cluster_distances.mean(axis=None)
-        cluster_metadata_df.append(row)
-    pbar.close()
-
-    cluster_metadata_df = pd.DataFrame(cluster_metadata_df).set_index('cluster_id')
-    cluster_metadata_df = cluster_metadata_df.fillna(0.0)
-    return cluster_metadata_df
-
-
 
 class Clusterer():
 
@@ -195,9 +83,11 @@ class Clusterer():
         self.curr_cluster_id = 1
         self.tree = '0'
         self.split_order = []
+
         self.cluster_ids = None
         self.labels = None
         self.cluster_centers = [None] # Store as a list, becaue the exact number of clusters is flexible. 
+        self.cluster_idxs = None # Dictionary mapping cluster IDs to the dataset indices. 
         
         self.bisecting_strategy = bisecting_strategy
 
@@ -230,6 +120,10 @@ class Clusterer():
     
     def converged(self, kmeans):
         return kmeans.n_iter_ < self.max_iter
+    
+    def fitted(self):
+        '''Return whether or not the Clusterer has been fitted.'''
+        return (self.cluster_ids is not None)
         
     def _get_cluster_to_split(self):
 
@@ -245,6 +139,21 @@ class Clusterer():
 
         return np.argmax(cluster_sizes)
     
+    def subset(self, idxs:np.ndarray):
+
+        cluster_ids = self.cluster_ids[idxs].copy()
+        labels = self.labels[idxs].copy()
+        cluster_idxs = {i:np.where(cluster_ids == i)[0] for i in np.unique(cluster_ids)}
+        n_clusters = len(np.unique(cluster_ids))
+
+        clusterer = Clusterer(n_clusters=n_clusters, bisecting_strategy=self.bisecting_strategy)
+        clusterer.scaler = self.scaler 
+        clusterer.cluster_idxs = cluster_idxs
+        clusterer.cluster_ids = cluster_ids
+        clusterer.labels = labels
+
+        return clusterer
+
     def transform(self, dataset):
         embeddings = dataset.numpy().astype(np.float16)
         embeddings = self.scaler.transform(embeddings)
@@ -266,7 +175,6 @@ class Clusterer():
 
         iter = 0
         while self.curr_cluster_id < self.n_clusters:
-        # for _ in tqdm(desc='Clusterer.fit', total=self.n_clusters - 1):
             cluster_to_split = self._get_cluster_to_split()
             self.split_order.append(cluster_to_split)
             cluster_idxs = np.where(self.cluster_ids == cluster_to_split)[0]
@@ -293,6 +201,7 @@ class Clusterer():
             iter += 1
 
         self.cluster_centers = np.array(self.cluster_centers) # Convert to a numpy array. 
+        self.cluster_idxs = {i:np.where(self.cluster_ids == i)[0] for i in range(self.n_clusters)}
 
         if self.check_non_homogenous:
             n = self._get_n_non_homogenous()
@@ -309,10 +218,97 @@ class Clusterer():
             obj = pickle.load(f)
         return obj
     
+    def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
+        cluster_embeddings = embeddings[self.cluster_idxs[i]]
+        if method == 'center':
+            cluster_center = np.expand_dims(self.cluster_centers[i])
+            distances = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean')
+            return distances.mean()
+        distances = pairwise_distances(cluster_embeddings, metric='euclidean')
+        if method == 'pairwise':
+            return distances[np.triu_indices(distances, k=1)].mean(axis=None)
+        if method == 'furthest':
+            return distances.max(axis=None)
+        
+    def _get_inter_cluster_distance(self, i:int, j:int, embeddings:np.ndarray=None, method:str='center'):
+        if method == 'center':
+            cluster_center_i, cluster_center_j = np.expand_dims(self.cluster_centers[i]), np.expand_dims(self.cluster_centers[j])
+            distances = pairwise_distances(cluster_center_i, cluster_center_j, metric='euclidean')
+            return distances.mean()
+        cluster_i_embeddings, cluster_j_embeddings = embeddings[self.cluster_idxs[i]], embeddings[self.cluster_idxs[j]]
+        distances = pairwise_distances(cluster_i_embeddings, cluster_j_embeddings, metric='euclidean')
+        if method == 'closest':
+            return distances.min(axis=None)
+        if method == 'furthest':
+            return distances.max(axis=None)
+        
+    def get_silhouette_index(self, dataset):
+        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
+        cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
+        cluster_sizes = np.bincount(self.cluster_ids)
 
-# Want some kind of metric for cluster "difficulty" based on the bisection tree. 
-# Something like "How many splits before the leaf containing the child is homogenous?"
-# More splits would mean it's more mixed in with opposite-labeled things. 
+        D = PackedDistanceMatrix.from_embeddings(embeddings)
+
+        def a(x, i:int):
+            d = np.array([D.get(x, y) for y in self.cluster_idxs[i]])
+            return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
+
+        def b(x, i:int):
+            '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
+            Then, return the minimum of these mean distances over all clusters i != j.'''
+            d = lambda j : np.array([D.get(x, y) for y in self.cluster_idxs[j]]).mean(axis=None)
+            return min([d(j) for j in self.cluster_ids if (j != i)])
+        
+        def s(x, i:int):
+            if cluster_sizes[i] == 1:
+                return 0
+            else:
+                a_x, b_x = a(x, i), b(x, i)
+                return (b_x - a_x) / max(a_x, b_x)
+        
+        silhouette_index = {i:list() for i in np.arange(self.n_clusters)}
+        for x in tqdm(range(len(embeddings)), desc='Clusterer.get_silhouette_index', file=sys.stdout):
+            i = self.cluster_ids[x]
+            silhouette_index[i].append(s(x, i))
+        
+        for i in silhouette_index.keys():
+            cluster_metadata_df.loc[i, 'silhouette_index'] = silhouette_index[i].mean()
+            cluster_metadata_df.loc[i, 'silhouette_index_weight'] = len(silhouette_index[i])
+        silhouette_index = list(silhouette_index.values())
+        silhouette_index = np.array(silhouette_index).mean(axis=None)
+
+        return silhouette_index, cluster_metadata_df
+
+    def get_dunn_index(self, dataset, inter_method:str='center', intra_method:str='center'):
+        '''https://en.wikipedia.org/wiki/Dunn_index'''
+        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
+        cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_{intra_method}', f'min_inter_cluster_distance_{inter_method}'])
+
+        for i in tqdm(range(self.n_clusters), desc='get_dunn_index'):
+            inter_cluster_distances = [self._get_inter_cluster_distance(i, j, embeddings=embeddings, method=inter_method) for j in range(self.n_clusters) if (i != j)]
+            cluster_metadata_df.loc[i, f'intra_cluster_distance_{intra_method}'] = self._get_intra_cluster_distance(i, embeddings=embeddings, method=intra_method)
+            cluster_metadata_df.loc[i, f'min_inter_cluster_distance_{inter_method}'] = min(inter_cluster_distances)
+
+        dunn_index = cluster_metadata_df[f'intra_cluster_distance_{intra_method}'].max()
+        dunn_index /= cluster_metadata_df[f'min_inter_cluster_distance_{inter_method}'].min()
+
+        return dunn_index, cluster_metadata_df
+    
+    def get_davies_bouldin_index(self, dataset):
+
+        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
+        cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_center', 'davies_bouldin_index'])
+ 
+        D = pairwise_distances(self.cluster_centers, metric='euclidean') # Might need to do this one at a time if memory is a problem. 
+        sigma = np.array([self._get_intra_cluster_distance(i, embeddings=embeddings) for i in range(self.n_clusters)])
+        for i in range(self.n_clusters):
+            cluster_metadata_df['davies_bouldin_index'] = max([(sigma[i] + sigma[j]) / D[i, j] for j in range(self.n_clusters) if (i != j)])
+        cluster_metadata_df['intra_cluster_distance_center'] = sigma 
+        davies_bouldin_index = cluster_metadata_df['davies_bouldin_index'].sum() / self.n_clusters
+
+        return davies_bouldin_index, cluster_metadata_df
+
+
 class ClusterTreeNode():
 
     def __init__(self, cluster_ids:list, index:np.ndarray=None, labels:np.ndarray=None):
@@ -402,46 +398,6 @@ class ClusterTree():
             
         return _get_first_homogenous_node(self.root_node, 0)
         
-
-
-#     def __init__(self, tolerance=1e-8, n_clusters:int=1000, n_init:int=10, max_iter:int=1000, verbose:bool=False):
-        
-#         self.n_clusters = n_clusters
-#         self.kmeans = BisectingKMeans(verbose=verbose, n_clusters=n_clusters, bisecting_strategy='largest_cluster', tol=tolerance, n_init=n_init, random_state=42, max_iter=max_iter) # Will use Euclidean distance. 
-#         self.scaler = StandardScaler() # I think scaling prior to clustering is important. Applying same assumption as with Classifier training. 
-#         self.cluster_map = None
-#         self.cluster_ids = None
-#         self.index = None # Stores the index of the data used to fit the model. 
-
-#     def _check_homogenous(self, dataset):
-#         df = pd.DataFrame(index=dataset.index)
-#         df['label'] = dataset.label 
-#         df['cluster_id'] = self.cluster_ids
-#         for cluster_id, cluster_df in df.groupby('cluster_id'):
-#             assert cluster_df.label.nunique() == 1, f'Clusterer._check_homogenous: Cluster {cluster_id} is not homogenous.'
-
-#     def transform(self, dataset):
-#         embeddings = dataset.numpy().astype(np.float16) # Use half precision to reduce memory. 
-#         embeddings = self.scaler.transform(embeddings)
-#         dists = self.kmeans.transform(embeddings)
-#         return dists 
-    
-#     def predict(self, dataset):
-#         dists = self.transform(dataset)
-#         return dists.argmin(axis=1) 
-    
-#     def fit(self, dataset): # , check_homogenous:bool=False):
-#         embeddings = dataset.numpy().astype(np.float16) # Use half precision to reduce memory. 
-#         embeddings = self.scaler.fit_transform(embeddings)
-#         self.index = dataset.index
-#         self.kmeans.fit(embeddings)
-#         self.cluster_ids = self.kmeans.labels_ 
-#         self.cluster_map = dict(list(zip(self.index, self.cluster_ids)))
-#         self.cluster_centers = self.kmeans.cluster_centers_
-
-#         # if check_homogenous and (hasattr(dataset, 'label')):
-#         #     self._check_homogenous(dataset)
-    
 
 
 
