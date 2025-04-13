@@ -270,7 +270,6 @@ class Clusterer():
         cluster_sizes = np.bincount(self.cluster_ids)
         cluster_ids = np.unique(self.cluster_ids) 
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
-        check_packed_distance_matrix(embeddings)
 
         D = PackedDistanceMatrix.from_embeddings(embeddings, sample_idxs=sample_idxs)
 
