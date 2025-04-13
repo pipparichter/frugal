@@ -9,6 +9,7 @@ import torch
 from scipy.spatial import distance_matrix
 from scipy.spatial.distance import euclidean
 from sklearn.metrics import pairwise_distances, euclidean_distances
+from numpy.linalg import norm
 from tqdm import tqdm
 import pickle
 from scipy.sparse import lil_matrix, lil_array
@@ -69,18 +70,20 @@ class PackedDistanceMatrix():
         # make the PackedDistanceMatrix sparse. 
         if sample_idxs is not None: # Only compute distances relative to an index in the sample subset.
             # idxs = [(i, j) for (i, j) in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings: Filtering indices.', total=self.size) if ((i in sample_idxs) or (j in sample_idxs))] 
-            total = n * len(sample_idxs)
-            assert total < matrix.size
-            idxs = itertools.product(np.arange(n), sample_idxs)
-            idxs = set([(min(i, j), max(i, j)) for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings: Filtering indices.', total=total)])
+            i_idxs, j_idxs = np.meshgrid(np.arange(n), sample_idxs, indexing='ij')
+            i_idxs, j_idxs = i_idxs.ravel(), j_idxs.ravel()
+            i_idxs, j_idxs = np.minimum(i_idxs, j_idxs), np.maximum(i_idxs, j_idxs)
+            idxs = np.unique(np.stack(i_idxs, j_idxs), axis=1)
         else:
-            idxs = itertools.combinations(np.arange(n), 2)
+            idxs = list(itertools.combinations(np.arange(n), 2))
+            idxs = np.stack(*[np.array([i for i, _ in idxs]), np.array([i for _, j in idxs])])
 
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
-        
-        for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings', total=len(idxs), file=sys.stdout):
-            matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
+
+        for i, j in tqdm(zip(idxs[0], idxs[1]), desc='PackedDistanceMatrix.from_embeddings', total=idxs.shape[-1], file=sys.stdout):
+            # matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
+            matrix.put(i, j, norm(embeddings[i] - embeddings[j]))
 
         return matrix
     
