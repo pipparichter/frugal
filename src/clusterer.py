@@ -50,7 +50,7 @@ class PackedDistanceMatrix():
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
         # Number of elements in row i is (n - (i + 1)). Because j > i, j is always greater than 0. 
-        offset = 0 if (i == 0) else sum([self.n - i_ for i_ in range(i)]) # The number of elements before row i, shifted one to the left so that it's an index. 
+        offset = 0 if (i == 0) else sum([self.n - (i_ + 1) - 1 for i_ in range(i)]) # The number of elements before row i, shifted one to the left so that it's an index. 
         print(i, j, offset + (j - 1))
         return offset + (j - 1)
 
