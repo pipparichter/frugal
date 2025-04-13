@@ -67,9 +67,14 @@ class PackedDistanceMatrix():
         # compute distances between the sampled elements versus all other entries in the dataset. However, I still want to take
         # advantage of symmetry to avoid computing a full (sample_size, n) distance matrix, so I decided to 
         # make the PackedDistanceMatrix sparse. 
-        idxs = itertools.combinations(np.arange(n), 2)
         if sample_idxs is not None: # Only compute distances relative to an index in the sample subset.
-            idxs = [(i, j) for (i, j) in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings: Filtering indices.') if ((i in sample_idxs) or (j in sample_idxs))] 
+            # idxs = [(i, j) for (i, j) in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings: Filtering indices.', total=self.size) if ((i in sample_idxs) or (j in sample_idxs))] 
+            total = n * len(sample_idxs)
+            assert total < matrix.size
+            idxs = itertools.product(np.arange(n), sample_idxs)
+            idxs = set([(min(i, j), max(i, j)) for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings: Filtering indices.', total=total)])
+        else:
+            idxs = itertools.combinations(np.arange(n), 2)
 
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
