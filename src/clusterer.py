@@ -36,11 +36,9 @@ class PackedDistanceMatrix():
         # decreases by one element. So row 0 has (n - 1) elements, row 1 has (n - 2) elements, etc. 
         self.n = n
         self.dtype = dtype
-        self.size = math.comb(n, 2)
-
-        mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
-        print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
-        # self.matrix = np.zeros(self.size, dtype=dtype)
+        # self.size = math.comb(n, 2)
+        # mem = np.dtype(self.dtype).itemsize * self.size / (1024 ** 3)
+        # print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
         self.matrix = lil_array((1, self.size), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
 
     def _get_index(self, i:int, j:int):
@@ -73,17 +71,18 @@ class PackedDistanceMatrix():
             i_idxs, j_idxs = np.meshgrid(np.arange(n), sample_idxs, indexing='ij')
             i_idxs, j_idxs = i_idxs.ravel(), j_idxs.ravel()
             i_idxs, j_idxs = np.minimum(i_idxs, j_idxs), np.maximum(i_idxs, j_idxs)
-            idxs = np.unique(np.stack(i_idxs, j_idxs), axis=1)
+            idxs = np.unique(np.stack([i_idxs, j_idxs], axis=1), axis=0)
         else:
             idxs = list(itertools.combinations(np.arange(n), 2))
-            idxs = np.stack(*[np.array([i for i, _ in idxs]), np.array([i for _, j in idxs])])
+            idxs = np.array(idxs)
 
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
 
-        for i, j in tqdm(zip(idxs[0], idxs[1]), desc='PackedDistanceMatrix.from_embeddings', total=idxs.shape[-1], file=sys.stdout):
+        distances = norm(embeddings[idxs[:, 0]] - embeddings[idxs[:, 1]], axis=1)
+        for (i, j), d in tqdm(zip(idxs, distances), desc='PackedDistanceMatrix.from_embeddings', total=len(idxs), file=sys.stdout):
             # matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
-            matrix.put(i, j, norm(embeddings[i] - embeddings[j]))
+            matrix.put(i, j, d)
 
         return matrix
     
