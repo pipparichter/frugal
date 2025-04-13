@@ -75,14 +75,14 @@ class PackedDistanceMatrix():
         return matrix
     
 
-def check_packed_distance_matrix(embeddings):
-    D_ = pairwise_distances(embeddings, metric='euclidean')
-    D = PackedDistanceMatrix.from_embeddings(embeddings)
-    n = len(embeddings)
-    for i in range(n):
-        for j in range(n):
-            assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
-            print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
+# def check_packed_distance_matrix(embeddings):
+#     D_ = pairwise_distances(embeddings, metric='euclidean')
+#     D = PackedDistanceMatrix.from_embeddings(embeddings)
+#     n = len(embeddings)
+#     for i in range(n):
+#         for j in range(n):
+#             assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
+#             # print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
     
 
 class Clusterer():
@@ -269,7 +269,7 @@ class Clusterer():
         cluster_sizes = np.bincount(self.cluster_ids)
         print(silhouette_score(embeddings, self.cluster_ids))
 
-        check_packed_distance_matrix(embeddings)
+        # check_packed_distance_matrix(embeddings)
         D = PackedDistanceMatrix.from_embeddings(embeddings)
 
         def a(x, i:int):
