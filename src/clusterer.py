@@ -50,10 +50,8 @@ class PackedDistanceMatrix():
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
         # Number of elements in row i is (n - (i + 1)). Because j > i, j is always greater than 0. 
-        n = 0 if (i == 0) else sum([self.n - (i_ + 1) for i_ in range(i)]) # The number of elements before row i. 
-        print(i, j, n + (j - 1))
-        exit
-        return n + (j - 1)
+        offset = 0 if (i == 0) else sum([self.n - (i_ + 1) for i_ in range(i)]) - 1 # The number of elements before row i. 
+        return offset + (j - 1)
 
     def get(self, i:int, j:int):
         if i == j:
@@ -71,7 +69,6 @@ class PackedDistanceMatrix():
         matrix = cls(n)
         pbar = tqdm(list(itertools.combinations(np.arange(n), 2)), desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout)
         for i, j in pbar:
-            print(i, j)
             matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
             # matrix.put(i, j, pairwise_distances(np.expand_dims(embeddings[i], axis=0), np.expand_dims(embeddings[j], axis=0), metric='euclidean'))
         pbar.close()
