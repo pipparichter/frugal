@@ -262,11 +262,12 @@ class Clusterer():
         if method == 'furthest':
             return distances.max(axis=None)
         
-    def get_silhouette_index(self, dataset):
+    def get_silhouette_index(self, dataset, exclude_singletons:bool=True):
         self._check_dataset(dataset)
         embeddings = self.scaler.transform(dataset.numpy()) # .astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         cluster_sizes = np.bincount(self.cluster_ids)
+        cluster_ids = np.where(cluster_sizes > 0)[0] if exclude_singletons else np.unique(self.cluster_ids)
         print(silhouette_score(embeddings, self.cluster_ids))
 
         # check_packed_distance_matrix(embeddings)
@@ -280,7 +281,7 @@ class Clusterer():
             '''For a datapoint x in cluster i, compute the mean distance between x and all elements in cluster j. 
             Then, return the minimum of these mean distances over all clusters i != j.'''
             d = lambda j : np.array([D.get(x, y) for y in self.cluster_idxs[j]]).mean(axis=None)
-            return min([d(j) for j in np.unique(self.cluster_ids) if (j != i)])
+            return min([d(j) for j in cluster_ids if (j != i)])
         
         def s(x, i:int):
             if cluster_sizes[i] == 1:
