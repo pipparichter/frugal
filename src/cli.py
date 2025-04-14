@@ -93,6 +93,7 @@ def cluster_metric(args):
     cluster_metadata_df.to_csv(output_path)
 
 
+# sbatch --mem 300GB --time 10:00:00 --mail-user prichter@caltech.edu --mail-type ALL --output dataset_cluster.out --wrap "cluster fit --dataset-path ./data/datasets/dataset.h5"
 def cluster_fit(args):
     
     base_cluster_path = args.dataset_path.replace('.h5', '')

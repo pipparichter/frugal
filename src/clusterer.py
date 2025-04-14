@@ -1,8 +1,8 @@
 import pandas as pd 
 import numpy as np 
 from sklearn.cluster import KMeans # , OPTICS
-from sklearn.decomposition import StandardScaler
-from sklearn.linear import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 # from sklearn.neighbors import NearestNeighbors
 import warnings 
 from sklearn.metrics import pairwise_distances
