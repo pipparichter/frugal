@@ -251,18 +251,15 @@ class Clusterer():
         assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
         assert np.all(dataset.cluster_id == self.cluster_ids), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
 
-    def _init_hnsw(self, M:int=15, ef_construction:int=100):
-        print('Clusterer._init_hnsw: Initializing HNSW index for nearby cluster searches.')
-        self.hnsw = hnswlib.Index(space='l2', dim=self.cluster_centers.shape[-1])
-        self.hnsw.init_index(max_elements=self.n_clusters, M=M, ef_construction=ef_construction)
-        self.hnsw.set_ef(50)
-        self.hnsw.add_items(self.cluster_centers)
+    def _get_nearest_cluster_ids(self, M:int=15, ef_construction:int=100, k:int=50):
+        print('Clusterer._get_nearest_cluster_ids: Initializing HNSW index for nearby cluster searches.')
+        hnsw = hnswlib.Index(space='l2', dim=self.cluster_centers.shape[-1])
+        hnsw.init_index(max_elements=self.n_clusters, M=M, ef_construction=ef_construction)
+        hnsw.set_ef(50)
+        hnsw.add_items(self.cluster_centers)
+        nearest_cluster_ids, _ = hnsw.knn_query(self.cluster_centers, k=k)
+        return nearest_cluster_ids # Returns an (N, k) array with the labels of the nearest clusters. 
 
-    def _search_hnsw(self, cluster_id:int, k:int=50):
-        cluster_center = np.expand_dims(self.cluster_centers[cluster_id], axis=0)
-        labels, _ = self.hnsw.knn_query(cluster_center, k=k)
-        return labels[0]
-    
     def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
         cluster_embeddings = embeddings[self.cluster_idxs[i]]
         if method == 'center':
@@ -301,9 +298,9 @@ class Clusterer():
 
         cluster_sizes = np.bincount(self.cluster_ids) 
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
+        nearest_cluster_ids = self._get_nearest_cluster_ids()
 
         D = PackedDistanceMatrix.from_array(embeddings, sample_idxs=sample_idxs)
-        self._init_hnsw()
 
         def a(x, i:int):
             '''For a datapoint in cluster i, compute the mean distance from all elements in cluster i.'''
@@ -314,8 +311,7 @@ class Clusterer():
         def b(x, i:int):
             '''For a datapoint x in cluster i, compute the mean distance from all elements in cluster j, and return the minimum.'''
             d = lambda j : D._get_vectorized(np.repeat(x, cluster_sizes[j]), self.cluster_idxs[j]).mean(axis=None)
-            nearby_cluster_ids = self._search_hnsw(i)
-            return min([d(j) for j in nearby_cluster_ids if (j != i)])
+            return min([d(j) for j in nearest_cluster_ids[i] if (j != i)])
         
         def s(x, i:int):
             if cluster_sizes[i] == 1:
@@ -325,13 +321,14 @@ class Clusterer():
         
         # print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
         silhouette_index = dict() # Store silhouette score computations by cluster. 
-        # for i_, x in enumerate(sample_idxs): 
-        for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
-            # print(f'Clusterer.get_silhouette_index: Computing silhouette index for element {i_} of {len(sample_idxs)}.', flush=True)
+        for i_, x in enumerate(sample_idxs): 
+        # for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
             i = self.cluster_ids[x]
             if i not in silhouette_index:
                 silhouette_index[i] = []
-            silhouette_index[i].append(s(x, i))
+            s_x = s(x, i)
+            print(f'Clusterer.get_silhouette_index: Computed silhouette index of {s_x:.4f} for element {i_} of {len(sample_idxs)}.', flush=True)
+            silhouette_index[i].append(s_x)
         
         for i in silhouette_index.keys():
             cluster_metadata_df.loc[i, 'silhouette_index_mean'] = np.mean(silhouette_index[i])
