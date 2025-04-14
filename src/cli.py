@@ -100,7 +100,7 @@ def cluster_fit(args):
     if not os.path.exists(base_cluster_path + '_cluster.csv'):
         dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
 
-        clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisecting_strategy)
+        clusterer = Clusterer(n_clusters=args.n_clusters, dims=args.dims, bisecting_strategy=args.bisecting_strategy)
         clusterer.fit(dataset)
         print(f'cluster_fit: {len(dataset)} input sequences sorted into {clusterer.n_clusters} clusters.')
 
