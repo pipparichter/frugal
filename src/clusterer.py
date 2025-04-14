@@ -64,7 +64,7 @@ class PackedDistanceMatrix():
         self.matrix[0, self._get_index_vectorized(i, j)] = values
 
     def _get_vectorized(self, i:np.ndarray, j:np.ndarray):
-        return self.matrix[0, self._get_index_vectorized(i, j)]
+        return self.matrix[0, self._get_index_vectorized(i, j)].toarray().ravel()
     
     @classmethod
     def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
