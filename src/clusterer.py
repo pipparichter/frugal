@@ -139,7 +139,7 @@ class Clusterer():
         self.bisecting_strategy = bisecting_strategy
 
         self.max_iter = max_iter
-        self.n_init
+        self.n_init = n_init
         self.kmeans_kwargs = {'max_iter':max_iter, 'n_clusters':2, 'n_init':n_init, 'random_state':self.random_state}
 
         self.check_non_homogenous = (bisecting_strategy == 'largest_non_homogenous')
