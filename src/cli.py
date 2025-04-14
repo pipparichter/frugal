@@ -99,7 +99,7 @@ def cluster_fit(args):
     base_cluster_path = args.dataset_path.replace('.h5', '')
 
     if not os.path.exists(base_cluster_path + '_cluster.csv'):
-        dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
+        dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['label'])
 
         clusterer = Clusterer(n_clusters=args.n_clusters, dims=args.dims, bisecting_strategy=args.bisecting_strategy)
         clusterer.fit(dataset)
