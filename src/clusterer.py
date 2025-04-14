@@ -309,9 +309,10 @@ class Clusterer():
             a_x, b_x = a(x, i), b(x, i)
             return (b_x - a_x) / max(a_x, b_x)
         
-        print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
+        # print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
         silhouette_index = dict() # Store silhouette score computations by cluster. 
-        for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
+        for i_, x in enumerate(sample_idxs): # tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
+            print(f'Clusterer.get_silhouette_index: Computing silhouette index for element {i_} of {len(sample_idxs)}.', flush=True)
             i = self.cluster_ids[x]
             if i not in silhouette_index:
                 silhouette_index[i] = []
