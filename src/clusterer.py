@@ -80,11 +80,11 @@ class PackedDistanceMatrix():
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
 
-        batch_size = 100
         n_batches = np.ceil(len(idxs) / batch_size)
         batched_idxs = np.array_split(idxs, n_batches, axis=0)
         for idxs_ in tqdm(batched_idxs, desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout):
-            distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
+            # distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
+            distances = pairwise_distances(embeddings[idxs_[:, 0]], embeddings[idxs_[:, 1]], metric='euclidean')
             for (i, j), d in zip(idxs, distances):
                 matrix.put(i, j, d)
 
@@ -278,7 +278,7 @@ class Clusterer():
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float32)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         check_packed_distance_matrix(embeddings)
-        
+
         cluster_sizes = np.bincount(self.cluster_ids)
         cluster_ids = np.unique(self.cluster_ids) 
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
