@@ -1,24 +1,19 @@
 import pandas as pd 
 import numpy as np 
-from sklearn.cluster import BisectingKMeans, KMeans # , OPTICS
-from src.split import ClusterStratifiedShuffleSplit
+from sklearn.cluster import KMeans # , OPTICS
 from sklearn.preprocessing import StandardScaler
 # from sklearn.neighbors import NearestNeighbors
 import warnings 
-import torch 
-from scipy.spatial import distance_matrix
-from scipy.spatial.distance import euclidean
-from sklearn.metrics import pairwise_distances, euclidean_distances
+from sklearn.metrics import pairwise_distances
 from numpy.linalg import norm
 from tqdm import tqdm
 import pickle
-from scipy.sparse import lil_matrix, lil_array
+from scipy.sparse import lil_array
 import re 
-import math 
+import hnswlib
 from scipy.special import comb
 import sys 
 import itertools
-from sklearn.metrics import silhouette_score
 
 # TODO: Is there any data leakage by fitting a StandardScaler before clustering? I don't think any more so
 #   than caused by clustering the training and testing dataset together. 
@@ -65,9 +60,12 @@ class PackedDistanceMatrix():
             return 
         self.matrix[0, self._get_index(i, j)] = value
     
-    def _put_batch(self, i:np.ndarray, j:np.ndarray, values:np.ndarray):
+    def _put_vectorized(self, i:np.ndarray, j:np.ndarray, values:np.ndarray):
         self.matrix[0, self._get_index_vectorized(i, j)] = values
 
+    def _get_vectorized(self, i:np.ndarray, j:np.ndarray):
+        return self.matrix[0, self._get_index_vectorized(i, j)]
+    
     @classmethod
     def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
         n = len(embeddings)
@@ -93,7 +91,7 @@ class PackedDistanceMatrix():
         batched_idxs = np.array_split(idxs, n_batches, axis=0)
         for idxs_ in tqdm(batched_idxs, desc='PackedDistanceMatrix.from_array', file=sys.stdout):
             distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
-            matrix._put_batch(idxs_[:, 0], idxs_[:, 1], distances)
+            matrix._put_vectorized(idxs_[:, 0], idxs_[:, 1], distances)
 
         matrix.matrix = matrix.matrix.tocsr() # Converting to CSR for much faster read access.
         return matrix
@@ -250,6 +248,18 @@ class Clusterer():
         assert len(dataset.index) == len(self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
         assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
         assert np.all(dataset.cluster_id == self.cluster_ids), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
+
+    def _init_hnsw(self):
+        print('Clusterer._init_hnsw: Initializing HNSW index for nearby cluster searches.')
+        self.hnsw = hnswlib.Index(space='l2', dim=self.cluster_centers.shape[-1])
+        self.hnsw.init_index(max_elements=self.n_clusters, M=25, ef_construction=200)
+        self.hnsw.set_ef(50)
+        self.hnsw.add_items(self.cluster_centers)
+
+    def _search_hnsw(self, cluster_id:int, k:int=20):
+        cluster_center = np.expand_dims(self.cluster_centers[cluster_id])
+        labels, _ = self.hnsw.knn_query(cluster_center, k=k)
+        return labels[0]
     
     def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
         cluster_embeddings = embeddings[self.cluster_idxs[i]]
@@ -287,21 +297,21 @@ class Clusterer():
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         # check_packed_distance_matrix(embeddings)
 
-        cluster_sizes = np.bincount(self.cluster_ids)
-        cluster_ids = np.unique(self.cluster_ids) 
+        cluster_sizes = np.bincount(self.cluster_ids) 
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
 
         D = PackedDistanceMatrix.from_array(embeddings, sample_idxs=sample_idxs)
 
         def a(x, i:int):
             '''For a datapoint in cluster i, compute the mean distance from all elements in cluster i.'''
-            d = np.array([D.get(x, y) for y in self.cluster_idxs[i]])
+            d = D._get_vectorized(np.repeat(x, cluster_sizes[i]), self.cluster_idxs[i])
             return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
 
         def b(x, i:int):
             '''For a datapoint x in cluster i, compute the mean distance from all elements in cluster j, and return the minimum.'''
-            d = lambda j : np.array([D.get(x, y) for y in self.cluster_idxs[j]]).mean(axis=None)
-            return min([d(j) for j in cluster_ids if (j != i)])
+            d = lambda j : D._get_vectorized(np.repeat(x, cluster_sizes[j]), self.cluster_idxs[j]).mean(axis=None)
+            nearby_cluster_ids = self._search_hnsw(i)
+            return min([d(j) for j in nearby_cluster_ids if (j != i)])
         
         def s(x, i:int):
             if cluster_sizes[i] == 1:

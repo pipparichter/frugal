@@ -60,7 +60,7 @@ class RadiusNeighborsGraph():
             _, neighbor_idxs = self._get_neighbor_idxs(id_)
         return [self.index_to_id_map[idx] for idx in neighbor_idxs]
     
-    def get_neighbor_metadata(self, id_:str, field:str=None):
+    def get_neighbor_metadata(self, id_:str, field:str=None, max_k:int=None, max_distance:float=None):
         neighbor_ids = self.get_neighbor_ids(id_, max_k=max_k, max_distance=max_distance)
         metadata_df = self.metadata.loc[neighbor_ids].copy()
         if field is not None:
