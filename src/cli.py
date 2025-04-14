@@ -37,11 +37,11 @@ def cluster():
     subparser = parser.add_subparsers(title='cluster', dest='subcommand', required=True)
 
     cluster_parser = subparser.add_parser('fit')
-    cluster_parser.add_argument('--input-path', type=str)
+    cluster_parser.add_argument('--dataset-path', type=str)
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     cluster_parser.add_argument('--n-clusters', default=50000, type=int)
     cluster_parser.add_argument('--bisecting-strategy', default='largest_non_homogenous', type=str)
-    cluster_parser.add_argument('--verbose', action='store_true')
+    cluster_parser.add_argument('--dims', type=int, default=20)
 
     cluster_parser = subparser.add_parser('predict')
     cluster_parser.add_argument('--input-path', type=str)
@@ -95,9 +95,9 @@ def cluster_metric(args):
 
 def cluster_fit(args):
     
-    base_output_path = args.input_path.replace('.h5', '')
+    base_cluster_path = args.dataset_path.replace('.h5', '')
 
-    if not os.path.exists(base_output_path + '_cluster.csv'):
+    if not os.path.exists(base_cluster_path + '_cluster.csv'):
         dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label'])
 
         clusterer = Clusterer(n_clusters=args.n_clusters, verbose=args.verbose, bisecting_strategy=args.bisecting_strategy)
@@ -108,13 +108,13 @@ def cluster_fit(args):
         df = pd.DataFrame(index=pd.Series(dataset.index, name='id'))
         df['cluster_id'] = clusterer.cluster_ids
         
-        clusterer.save(base_output_path + '_cluster.pkl') # Save the Clusterer object.
-        df.to_csv(base_output_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
+        clusterer.save(base_cluster_path + '_cluster.pkl') # Save the Clusterer object.
+        df.to_csv(base_cluster_path + '_cluster.csv') # Write the cluster predictions to a separate file. 
     else: 
-        df = pd.read_csv(base_output_path + '_cluster.csv', index_col=0)
-        print(f'cluster_fit: Loading existing cluster results from {base_output_path + '_cluster.csv'}')
+        df = pd.read_csv(base_cluster_path + '_cluster.csv', index_col=0)
+        print(f'cluster_fit: Loading existing cluster results from {base_cluster_path + '_cluster.csv'}')
 
-    # update_metadata(args.input_path, cols=[df.cluster_id]) # Add the cluster ID to dataset file metadata. 
+    update_metadata(args.dataset_path, cols=[df.cluster_id]) # Add the cluster ID to dataset file metadata. 
 
 
 def cluster_predict(args):

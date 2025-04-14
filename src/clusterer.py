@@ -1,7 +1,8 @@
 import pandas as pd 
 import numpy as np 
 from sklearn.cluster import KMeans # , OPTICS
-from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import StandardScaler
+from sklearn.linear import PCA
 # from sklearn.neighbors import NearestNeighbors
 import warnings 
 from sklearn.metrics import pairwise_distances
@@ -116,16 +117,20 @@ class PackedDistanceMatrix():
 
 class Clusterer():
 
-    def __init__(self, verbose:bool=True, n_clusters:int=1000, n_init:int=10, max_iter:int=1000, bisecting_strategy:str='largest_non_homogenous'):
+    def __init__(self, dims:int=20, n_clusters:int=10000, n_init:int=10, max_iter:int=1000, bisecting_strategy:str='largest_non_homogenous'):
         
+        self.dims = dims
         self.n_clusters = n_clusters 
+        self.random_state = 42 # Setting a consistent random state and keeping all other parameters the same results in reproducible clustering output. 
+
+        self.pca = PCA(n_components=dims, random_state=self.random_state)
         self.scaler = StandardScaler() # I think scaling prior to clustering is important. Applying same assumption as with Classifier training. 
-        self.index = None # Stores the index of the data used to fit the model. 
-        
+
         self.curr_cluster_id = 1
         self.tree = '0'
-        self.split_order = []
 
+        self.index = None # Stores the index of the data used to fit the model. 
+        self.labels = None 
         self.cluster_ids = None
         self.labels = None
         self.cluster_centers = [None] # Store as a list, becaue the exact number of clusters is flexible. 
@@ -134,11 +139,23 @@ class Clusterer():
         self.bisecting_strategy = bisecting_strategy
 
         self.max_iter = max_iter
-        # Setting a consistent random state and keeping all other parameters the same results in reproducible clustering output. 
-        self.kmeans_kwargs = {'max_iter':max_iter, 'n_clusters':2, 'n_init':n_init, 'random_state':42}
+        self.n_init
+        self.kmeans_kwargs = {'max_iter':max_iter, 'n_clusters':2, 'n_init':n_init, 'random_state':self.random_state}
 
-        self.verbose = verbose 
         self.check_non_homogenous = (bisecting_strategy == 'largest_non_homogenous')
+
+    def _preprocess(self, dataset, fit:bool=False):
+        embeddings = dataset.numpy()
+        if fit:
+            dims = embeddings.shape[-1]
+            embeddings = self.scaler.fit_transform(embeddings)
+            embeddings = self.pca.fit_transform(embeddings)
+            explained_variance = self.pca.explained_variance_ratio_.sum()
+            print(f'Clusterer._preprocess: Used PCA to reduce dimensions from {dims} to {self.dims}. Total explained variance is {explained_variance:4f}.')
+        else:
+            embeddings = self.scaler.transform(embeddings)
+            embeddings = self.pca.transform(embeddings)
+        return embeddings
 
     def _is_homogenous(self):
         n_labels_per_cluster = self._get_n_labels_per_cluster()
@@ -179,8 +196,7 @@ class Clusterer():
         return np.argmax(cluster_sizes)
 
     def transform(self, dataset):
-        embeddings = dataset.numpy().astype(np.float16)
-        embeddings = self.scaler.transform(embeddings)
+        embeddings = self._preprocess(dataset, fit=False)
         dists = pairwise_distances(embeddings, self.cluster_centers, metric='euclidean')
         return dists 
     
@@ -190,21 +206,18 @@ class Clusterer():
     
     def fit(self, dataset):
 
-        embeddings = dataset.numpy().astype(np.float32)
-        embeddings = self.scaler.fit_transform(embeddings)
+        embeddings = self._preprocess(dataset, fit=True)
 
-        self.labels = dataset.label if hasattr(dataset, 'label') else None 
-        self.index = dataset.index 
+        self.labels = dataset.label.copy() if hasattr(dataset, 'label') else None 
+        self.index = dataset.index.copy()
         self.cluster_ids = np.zeros(len(dataset), dtype=np.int64) # Initialize the cluster labels. 
 
         iter = 0
         while self.curr_cluster_id < self.n_clusters:
             cluster_to_split = self._get_cluster_to_split()
-            self.split_order.append(cluster_to_split)
             cluster_idxs = np.where(self.cluster_ids == cluster_to_split)[0]
 
-            if self.verbose:
-                print(f'Clusterer.fit: Split {iter}, cluster {cluster_to_split} divided using bisection strategy {self.bisecting_strategy}.', flush=True)
+            print(f'Clusterer.fit: Split {iter}, cluster {cluster_to_split} divided using bisection strategy {self.bisecting_strategy}.', flush=True)
             
             kmeans = KMeans(**self.kmeans_kwargs)
             kmeans.fit(embeddings[cluster_idxs])
