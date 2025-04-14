@@ -86,7 +86,7 @@ class PackedDistanceMatrix():
             # distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
             distances = pairwise_distances(embeddings[idxs_[:, 0]], embeddings[idxs_[:, 1]], metric='euclidean')
             for (i, j), d in zip(idxs, distances):
-                matrix.put(i, j, d)
+                matrix.put(i, j, d[i, j])
 
         return matrix
     
