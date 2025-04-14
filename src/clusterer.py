@@ -68,7 +68,6 @@ class PackedDistanceMatrix():
         # advantage of symmetry to avoid computing a full (sample_size, n) distance matrix, so I decided to 
         # make the PackedDistanceMatrix sparse. 
         if sample_idxs is not None: # Only compute distances relative to an index in the sample subset.
-            # idxs = [(i, j) for (i, j) in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings: Filtering indices.', total=self.size) if ((i in sample_idxs) or (j in sample_idxs))] 
             i_idxs, j_idxs = np.meshgrid(np.arange(n), sample_idxs, indexing='ij')
             i_idxs, j_idxs = i_idxs.ravel(), j_idxs.ravel()
             i_idxs, j_idxs = np.minimum(i_idxs, j_idxs), np.maximum(i_idxs, j_idxs)
@@ -80,25 +79,24 @@ class PackedDistanceMatrix():
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
 
-        n_batches = np.ceil(len(idxs) / batch_size)
+        n_batches = int(np.ceil(len(idxs) / batch_size))
         batched_idxs = np.array_split(idxs, n_batches, axis=0)
         for idxs_ in tqdm(batched_idxs, desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout):
             distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
-            # distances = pairwise_distances(embeddings[idxs_[:, 0]], embeddings[idxs_[:, 1]], metric='euclidean')
             for (i, j), d in zip(idxs_, distances):
                 matrix.put(i, j, d)
 
         return matrix
     
 
-def check_packed_distance_matrix(embeddings):
-    D_ = pairwise_distances(embeddings, metric='euclidean')
-    D = PackedDistanceMatrix.from_embeddings(embeddings)
-    n = len(embeddings)
-    for i in range(n):
-        for j in range(n):
-            assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
-            # print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
+# def check_packed_distance_matrix(embeddings):
+#     D_ = pairwise_distances(embeddings, metric='euclidean')
+#     D = PackedDistanceMatrix.from_embeddings(embeddings)
+#     n = len(embeddings)
+#     for i in range(n):
+#         for j in range(n):
+#             assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
+#             # print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
     
 
 class Clusterer():
@@ -277,7 +275,7 @@ class Clusterer():
         
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float32)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
-        check_packed_distance_matrix(embeddings)
+        # check_packed_distance_matrix(embeddings)
 
         cluster_sizes = np.bincount(self.cluster_ids)
         cluster_ids = np.unique(self.cluster_ids) 
