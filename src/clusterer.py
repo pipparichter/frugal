@@ -42,24 +42,34 @@ class PackedDistanceMatrix():
         print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
         self.matrix = lil_array((1, self.size), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
 
+
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
-        # Number of elements in row i is (n - (i + 1)). Because j > i, j is always greater than 0. 
-        offset = 0 if (i == 0) else sum([self.n - (i_ + 1) - 1 for i_ in range(i)]) # The number of elements before row i, shifted one to the left so that it's an index. 
+        i, j = min(i, j), max(i, j)
+        offset = (i * (2 * self.n - i - 1)) // 2 - i # I think we need to subtract i so we are back into an index (otherwise gets shifted by one each time)
+        # offset = 0 if (i == 0) else sum([self.n - (i_ + 1) - 1 for i_ in range(i)]) # The number of elements before row i, shifted one to the left so that it's an index. 
+        return offset + (j - 1)
+    
+    def _get_index_vectorized(self, i:np.ndarray, j:np.ndarray):
+        i, j = np.minimum(i, j), np.maximum(i, j)
+        offset = (i * (2 * self.n - i - 1)) // 2 - i
         return offset + (j - 1)
 
     def get(self, i:int, j:int):
         if i == j:
             return 0
-        return self.matrix[0, self._get_index(min(i, j), max(i, j))]
+        return self.matrix[0, self._get_index(i, j)]
     
-    def put(self, i:int, j:int, value:np.float16):
+    def put(self, i:int, j:int, value):
         if i == j:
             return 
-        self.matrix[0, self._get_index(min(i, j), max(i, j))] = value
+        self.matrix[0, self._get_index(i, j)] = value
+    
+    def _put_batch(self, i:np.ndarray, j:np.ndarray, values:np.ndarray):
+        self.matrix[0, self._get_index_vectorized(i, j)] = values
 
     @classmethod
-    def from_embeddings(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
+    def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
         n = len(embeddings)
         matrix = cls(n)
 
@@ -81,17 +91,17 @@ class PackedDistanceMatrix():
 
         n_batches = int(np.ceil(len(idxs) / batch_size))
         batched_idxs = np.array_split(idxs, n_batches, axis=0)
-        for idxs_ in tqdm(batched_idxs, desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout):
+        for idxs_ in tqdm(batched_idxs, desc='PackedDistanceMatrix.from_array', file=sys.stdout):
             distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
-            for (i, j), d in zip(idxs_, distances):
-                matrix.put(i, j, d)
+            matrix._put_batch(idxs_[:, 0], idxs_[:, 1], distances)
 
+        matrix.matrix = matrix.matrix.tocsr() # Converting to CSR for much faster read access.
         return matrix
     
 
 # def check_packed_distance_matrix(embeddings):
 #     D_ = pairwise_distances(embeddings, metric='euclidean')
-#     D = PackedDistanceMatrix.from_embeddings(embeddings)
+#     D = PackedDistanceMatrix.from_array(embeddings)
 #     n = len(embeddings)
 #     for i in range(n):
 #         for j in range(n):
@@ -281,7 +291,7 @@ class Clusterer():
         cluster_ids = np.unique(self.cluster_ids) 
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
 
-        D = PackedDistanceMatrix.from_embeddings(embeddings, sample_idxs=sample_idxs)
+        D = PackedDistanceMatrix.from_array(embeddings, sample_idxs=sample_idxs)
 
         def a(x, i:int):
             '''For a datapoint in cluster i, compute the mean distance from all elements in cluster i.'''
@@ -338,7 +348,8 @@ class Clusterer():
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_center', 'davies_bouldin_index'])
  
-        D = pairwise_distances(self.cluster_centers, metric='euclidean') # Might need to do this one at a time if memory is a problem. 
+        D = PackedDistanceMatrix.from_array(self.cluster_centers) # Might need to do this one at a time if memory is a problem. 
+        
         sigma = np.array([self._get_intra_cluster_distance(i, embeddings=embeddings) for i in range(self.n_clusters)])
         for i in range(self.n_clusters):
             cluster_metadata_df['davies_bouldin_index'] = max([(sigma[i] + sigma[j]) / D[i, j] for j in range(self.n_clusters) if (i != j)])
