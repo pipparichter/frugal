@@ -77,9 +77,9 @@ def cluster():
 
 
 def cluster_metric(args):
-    output_path = args.input_path.replace('.h5', '_cluster_metadata.csv') if (args.output_path is None) else args.output_path
+    output_path = args.dataset_path.replace('.h5', '_cluster_metadata.csv') if (args.output_path is None) else args.output_path
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
+    dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
     clusterer = Clusterer.load(args.cluster_path)
     n_clusters = clusterer.n_clusters
 
