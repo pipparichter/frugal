@@ -321,13 +321,13 @@ class Clusterer():
             t1 = time.perf_counter()
             a_x = a(x, i)
             t2 = time.perf_counter()
-            print(f'Clusterer.get_silhouette_index: Time for computing a(x, i) on x={x} is {t2 - t1:.4f} seconds.')
+            print(f'Clusterer.get_silhouette_index: Time for computing a(x, i) on x={x} is {t2 - t1:.4f} seconds.', flush=True)
             
             t1 = time.perf_counter()
             b_x = b(x, i)
             t2 = time.perf_counter()
-            print(f'Clusterer.get_silhouette_index: Time for computing b(x, i) on x={x} is {t2 - t1:.4f} seconds.')
-            
+            print(f'Clusterer.get_silhouette_index: Time for computing b(x, i) on x={x} is {t2 - t1:.4f} seconds.', flush=True)
+
             return (b_x - a_x) / max(a_x, b_x)
         
         # print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
