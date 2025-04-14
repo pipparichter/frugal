@@ -64,7 +64,7 @@ class PackedDistanceMatrix():
         self.matrix[0, self._get_index_vectorized(i, j)] = values
     
     def _get_vectorized(self, i: np.ndarray, j: np.ndarray):
-        # Need to access each index one-by-one. When you try to access an array with 
+        # For some reason, everything freaks out when I try to access this with a vector. 
         idxs = self._get_index_vectorized(i, j)
         return np.array([self.matrix[0, idx] for idx in idxs])
         
@@ -251,14 +251,14 @@ class Clusterer():
         assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
         assert np.all(dataset.cluster_id == self.cluster_ids), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
 
-    def _init_hnsw(self):
+    def _init_hnsw(self, M:int=15, ef_construction:int=100):
         print('Clusterer._init_hnsw: Initializing HNSW index for nearby cluster searches.')
         self.hnsw = hnswlib.Index(space='l2', dim=self.cluster_centers.shape[-1])
-        self.hnsw.init_index(max_elements=self.n_clusters, M=25, ef_construction=200)
+        self.hnsw.init_index(max_elements=self.n_clusters, M=M, ef_construction=ef_construction)
         self.hnsw.set_ef(50)
         self.hnsw.add_items(self.cluster_centers)
 
-    def _search_hnsw(self, cluster_id:int, k:int=100):
+    def _search_hnsw(self, cluster_id:int, k:int=50):
         cluster_center = np.expand_dims(self.cluster_centers[cluster_id], axis=0)
         labels, _ = self.hnsw.knn_query(cluster_center, k=k)
         return labels[0]
@@ -308,6 +308,7 @@ class Clusterer():
         def a(x, i:int):
             '''For a datapoint in cluster i, compute the mean distance from all elements in cluster i.'''
             d = D._get_vectorized(np.repeat(x, cluster_sizes[i]), self.cluster_idxs[i])
+            assert len(d) == cluster_sizes[i], 'Clusterer.get_silhouette_index: The number of intra-cluster distances should be equal to the cluster size.'
             return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
 
         def b(x, i:int):
