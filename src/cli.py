@@ -41,7 +41,7 @@ def cluster():
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     cluster_parser.add_argument('--n-clusters', default=10000, type=int)
     cluster_parser.add_argument('--bisecting-strategy', default='largest_non_homogenous', type=str)
-    cluster_parser.add_argument('--dims', type=int, default=20)
+    cluster_parser.add_argument('--dims', type=int, default=None)
 
     cluster_parser = subparser.add_parser('predict')
     cluster_parser.add_argument('--input-path', type=str)
@@ -124,7 +124,9 @@ def cluster_metric(args):
 # sbatch --mem 300GB --time 10:00:00 --mail-user prichter@caltech.edu --mail-type ALL --output dataset_cluster.out --wrap "cluster fit --dataset-path ./data/datasets/dataset.h5"
 def cluster_fit(args):
     
-    base_cluster_path = args.dataset_path.replace('.h5', f'_dims{args.dims}')
+    base_cluster_path = args.dataset_path.replace('.h5', f'_dims1280')
+    if args.dims is not None:
+        base_cluster_path = args.dataset_path.replace('.h5', f'_dims{args.dims}')
 
     if not os.path.exists(base_cluster_path + '_cluster.csv'):
         dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['label'])

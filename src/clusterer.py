@@ -110,13 +110,13 @@ class Clusterer():
     intra_dist_methods = ['center', 'pairwise', 'furthest']
     inter_dist_methods = ['center', 'furthest', 'closest']
 
-    def __init__(self, dims:int=20, n_clusters:int=10000, n_init:int=10, max_iter:int=1000, bisecting_strategy:str='largest_non_homogenous'):
+    def __init__(self, dims:int=None, n_clusters:int=10000, n_init:int=10, max_iter:int=1000, bisecting_strategy:str='largest_non_homogenous'):
         
         self.dims = dims
         self.n_clusters = n_clusters 
         self.random_state = 42 # Setting a consistent random state and keeping all other parameters the same results in reproducible clustering output. 
 
-        self.pca = PCA(n_components=dims, random_state=self.random_state)
+        self.pca = PCA(n_components=dims, random_state=self.random_state) if (dims is not None) else None
         self.scaler = StandardScaler() # I think scaling prior to clustering is important. Applying same assumption as with Classifier training. 
 
         self.curr_cluster_id = 1
@@ -142,12 +142,14 @@ class Clusterer():
         if fit:
             dims = embeddings.shape[-1]
             embeddings = self.scaler.fit_transform(embeddings)
-            embeddings = self.pca.fit_transform(embeddings)
-            explained_variance = self.pca.explained_variance_ratio_.sum()
-            print(f'Clusterer._preprocess: Used PCA to reduce dimensions from {dims} to {self.dims}. Total explained variance is {explained_variance:4f}.')
+            if self.pca is not None:
+                embeddings = self.pca.fit_transform(embeddings)
+                explained_variance = self.pca.explained_variance_ratio_.sum()
+                print(f'Clusterer._preprocess: Used PCA to reduce dimensions from {dims} to {self.dims}. Total explained variance is {explained_variance:4f}.')
         else:
             embeddings = self.scaler.transform(embeddings)
-            embeddings = self.pca.transform(embeddings)
+            if self.pca is not None:
+                embeddings = self.pca.transform(embeddings)
         return embeddings
 
     def _is_homogenous(self):
