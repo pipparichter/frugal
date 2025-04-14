@@ -80,13 +80,13 @@ class PackedDistanceMatrix():
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
         print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
 
-        # distances = norm(embeddings[idxs[:, 0]] - embeddings[idxs[:, 1]], axis=1)
-        # for (i, j), d in tqdm(zip(idxs, distances), desc='PackedDistanceMatrix.from_embeddings', total=len(idxs), file=sys.stdout):
-        #     # matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
-        #     matrix.put(i, j, d)
-        for i, j in tqdm(idxs, desc='PackedDistanceMatrix.from_embeddings', total=len(idxs), file=sys.stdout):
-            # matrix.put(i, j, euclidean(embeddings[i], embeddings[j]))
-            matrix.put(i, j, norm(embeddings[i] - embeddings[j]))
+        batch_size = 100
+        n_batches = np.ceil(len(idxs) / batch_size)
+        batched_idxs = np.array_split(idxs, n_batches, axis=0)
+        for idxs_ in tqdm(batched_idxs, desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout):
+            distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
+            for (i, j), d in zip(idxs, distances):
+                matrix.put(i, j, d)
 
         return matrix
     
