@@ -102,7 +102,7 @@ def cluster_metric(args):
         print('cluster_metric: Davies-Bouldin index is', davies_bouldin_index)
 
     # For inter-cluster distances, always returns the smallest non-self value computed acoss all clusters. 
-    elif args.inter_dist:
+    elif args.min_inter_dist:
         method = args.inter_dist_method
         assert method in clusterer.inter_dist_methods, f'cluster_metric: {method} is not a valid method for computing inter-cluster distances.'
         min_inter_cluster_distance, cluster_metadata_df_ = clusterer.get_min_inter_cluster_distance(dataset, method=method) 
