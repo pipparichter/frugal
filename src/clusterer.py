@@ -301,6 +301,7 @@ class Clusterer():
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
 
         D = PackedDistanceMatrix.from_array(embeddings, sample_idxs=sample_idxs)
+        self._init_hnsw()
 
         def a(x, i:int):
             '''For a datapoint in cluster i, compute the mean distance from all elements in cluster i.'''
