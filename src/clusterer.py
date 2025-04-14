@@ -62,10 +62,12 @@ class PackedDistanceMatrix():
     
     def _put_vectorized(self, i:np.ndarray, j:np.ndarray, values:np.ndarray):
         self.matrix[0, self._get_index_vectorized(i, j)] = values
-
-    def _get_vectorized(self, i:np.ndarray, j:np.ndarray):
-        return self.matrix[0, self._get_index_vectorized(i, j)].data
     
+    def _get_vectorized(self, i: np.ndarray, j: np.ndarray):
+        # Need to access each index one-by-one. When you try to access an array with 
+        idxs = self._get_index_vectorized(i, j)
+        return np.array([self.matrix[0, idx] for idx in idxs])
+        
     @classmethod
     def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
         n = len(embeddings)
