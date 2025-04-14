@@ -256,7 +256,7 @@ class Clusterer():
         self.hnsw.set_ef(50)
         self.hnsw.add_items(self.cluster_centers)
 
-    def _search_hnsw(self, cluster_id:int, k:int=20):
+    def _search_hnsw(self, cluster_id:int, k:int=100):
         cluster_center = np.expand_dims(self.cluster_centers[cluster_id], axis=0)
         labels, _ = self.hnsw.knn_query(cluster_center, k=k)
         return labels[0]
