@@ -1,6 +1,7 @@
 import numpy as np 
 from sklearn.preprocessing import StandardScaler 
 from sklearn.neighbors import NearestNeighbors
+from sklearn.decomposition import PCA
 import pickle
 from tqdm import tqdm
 import pandas as pd
@@ -15,17 +16,23 @@ import pandas as pd
 class RadiusNeighborsGraph():
 
     def __init__(self, radius:float=15):
-        
+        self.random_state = 42
         self.radius = radius # Radius is inclusive. 
         self.graph = None 
         self.neighbor_idxs = None
         self.scaler = StandardScaler()
+
         self.metadata = None
         self.id_to_index_map = None # Will store a dictionary mapping IDs to numerical indices. 
         self.index_to_id_map = None # Will store a dictionary mapping numerical indices to sequence IDs. 
 
-    # def _get_row(self, i:int):
-    #     return np.array([self.graph[i, j] for j in self.neighbor_idxs[i]])
+    def _preprocess(self, dataset):
+        embeddings = dataset.numpy()
+        dims = embeddings.shape[-1]
+        embeddings = self.scaler.fit_transform(embeddings)
+        embeddings = self.pca.fit_transform(embeddings)
+        explained_variance = self.pca.explained_variance_ratio_.sum()
+        print(f'RadiusNeighborsGraph._preprocess: Used PCA to reduce dimensions from {dims} to {self.dims}. Total explained variance is {explained_variance:4f}.')
 
     def _get_neighbor_idxs(self, id_:str) -> np.ndarray:
         idx = self.id_to_index_map[id_]
@@ -69,8 +76,7 @@ class RadiusNeighborsGraph():
 
     def fit(self, dataset):
 
-        embeddings = dataset.numpy()
-        embeddings = self.scaler.fit_transform(embeddings) # Make sure the embeddings are scaled. 
+        embeddings = self._preprocess(dataset) # Make sure the embeddings are scaled. 
         self.metadata = dataset.metadata()
         self.id_to_index_map = {id_:i for i, id_ in enumerate(dataset.index)}
         self.index_to_id_map = {i:id_ for i, id_ in enumerate(dataset.index)}

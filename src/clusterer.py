@@ -207,7 +207,6 @@ class Clusterer():
     def fit(self, dataset):
 
         embeddings = self._preprocess(dataset, fit=True)
-
         self.labels = dataset.label.copy() if hasattr(dataset, 'label') else None 
         self.index = dataset.index.copy()
         self.cluster_ids = np.zeros(len(dataset), dtype=np.int64) # Initialize the cluster labels. 
@@ -292,9 +291,9 @@ class Clusterer():
         
     def _get_inter_cluster_distance(self, i:int, j:int, embeddings:np.ndarray=None, method:str='center'):
         if method == 'center':
-            cluster_center_i, cluster_center_j = np.expand_dims(self.cluster_centers[i]), np.expand_dims(self.cluster_centers[j])
+            cluster_center_i, cluster_center_j = np.expand_dims(self.cluster_centers[i], axis=0), np.expand_dims(self.cluster_centers[j], axis=0)
             distances = pairwise_distances(cluster_center_i, cluster_center_j, metric='euclidean')
-            return distances.mean()
+            return distances.mean(axis=None)
         cluster_i_embeddings, cluster_j_embeddings = embeddings[self.cluster_idxs[i]], embeddings[self.cluster_idxs[j]]
         distances = pairwise_distances(cluster_i_embeddings, cluster_j_embeddings, metric='euclidean')
         if method == 'closest':
@@ -309,8 +308,8 @@ class Clusterer():
         two clusters. Silhouette indices range from -1 to 1. https://en.wikipedia.org/wiki/Silhouette_(clustering)'''
         
         self._check_dataset(dataset)
-        
-        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float32)
+        embeddings = self._preprocess(dataset, fit=False)
+
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
         # check_packed_distance_matrix(embeddings)
 
@@ -372,7 +371,8 @@ class Clusterer():
     def get_dunn_index(self, dataset, inter_method:str='center', intra_method:str='center'):
         '''https://en.wikipedia.org/wiki/Dunn_index'''
         self._check_dataset(dataset)
-        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
+        embeddings = self._preprocess(dataset, fit=False)
+        
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_{intra_method}', f'min_inter_cluster_distance_{inter_method}'])
 
         for i in tqdm(range(self.n_clusters), desc='get_dunn_index'):
@@ -387,7 +387,8 @@ class Clusterer():
     
     def get_davies_bouldin_index(self, dataset):
         self._check_dataset(dataset)
-        embeddings = self.scaler.transform(dataset.numpy()).astype(np.float16)
+        embeddings = self._preprocess(dataset, fit=False)
+        
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_center', 'davies_bouldin_index'])
  
         D = PackedDistanceMatrix.from_array(self.cluster_centers) # Might need to do this one at a time if memory is a problem. 

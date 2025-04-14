@@ -39,7 +39,7 @@ def cluster():
     cluster_parser = subparser.add_parser('fit')
     cluster_parser.add_argument('--dataset-path', type=str)
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    cluster_parser.add_argument('--n-clusters', default=50000, type=int)
+    cluster_parser.add_argument('--n-clusters', default=10000, type=int)
     cluster_parser.add_argument('--bisecting-strategy', default='largest_non_homogenous', type=str)
     cluster_parser.add_argument('--dims', type=int, default=20)
 
