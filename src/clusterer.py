@@ -83,11 +83,10 @@ class PackedDistanceMatrix():
         n_batches = np.ceil(len(idxs) / batch_size)
         batched_idxs = np.array_split(idxs, n_batches, axis=0)
         for idxs_ in tqdm(batched_idxs, desc='PackedDistanceMatrix.from_embeddings', file=sys.stdout):
-            # distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
-            distances = pairwise_distances(embeddings[idxs_[:, 0]], embeddings[idxs_[:, 1]], metric='euclidean')
-            # for (i, j), d in zip(idxs, distances):
-            for i, j in idxs_:
-                matrix.put(i, j, distances[i, j])
+            distances = norm(embeddings[idxs_[:, 0]] - embeddings[idxs_[:, 1]], axis=1)
+            # distances = pairwise_distances(embeddings[idxs_[:, 0]], embeddings[idxs_[:, 1]], metric='euclidean')
+            for (i, j), d in zip(idxs_, distances):
+                matrix.put(i, j, d)
 
         return matrix
     
