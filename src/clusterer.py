@@ -105,17 +105,10 @@ class PackedDistanceMatrix():
         return matrix
     
 
-# def check_packed_distance_matrix(embeddings):
-#     D_ = pairwise_distances(embeddings, metric='euclidean')
-#     D = PackedDistanceMatrix.from_array(embeddings)
-#     n = len(embeddings)
-#     for i in range(n):
-#         for j in range(n):
-#             assert np.isclose(D.get(i, j), D_[i, j], atol=1e-5), f'check_packed_distance_matrix: Distances do not agree at ({i}, {j}). Expected {D_[i, j]}, got {D.get(i, j)}.'
-#             # print(f'check_packed_distance_matrix: Distances agree at ({i}, {j}).')
-    
-
 class Clusterer():
+
+    intra_dist_methods = ['center', 'pairwise', 'furthest']
+    inter_dist_methods = ['center', 'furthest', 'closest']
 
     def __init__(self, dims:int=20, n_clusters:int=10000, n_init:int=10, max_iter:int=1000, bisecting_strategy:str='largest_non_homogenous'):
         
@@ -254,7 +247,8 @@ class Clusterer():
             obj = pickle.load(f)
         return obj
     
-    # Functions for computing cluster metrics. 
+    # Functions for computing cluster metrics. I wrote my own implementations for these metrics to allow more flexibility, e.g. 
+    # for storing per-cluster metrics and working with the PackedDistanceMatrix for more efficient memory usage (I hope). 
 
     def _get_sample_idxs(self, sample_size:int=None):
         '''Get indices for a sub-sample. If stratified is set to true, ensures the sample contains an even spread of the clusters.'''
@@ -301,17 +295,42 @@ class Clusterer():
         if method == 'furthest':
             return distances.max(axis=None)
         
+    def _init_cluster_metadata(self, cols:list=[]):
+        return pd.DataFrame(index=pd.Index(np.arange(self.n_clusters), name='cluster_id'), columns=cols)
+        
+    def get_min_inter_cluster_distance(self, dataset, method:str=None):
+        self._check_dataset(dataset)
+        embeddings = self._preprocess(dataset, fit=False)
+        cluster_metadata_df = self._init_cluster_metadata([f'min_inter_cluster_distance_{method}'])
+
+        # Get the k nearest clusters to avoid computing inter-cluster distances between every cluster.  
+        nearest_cluster_ids = self._get_nearest_cluster_ids(k=20)
+        for i in tqdm(np.arange(self.n_clusters), desc='Clusterer.get_min_inter_cluster_distance'):
+            inter_cluster_distances = [self._get_inter_cluster_distance(i, j, embeddings=embeddings, method=method) for j in nearest_cluster_ids[j]]
+            cluster_metadata_df.loc[i, f'min_inter_cluster_distance_{method}'] = min(inter_cluster_distances)
+
+        min_inter_cluster_distance = cluster_metadata_df[f'min_inter_cluster_distance_{method}'].mean()
+        return min_inter_cluster_distance, cluster_metadata_df
+
+    def get_intra_cluster_distance(self, dataset, method:str=None):
+        self._check_dataset(dataset)
+        embeddings = self._preprocess(dataset, fit=False)
+        cluster_metadata_df = self._init_cluster_metadata([f'intra_cluster_distance_{method}'])
+
+        for i in tqdm(np.arange(self.n_clusters), desc='Clusterer.get_intra_cluster_distance'):
+            cluster_metadata_df.loc[i, f'min_inter_cluster_distance_{method}'] = self._get_intra_cluster_distance(i, method=method, embeddings=embeddings)
+
+        intra_cluster_distance = cluster_metadata_df[f'min_inter_cluster_distance_{method}'].mean() # Use the mean of the intra-cluster distances as a summary statistic.
+        return intra_cluster_distance, cluster_metadata_df
+
     def get_silhouette_index(self, dataset, sample_size:int=None):
         '''A silhouette index for a particular point x in cluster i is essentially the "closeness" of point x to the nearest cluster i != j minus the
         "closeness" of x to its own cluster i, normalized according to the maximum of the two closeness metrics. A negative silhoutte index therefore
         implies that x is closer to another cluster than its own cluster, while a score close to zero indicates that a point is equidistant between
         two clusters. Silhouette indices range from -1 to 1. https://en.wikipedia.org/wiki/Silhouette_(clustering)'''
-        
         self._check_dataset(dataset)
         embeddings = self._preprocess(dataset, fit=False)
-
-        cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
-        # check_packed_distance_matrix(embeddings)
+        cluster_metadata_df = self._init_cluster_metadata(['silhouette_index', 'silhouette_index_weight'])
 
         cluster_sizes = np.bincount(self.cluster_ids) 
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
@@ -368,32 +387,37 @@ class Clusterer():
 
         return silhouette_index, cluster_metadata_df
 
-    def get_dunn_index(self, dataset, inter_method:str='center', intra_method:str='center'):
+    def get_dunn_index(self, dataset, inter_dist_method:str='center', intra_dist_method:str='center'):
         '''https://en.wikipedia.org/wiki/Dunn_index'''
         self._check_dataset(dataset)
         embeddings = self._preprocess(dataset, fit=False)
-        
-        cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_{intra_method}', f'min_inter_cluster_distance_{inter_method}'])
+        cluster_metadata_df = self._init_cluster_metadata([f'intra_cluster_distance_{intra_dist_method}', f'min_inter_cluster_distance_{inter_dist_method}'])
 
         for i in tqdm(range(self.n_clusters), desc='get_dunn_index'):
-            inter_cluster_distances = [self._get_inter_cluster_distance(i, j, embeddings=embeddings, method=inter_method) for j in range(self.n_clusters) if (i != j)]
-            cluster_metadata_df.loc[i, f'intra_cluster_distance_{intra_method}'] = self._get_intra_cluster_distance(i, embeddings=embeddings, method=intra_method)
-            cluster_metadata_df.loc[i, f'min_inter_cluster_distance_{inter_method}'] = min(inter_cluster_distances)
+            inter_cluster_distances = [self._get_inter_cluster_distance(i, j, embeddings=embeddings, method=inter_dist_method) for j in range(self.n_clusters) if (i != j)]
+            cluster_metadata_df.loc[i, f'intra_cluster_distance_{intra_dist_method}'] = self._get_intra_cluster_distance(i, embeddings=embeddings, method=intra_dist_method)
+            cluster_metadata_df.loc[i, f'min_inter_cluster_distance_{inter_dist_method}'] = min(inter_cluster_distances)
 
-        dunn_index = cluster_metadata_df[f'intra_cluster_distance_{intra_method}'].max()
-        dunn_index /= cluster_metadata_df[f'min_inter_cluster_distance_{inter_method}'].min()
+        dunn_index = cluster_metadata_df[f'intra_cluster_distance_{intra_dist_method}'].max()
+        dunn_index /= cluster_metadata_df[f'min_inter_cluster_distance_{inter_dist_method}'].min()
 
         return dunn_index, cluster_metadata_df
     
     def get_davies_bouldin_index(self, dataset):
+        '''To compute the Davies-Bouldin index for a specific cluster i, first compute the intra-cluster distance (measured as the mean distance of each
+        point to the cluster center) for cluster i. Then, compute the intra-cluster distance for every other cluster j != i, and divide the sum by the
+        distance between the i and j cluster centers. Take the maximum of these values; the maximum value is for the cluster pair i, j for which the separation
+        is the worst.'''
         self._check_dataset(dataset)
         embeddings = self._preprocess(dataset, fit=False)
-        
-        cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=[f'intra_cluster_distance_center', 'davies_bouldin_index'])
- 
+        cluster_metadata_df = self._init_cluster_metadata([f'intra_cluster_distance_center', 'davies_bouldin_index'])
+
+        # Pre-compute pairwise distances between cluster centers, as well as intra-cluster distances. 
         D = PackedDistanceMatrix.from_array(self.cluster_centers) # Might need to do this one at a time if memory is a problem. 
-        
-        sigma = np.array([self._get_intra_cluster_distance(i, embeddings=embeddings) for i in range(self.n_clusters)])
+        print(f'Clusterer.get_davies_bouldin_index: Computed pairwise distances between cluster centers.', flush=True)
+        sigma = np.array([self._get_intra_cluster_distance(i, embeddings=embeddings, method='center') for i in range(self.n_clusters)])
+        print(f'Clusterer.get_davies_bouldin_index: Computed intra-cluster distances using method "center."', flush=True)
+
         for i in range(self.n_clusters):
             cluster_metadata_df['davies_bouldin_index'] = max([(sigma[i] + sigma[j]) / D[i, j] for j in range(self.n_clusters) if (i != j)])
         cluster_metadata_df['intra_cluster_distance_center'] = sigma 
