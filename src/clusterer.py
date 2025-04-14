@@ -309,6 +309,7 @@ class Clusterer():
             a_x, b_x = a(x, i), b(x, i)
             return (b_x - a_x) / max(a_x, b_x)
         
+        print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
         silhouette_index = dict() # Store silhouette score computations by cluster. 
         for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
             i = self.cluster_ids[x]
@@ -319,9 +320,9 @@ class Clusterer():
         for i in silhouette_index.keys():
             cluster_metadata_df.loc[i, 'silhouette_index_mean'] = np.mean(silhouette_index[i])
             cluster_metadata_df.loc[i, 'silhouette_index_weight'] = len(silhouette_index[i])
-            cluster_metadata_df.loc[i, 'silhouette_index_min'] = np.min(silhouette_index[i])
-            cluster_metadata_df.loc[i, 'silhouette_index_max'] = np.max(silhouette_index[i])
-            cluster_metadata_df.loc[i, 'silhouette_index_n_negative'] = (np.array(silhouette_index[i]) < 0).sum()
+            # cluster_metadata_df.loc[i, 'silhouette_index_min'] = np.min(silhouette_index[i])
+            # cluster_metadata_df.loc[i, 'silhouette_index_max'] = np.max(silhouette_index[i])
+            # cluster_metadata_df.loc[i, 'silhouette_index_n_negative'] = (np.array(silhouette_index[i]) < 0).sum()
         silhouette_index = [value for values in silhouette_index.values() for value in values] # Unravel the silhouette values. 
         silhouette_index = np.array(silhouette_index).mean(axis=None)
 
