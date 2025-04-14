@@ -64,7 +64,6 @@ class PackedDistanceMatrix():
         self.matrix[0, self._get_index_vectorized(i, j)] = values
 
     def _get_vectorized(self, i:np.ndarray, j:np.ndarray):
-        print(len(self._get_index_vectorized(i, j)))
         return self.matrix[0, self._get_index_vectorized(i, j)].data
     
     @classmethod
@@ -323,7 +322,8 @@ class Clusterer():
         
         # print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
         silhouette_index = dict() # Store silhouette score computations by cluster. 
-        for i_, x in enumerate(sample_idxs): # tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
+        # for i_, x in enumerate(sample_idxs): 
+        for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
             # print(f'Clusterer.get_silhouette_index: Computing silhouette index for element {i_} of {len(sample_idxs)}.', flush=True)
             i = self.cluster_ids[x]
             if i not in silhouette_index:
