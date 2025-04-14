@@ -124,7 +124,7 @@ def cluster_metric(args):
 # sbatch --mem 300GB --time 10:00:00 --mail-user prichter@caltech.edu --mail-type ALL --output dataset_cluster.out --wrap "cluster fit --dataset-path ./data/datasets/dataset.h5"
 def cluster_fit(args):
     
-    base_cluster_path = args.dataset_path.replace('.h5', '')
+    base_cluster_path = args.dataset_path.replace('.h5', f'_dims{args.dims}')
 
     if not os.path.exists(base_cluster_path + '_cluster.csv'):
         dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['label'])
