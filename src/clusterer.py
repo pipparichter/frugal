@@ -252,7 +252,7 @@ class Clusterer():
         assert np.all(dataset.index == self.index), 'Clusterer._check_dataset: Dataset and cluster indices do not match.'
         assert np.all(dataset.cluster_id == self.cluster_ids), 'Clusterer._check_dataset: Datased and cluster indices do not match.'
 
-    def _get_nearest_cluster_ids(self, M:int=15, ef_construction:int=100, k:int=50):
+    def _get_nearest_cluster_ids(self, M:int=15, ef_construction:int=100, k:int=5):
         print('Clusterer._get_nearest_cluster_ids: Initializing HNSW index for nearby cluster searches.')
         hnsw = hnswlib.Index(space='l2', dim=self.cluster_centers.shape[-1])
         hnsw.init_index(max_elements=self.n_clusters, M=M, ef_construction=ef_construction)
