@@ -14,6 +14,7 @@ import hnswlib
 from scipy.special import comb
 import sys 
 import itertools
+import time 
 
 # TODO: Is there any data leakage by fitting a StandardScaler before clustering? I don't think any more so
 #   than caused by clustering the training and testing dataset together. 
@@ -298,7 +299,7 @@ class Clusterer():
 
         cluster_sizes = np.bincount(self.cluster_ids) 
         sample_idxs = np.arange(len(self.index)) if (sample_size is None) else self._get_sample_idxs(sample_size=sample_size)
-        nearest_cluster_ids = self._get_nearest_cluster_ids()
+        nearest_cluster_ids = self._get_nearest_cluster_ids(k=20)
 
         D = PackedDistanceMatrix.from_array(embeddings, sample_idxs=sample_idxs)
 
@@ -316,7 +317,17 @@ class Clusterer():
         def s(x, i:int):
             if cluster_sizes[i] == 1:
                 return 0 # Silhouette index is not well-defined for singleton clusters. 
-            a_x, b_x = a(x, i), b(x, i)
+            
+            t1 = time.perf_counter()
+            a_x = a(x, i)
+            t2 = time.perf_counter()
+            print(f'Clusterer.get_silhouette_index: Time for computing a(x, i) on x={x} is {t2 - t1:.4f} seconds.')
+            
+            t1 = time.perf_counter()
+            b_x = b(x, i)
+            t2 = time.perf_counter()
+            print(f'Clusterer.get_silhouette_index: Time for computing b(x, i) on x={x} is {t2 - t1:.4f} seconds.')
+            
             return (b_x - a_x) / max(a_x, b_x)
         
         # print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
