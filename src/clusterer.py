@@ -59,7 +59,7 @@ class PackedDistanceMatrix():
         self.matrix[0, self._get_index(min(i, j), max(i, j))] = value
 
     @classmethod
-    def from_embeddings(cls, embeddings:np.ndarray, sample_idxs:list=None):
+    def from_embeddings(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
         n = len(embeddings)
         matrix = cls(n)
 
@@ -277,6 +277,7 @@ class Clusterer():
         
         embeddings = self.scaler.transform(dataset.numpy()).astype(np.float32)
         cluster_metadata_df = pd.DataFrame(index=np.arange(self.n_clusters), columns=['silhouette_index', 'silhouette_index_weight']) # There is a good chance that not every cluster will be represented. 
+        check_packed_distance_matrix(embeddings)
         
         cluster_sizes = np.bincount(self.cluster_ids)
         cluster_ids = np.unique(self.cluster_ids) 

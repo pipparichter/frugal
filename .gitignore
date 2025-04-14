@@ -1,4 +1,5 @@
 data/*
+**/data/*
 models/*
 tripy.egg-info
 **/__pycache__
