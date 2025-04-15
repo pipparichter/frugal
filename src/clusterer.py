@@ -48,12 +48,10 @@ class PackedDistanceMatrix():
         return offset + (j - 1)
     
     def _get_index_vectorized(self, i:np.ndarray, j:np.ndarray):
-        t1 = time.perf_counter()
+        # I timed this function, it is extremely fast. Will not be the cause of any time bottlenecks. 
         i, j = np.minimum(i, j), np.maximum(i, j)
         offset = (i * (2 * self.n - i - 1)) // 2 - i
         idx = offset + (j - 1)
-        t2 = time.perf_counter()
-        print(f'PackedDistanceMatrix._get_vectorized: Vectorized index calculation in {t2 - t1:.4f} seconds.', flush=True)
         return idx 
     
     def get(self, i:int, j:int):
@@ -73,7 +71,8 @@ class PackedDistanceMatrix():
         # For some reason, everything freaks out when I try to access this with a vector. 
         idxs = self._get_index_vectorized(i, j)
         t1 = time.perf_counter()
-        values = np.array([self.matrix[0, idx] for idx in idxs])
+        # values = np.array([self.matrix[0, idx] for idx in idxs])
+        values = self.matrix[0, idxs]
         t2 = time.perf_counter()
         print(f'PackedDistanceMatrix._get_vectorized: Retrieved {len(idxs)} elements from the matrix in {t2 - t1:.4f} seconds.', flush=True)
         return values
