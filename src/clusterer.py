@@ -416,6 +416,7 @@ class Clusterer():
         self._check_dataset(dataset)
         embeddings = self._preprocess(dataset, fit=False)
         cluster_metadata_df = self._init_cluster_metadata([f'intra_cluster_distance_center', 'davies_bouldin_index'])
+        nearest_cluster_ids = self._get_nearest_cluster_ids(k=20)
 
         # Pre-compute pairwise distances between cluster centers, as well as intra-cluster distances. 
         D = PackedDistanceMatrix.from_array(self.cluster_centers) # Might need to do this one at a time if memory is a problem. 
@@ -424,7 +425,7 @@ class Clusterer():
         print(f'Clusterer.get_davies_bouldin_index: Computed intra-cluster distances using method "center."', flush=True)
 
         for i in range(self.n_clusters):
-            cluster_metadata_df['davies_bouldin_index'] = max([(sigma[i] + sigma[j]) / D[i, j] for j in range(self.n_clusters) if (i != j)])
+            cluster_metadata_df['davies_bouldin_index'] = max([(sigma[i] + sigma[j]) / D.get(i, j) for j in nearest_cluster_ids[i]])
         cluster_metadata_df['intra_cluster_distance_center'] = sigma 
         davies_bouldin_index = cluster_metadata_df['davies_bouldin_index'].sum() / self.n_clusters
 

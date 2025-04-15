@@ -302,9 +302,9 @@ def library_get(args):
 
 
 
-# sbatch --mail-user prichter@caltech.edu --output model_v1.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --dataset-path ./data/dataset_train.h5 --model-name model_v1"
-# sbatch --mail-user prichter@caltech.edu --output model_v2.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --dataset-path ./data/dataset_train.h5 --model-name model_v2"
-# sbatch --mail-user prichter@caltech.edu --output model_v3.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --dataset-path ./data/dataset_train.h5 --model-name model_v3"
+# sbatch --mail-user prichter@caltech.edu --output model_v1.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --dataset-path ./data/datasets/dataset_train.h5 --model-name model_v1"
+# sbatch --mail-user prichter@caltech.edu --output model_v2.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --dataset-path ./data/datasets/dataset_train.h5 --model-name model_v2"
+# sbatch --mail-user prichter@caltech.edu --output model_v3.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --dataset-path ./data/datasets/dataset_train.h5 --model-name model_v3"
 def model_fit(args):
 
     model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
