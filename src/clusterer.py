@@ -48,10 +48,14 @@ class PackedDistanceMatrix():
         return offset + (j - 1)
     
     def _get_index_vectorized(self, i:np.ndarray, j:np.ndarray):
+        t1 = time.perf_counter()
         i, j = np.minimum(i, j), np.maximum(i, j)
         offset = (i * (2 * self.n - i - 1)) // 2 - i
-        return offset + (j - 1)
-
+        idx = offset + (j - 1)
+        t2 = time.perf_counter()
+        print(f'PackedDistanceMatrix._get_vectorized: Vectorized index calculation in {t2 - t1:.4f} seconds.', flush=True)
+        return idx 
+    
     def get(self, i:int, j:int):
         if i == j:
             return 0
@@ -428,7 +432,6 @@ class Clusterer():
         for i in tqdm(range(self.n_clusters), desc='Clusterer.get_davies_bouldin_index'):
             sigma_i = np.repeat(sigma[i], k)
             sigma_j = sigma[nearest_cluster_ids[i]]
-            print(np.repeat(i, k).dtype, nearest_cluster_ids[i].dtype)
             distances = D._get_vectorized(np.repeat(i, k).astype(int), nearest_cluster_ids[i].astype(int))
             cluster_metadata_df['davies_bouldin_index'] = ((sigma_i + sigma_j) / distances).max(axis=None)
         cluster_metadata_df['intra_cluster_distance_center'] = sigma 
