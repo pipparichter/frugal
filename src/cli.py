@@ -89,7 +89,7 @@ def cluster_metric(args):
         assert len(cluster_metadata_df) == n_clusters, 'cluster_metric: The length of the cluster metadata DataFrame should be equal to the number of clusters.'
 
     if args.silhouette:
-        sample_size = min(len(dataset) - 1, args.sample_size)
+        sample_size = min(len(dataset) - 1, args.silhouette_sample_size)
         silhouette_index, cluster_metadata_df_ = clusterer.get_silhouette_index(dataset, sample_size=sample_size) 
         print('cluster_metric: Silhouette index is', silhouette_index)
 
