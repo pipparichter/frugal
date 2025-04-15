@@ -72,11 +72,10 @@ class PackedDistanceMatrix():
         idxs = self._get_index_vectorized(i, j)
         t1 = time.perf_counter()
         # values = np.array([self.matrix[0, idx] for idx in idxs])
-        print(type(self.matrix))
-        values = self.matrix[0, idxs]
+        values = self.matrix[0, idxs] # Returns a COO array because of fancy indexing.
         t2 = time.perf_counter()
         print(f'PackedDistanceMatrix._get_vectorized: Retrieved {len(idxs)} elements from the matrix in {t2 - t1:.4f} seconds.', flush=True)
-        return values.A.ravel()
+        return values.toarray().ravel()
         
     @classmethod
     def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
@@ -106,7 +105,6 @@ class PackedDistanceMatrix():
             matrix._put_vectorized(idxs_[:, 0], idxs_[:, 1], distances)
 
         matrix.matrix = matrix.matrix.tocsr() # Converting to CSR for much faster read access.
-        print(type(matrix.matrix))
         return matrix
     
 
