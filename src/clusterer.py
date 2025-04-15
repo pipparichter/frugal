@@ -75,7 +75,7 @@ class PackedDistanceMatrix():
         values = self.matrix[0, idxs]
         t2 = time.perf_counter()
         print(f'PackedDistanceMatrix._get_vectorized: Retrieved {len(idxs)} elements from the matrix in {t2 - t1:.4f} seconds.', flush=True)
-        return values
+        return values.A.ravel()
         
     @classmethod
     def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
