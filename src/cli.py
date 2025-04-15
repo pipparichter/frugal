@@ -220,7 +220,7 @@ def dataset_split(args):
     output_dir = os.path.dirname(args.dataset_path)
     output_base_path = os.path.join(output_dir, os.path.basename(args.dataset_path).replace('.h5', ''))
 
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
+    dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
     splits = ClusterStratifiedShuffleSplit(dataset, n_splits=1, test_size=0.2, train_size=0.8)
     train_dataset, test_dataset = list(splits)[0]
 
