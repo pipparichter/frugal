@@ -281,7 +281,7 @@ class Clusterer():
             return distances.mean()
         distances = pairwise_distances(cluster_embeddings, metric='euclidean')
         if method == 'pairwise':
-            return distances[np.triu_indices(distances, k=1)].mean(axis=None)
+            return distances[np.triu_indices(len(distances), k=1)].mean(axis=None)
         if method == 'furthest':
             return distances.max(axis=None)
         
