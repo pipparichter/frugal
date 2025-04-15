@@ -124,9 +124,7 @@ def cluster_metric(args):
 # sbatch --mem 300GB --time 10:00:00 --mail-user prichter@caltech.edu --mail-type ALL --output dataset_cluster.out --wrap "cluster fit --dataset-path ./data/datasets/dataset.h5"
 def cluster_fit(args):
     
-    base_cluster_path = args.dataset_path.replace('.h5', f'_dims1280')
-    if args.dims is not None:
-        base_cluster_path = args.dataset_path.replace('.h5', f'_dims{args.dims}')
+    base_cluster_path = args.dataset_path.replace('.h5', '')
 
     if not os.path.exists(base_cluster_path + '_cluster.csv'):
         dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['label'])
@@ -181,8 +179,7 @@ def dataset():
     dataset_parser.add_argument('--columns', type=str, default=None)
     
     dataset_parser = subparser.add_parser('split')
-    dataset_parser.add_argument('--input-path', type=str)
-    dataset_parser.add_argument('--output-dir', default=None)
+    dataset_parser.add_argument('--dataset-path', type=str)
     dataset_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
 
     dataset_parser = subparser.add_parser('graph')
@@ -220,18 +217,18 @@ def dataset_update(args):
 
 def dataset_split(args):
 
-    output_dir = os.path.dirname(args.input_path) if (args.output_dir is None) else args.output_dir
+    output_dir = os.path.dirname(args.input_path)
     output_base_path = os.path.join(output_dir, os.path.basename(args.input_path).replace('.h5', ''))
 
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
     splits = ClusterStratifiedShuffleSplit(dataset, n_splits=1, test_size=0.2, train_size=0.8)
     train_dataset, test_dataset = list(splits)[0]
 
-    print(f'train_test_split: Writing split datasets to {output_dir}.')
+    print(f'dataset_split: Writing split datasets to {output_dir}.')
     train_dataset.to_hdf(output_base_path + '_train.h5')
     test_dataset.to_hdf(output_base_path + '_test.h5')
 
-    print(f'train_test_split: Writing dataset metadata to output directory {output_dir}.')
+    print(f'dataset_split: Writing dataset metadata to output directory {output_dir}.')
     train_dataset.metadata().to_csv(output_base_path + '_train.csv')
     test_dataset.metadata().to_csv(output_base_path + '_test.csv')
 
