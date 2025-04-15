@@ -428,8 +428,8 @@ class Clusterer():
         for i in tqdm(range(self.n_clusters), desc='Clusterer.get_davies_bouldin_index'):
             sigma_i = np.repeat(sigma[i], k)
             sigma_j = sigma[nearest_cluster_ids[i]]
-            print(np.repeat(i, k), nearest_cluster_ids[i])
-            distances = D._get_vectorized(np.repeat(i, k), nearest_cluster_ids[i])
+            print(np.repeat(i, k).dtype, nearest_cluster_ids[i].dtype)
+            distances = D._get_vectorized(np.repeat(i, k).astype(int), nearest_cluster_ids[i].astype(int))
             cluster_metadata_df['davies_bouldin_index'] = ((sigma_i + sigma_j) / distances).max(axis=None)
         cluster_metadata_df['intra_cluster_distance_center'] = sigma 
         davies_bouldin_index = cluster_metadata_df['davies_bouldin_index'].sum() / self.n_clusters
