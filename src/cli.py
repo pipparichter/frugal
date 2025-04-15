@@ -301,22 +301,14 @@ def library_get(args):
     print(f'library_get: Embeddings of type {args.feature_type} written to {output_path}')
 
 
-# v1 1280,1024,2
-# v2 1280,1024,512,2
-# v3 1280,1024,512,256,2
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name model_v1"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name model_v2"
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name model_v3"
+# sbatch --mail-user prichter@caltech.edu --output model_v1.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name model_v1"
+# sbatch --mail-user prichter@caltech.edu --output model_v2.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name model_v2"
+# sbatch --mail-user prichter@caltech.edu --output model_v3.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name model_v3"
 def model_fit(args):
 
     model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=['cluster_id', 'label', 'domain'])
-
-    if not args.include_viruses:
-        subset_idxs = np.where(dataset.domain != 'Viruses')[0]
-        print(f'model_fit: Excluding {len(dataset) - len(subset_idxs)} viral proteins from the training data.')
-        dataset = dataset.subset(subset_idxs)
+    dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['cluster_id', 'label'])
 
     dims = [int(d) for d in args.dims.split(',')] if (args.dims is not None) else [dataset.n_features, 512, dataset.n_classes]
     assert dims[0] == dataset.n_features, f'model_fit: First model dimension {dims[0]} does not match the number of features {dataset.n_features}.'
@@ -339,21 +331,6 @@ def model_fit(args):
     best_model.save(model_path)
     print(f'model_fit: Saved best model to {model_path}')
 
-
-# def model_tune(args):
-
-#     base_model_path = os.path.join(args.output_dir, args.base_model_name + '.pkl')
-#     model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
-
-#     # When fine-tuning, should I just use the same dataset for training and validation? Or just not use a validation set. 
-#     model = Classifier.load(base_model_path)
-#     dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=['label'])
-#     model.scale(dataset, fit=False) # Use the existing StandardScaler without re-fitting.
-#     model.fit(Datasets(dataset, dataset), fit_loss_func=False, batch_size=args.batch_size, epochs=args.epochs)
-#     # Don't load the best model weights here. 
-
-#     model.save(model_path)
-#     print(f'model_fit: Saved best model to {model_path}')
 
 
 def model_predict(args):
@@ -389,8 +366,7 @@ def model():
     subparser = parser.add_subparsers(title='model', dest='subcommand', required=True)
 
     model_parser = subparser.add_parser('fit')
-    model_parser.add_argument('--input-path', type=str)
-    model_parser.add_argument('--cluster-path', type=str, default='./data/dataset_dereplicated_cluster.csv')
+    model_parser.add_argument('--dataset-path', type=str)
     model_parser.add_argument('--model-name', type=str)
     model_parser.add_argument('--output-dir', default='./models', type=str)
     model_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
@@ -399,16 +375,6 @@ def model():
     model_parser.add_argument('--batch-size', default=16, type=int)
     model_parser.add_argument('--n-splits', default=1, type=int)
     model_parser.add_argument('--include-viruses', action='store_true')
-
-
-    # model_parser = subparser.add_parser('tune')
-    # model_parser.add_argument('--input-path', type=str)
-    # model_parser.add_argument('--base-model-name', default=None, type=str)
-    # model_parser.add_argument('--model-name', default=None, type=str)
-    # model_parser.add_argument('--output-dir', default='./models', type=str)
-    # model_parser.add_argument('--epochs', default=50, type=int)
-    # model_parser.add_argument('--batch-size', default=16, type=int)
-    # model_parser.add_argument('--n-splits', default=5, type=int)
 
 
     model_parser = subparser.add_parser('predict')
