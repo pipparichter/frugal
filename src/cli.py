@@ -103,7 +103,7 @@ def cluster_metric(args):
 
     # For inter-cluster distances, always returns the smallest non-self value computed acoss all clusters. 
     elif args.min_inter_dist:
-        method = args.inter_dist_method
+        method = args.min_inter_dist_method
         assert method in clusterer.inter_dist_methods, f'cluster_metric: {method} is not a valid method for computing inter-cluster distances.'
         min_inter_cluster_distance, cluster_metadata_df_ = clusterer.get_min_inter_cluster_distance(dataset, method=method) 
         print(f'cluster_metric: Mean minimum inter-cluster distance using method {method} is', min_inter_cluster_distance)
@@ -302,9 +302,9 @@ def library_get(args):
 
 
 
-# sbatch --mail-user prichter@caltech.edu --output model_v1.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --input-path ./data/dataset_train.h5 --model-name model_v1"
-# sbatch --mail-user prichter@caltech.edu --output model_v2.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --input-path ./data/dataset_train.h5 --model-name model_v2"
-# sbatch --mail-user prichter@caltech.edu --output model_v3.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --input-path ./data/dataset_train.h5 --model-name model_v3"
+# sbatch --mail-user prichter@caltech.edu --output model_v1.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,2 --dataset-path ./data/dataset_train.h5 --model-name model_v1"
+# sbatch --mail-user prichter@caltech.edu --output model_v2.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,2 --dataset-path ./data/dataset_train.h5 --model-name model_v2"
+# sbatch --mail-user prichter@caltech.edu --output model_v3.out --mail-type ALL --mem 80GB --partition gpu --gres gpu:1 --time 100:00:00 --wrap "model fit --dims 1280,1024,512,256,2 --dataset-path ./data/dataset_train.h5 --model-name model_v3"
 def model_fit(args):
 
     model_path = os.path.join(args.output_dir, args.model_name + '.pkl')
