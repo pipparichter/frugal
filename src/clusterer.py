@@ -42,8 +42,10 @@ class PackedDistanceMatrix():
         self.lookup_map = None
 
     def _init_lookup(self):
-        lookup_data = self.matrix[0].data 
-        lookup_idxs = self.matrix[0].indices 
+        # There is new scipy behavior with the csr_array where indexing returns a COO (coordinate) array (not a CSR array).
+        # Need to use getrow to explicitly keep the output in CSR format.
+        lookup_data = self.matrix.getrow(0).data 
+        lookup_idxs = self.matrix.getrow(0).indices 
         self.lookup_map = dict(zip(lookup_idxs, lookup_data))
 
     def _get_index(self, i:int, j:int):
