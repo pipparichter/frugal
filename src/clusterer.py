@@ -310,7 +310,7 @@ class Clusterer():
         # Get the k nearest clusters to avoid computing inter-cluster distances between every cluster.  
         nearest_cluster_ids = self._get_nearest_cluster_ids(k=20)
         for i in tqdm(np.arange(self.n_clusters), desc='Clusterer.get_min_inter_cluster_distance'):
-            inter_cluster_distances = [self._get_inter_cluster_distance(i, j, embeddings=embeddings, method=method) for j in nearest_cluster_ids[j]]
+            inter_cluster_distances = [self._get_inter_cluster_distance(i, j, embeddings=embeddings, method=method) for j in nearest_cluster_ids[i]]
             cluster_metadata_df.loc[i, f'min_inter_cluster_distance_{method}'] = min(inter_cluster_distances)
 
         min_inter_cluster_distance = cluster_metadata_df[f'min_inter_cluster_distance_{method}'].mean()
