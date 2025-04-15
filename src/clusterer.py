@@ -271,7 +271,8 @@ class Clusterer():
         hnsw.set_ef(50)
         hnsw.add_items(self.cluster_centers)
         nearest_cluster_ids, _ = hnsw.knn_query(self.cluster_centers, k=k)
-        return nearest_cluster_ids # Returns an (N, k) array with the labels of the nearest clusters. 
+        # Make sure to exclude the first result, which is apparently just the cluster itself.
+        return nearest_cluster_ids[:, 1:] # Returns an (N, k) array with the labels of the nearest clusters. 
 
     def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
         cluster_embeddings = embeddings[self.cluster_idxs[i]]
