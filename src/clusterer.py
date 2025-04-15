@@ -39,6 +39,12 @@ class PackedDistanceMatrix():
         print(f'PackedDistanceMatrix.__init__: Packed distance matrix will require at most {self.size} elements, requiring {mem:.3f}GB of memory.', flush=True)
         self.matrix = lil_array((1, self.size), dtype=dtype) # Storing as a sparse array to efficiently handle computing distance matrices for sub-samples.
 
+        self.lookup_map = None
+
+    def _init_lookup(self):
+        lookup_data = self.matrix[0].data 
+        lookup_idxs = self.matrix[0].indices 
+        self.lookup_map = dict(zip(lookup_idxs, lookup_data))
 
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
@@ -72,10 +78,11 @@ class PackedDistanceMatrix():
         idxs = self._get_index_vectorized(i, j)
         t1 = time.perf_counter()
         # values = np.array([self.matrix[0, idx] for idx in idxs])
-        values = self.matrix[0, idxs] # Returns a COO array because of fancy indexing.
+        # values = self.matrix[0, idxs] # Returns a COO array because of fancy indexing.
+        values = np.array([self.lookup_map.get(idx, 0.0) for idx in idxs], dtype=np.float32)
         t2 = time.perf_counter()
         print(f'PackedDistanceMatrix._get_vectorized: Retrieved {len(idxs)} elements from the matrix in {t2 - t1:.4f} seconds.', flush=True)
-        return values.toarray().ravel()
+        return values
         
     @classmethod
     def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
@@ -105,6 +112,7 @@ class PackedDistanceMatrix():
             matrix._put_vectorized(idxs_[:, 0], idxs_[:, 1], distances)
 
         matrix.matrix = matrix.matrix.tocsr() # Converting to CSR for much faster read access.
+        matrix._init_lookup()
         return matrix
     
 
