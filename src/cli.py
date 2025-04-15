@@ -109,7 +109,7 @@ def cluster_metric(args):
         print(f'cluster_metric: Mean minimum inter-cluster distance using method {method} is', min_inter_cluster_distance)
 
     elif args.intra_dist:
-        method = args.inter_dist_method
+        method = args.intra_dist_method
         assert method in clusterer.intra_dist_methods, f'cluster_metric: {method} is not a valid method for computing intra-cluster distances.'
         intra_cluster_distance, cluster_metadata_df_ = clusterer.get_intra_cluster_distance(dataset, method=method) 
         print(f'cluster_metric: Mean intra-cluster distance using method {method} is', intra_cluster_distance)
