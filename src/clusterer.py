@@ -275,6 +275,8 @@ class Clusterer():
 
     def _get_intra_cluster_distance(self, i:int, method:str='center', embeddings:np.ndarray=None):
         cluster_embeddings = embeddings[self.cluster_idxs[i]]
+        if len(cluster_embeddings) == 1:
+            return 0
         if method == 'center':
             cluster_center = np.expand_dims(self.cluster_centers[i], axis=0)
             distances = pairwise_distances(cluster_center, cluster_embeddings, metric='euclidean')
