@@ -42,7 +42,7 @@ def cluster():
     cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     cluster_parser.add_argument('--n-clusters', default=10000, type=int)
     cluster_parser.add_argument('--bisecting-strategy', default='largest_non_homogenous', type=str)
-    cluster_parser.add_argument('--dims', type=int, default=None)
+    cluster_parser.add_argument('--dims', type=int, default=100)
 
     cluster_parser = subparser.add_parser('predict')
     cluster_parser.add_argument('--input-path', type=str)
@@ -184,10 +184,11 @@ def dataset():
     dataset_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
 
     dataset_parser = subparser.add_parser('graph')
-    dataset_parser.add_argument('--input-path', type=str)
+    dataset_parser.add_argument('--dataset-path', type=str)
     dataset_parser.add_argument('--output-path', default=None)
     dataset_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
     dataset_parser.add_argument('--radius', default=15, type=float)
+    dataset_parser.add_argument('--dims', default=100, type=int)
     
     args = parser.parse_args()
     
@@ -203,7 +204,7 @@ def dataset_graph(args):
 
     output_path = args.input_path.replace('.h5', '_graph.pkl') if (args.output_path is None) else args.output_path
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
-    graph = RadiusNeighborsGraph(radius=args.radius)
+    graph = RadiusNeighborsGraph(radius=args.radius, dims=args.dims)
     graph.fit(dataset)
     print(f'dataset_graph: Writing radius neighbors graph with radius {args.radius} to {output_path}')
     graph.save(output_path)

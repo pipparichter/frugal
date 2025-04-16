@@ -1,8 +1,12 @@
 import unittest 
 from sklearn.metrics import silhouette_score, davies_bouldin_score, pairwise_distances
-
+from src.dataset import Dataset
+from src.clusterer import Clusterer
+import pandas as pd
 
 class TestClusterer(unittest.TestCase):
+    dataset_df = pd.read_csv('/home/prichter/Documents/frugal/tests/data/dataset_subset.csv', index_col=0)
+    dataset = Dataset.from_hdf('/home/prichter/Documents/frugal/tests/data/dataset_subset.h5', attrs=['cluster_id', 'label'])
 
     def test_silhouette_index(self):
         pass

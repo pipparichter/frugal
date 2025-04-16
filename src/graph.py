@@ -15,12 +15,14 @@ import pandas as pd
 
 class RadiusNeighborsGraph():
 
-    def __init__(self, radius:float=15):
+    def __init__(self, radius:float=15, dims:int=100):
         self.random_state = 42
         self.radius = radius # Radius is inclusive. 
         self.graph = None 
         self.neighbor_idxs = None
         self.scaler = StandardScaler()
+        self.pca = PCA(n_components=dims)
+        self.dims = dims
 
         self.metadata = None
         self.id_to_index_map = None # Will store a dictionary mapping IDs to numerical indices. 
