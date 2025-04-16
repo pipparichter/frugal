@@ -3,7 +3,7 @@ import pandas as pd
 from src.dataset import Dataset, Datasets, update_metadata
 from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
-from src.graph import RadiusNeighborsGraph
+from src.graph import NeighborsGraph
 import argparse
 from src.clusterer import Clusterer
 from src.reference import Reference, ReferenceAnnotator
@@ -187,8 +187,9 @@ def dataset():
     dataset_parser.add_argument('--dataset-path', type=str)
     dataset_parser.add_argument('--output-path', default=None)
     dataset_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    dataset_parser.add_argument('--radius', default=25, type=float)
+    dataset_parser.add_argument('--radius', default=15, type=float)
     dataset_parser.add_argument('--dims', default=100, type=int)
+    dataset_parser.add_argument('--n-neighbors', default=5, type=int)
     
     args = parser.parse_args()
     
@@ -204,7 +205,7 @@ def dataset_graph(args):
 
     output_path = args.dataset_path.replace('.h5', '_graph.pkl') if (args.output_path is None) else args.output_path
     dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
-    graph = RadiusNeighborsGraph(radius=args.radius, dims=args.dims)
+    graph = NeighborsGraph(radius=args.radius, dims=args.dims, n_neighbors=args.n_neighbors)
     graph.fit(dataset)
     print(f'dataset_graph: Writing radius neighbors graph with radius {args.radius} to {output_path}')
     graph.save(output_path)
