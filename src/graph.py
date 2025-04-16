@@ -35,6 +35,7 @@ class RadiusNeighborsGraph():
         embeddings = self.pca.fit_transform(embeddings)
         explained_variance = self.pca.explained_variance_ratio_.sum()
         print(f'RadiusNeighborsGraph._preprocess: Used PCA to reduce dimensions from {dims} to {self.dims}. Total explained variance is {explained_variance:4f}.')
+        return embeddings
 
     def _get_neighbor_idxs(self, id_:str) -> np.ndarray:
         idx = self.id_to_index_map[id_]

@@ -7,9 +7,10 @@ import pandas as pd
 class TestClusterer(unittest.TestCase):
     dataset_df = pd.read_csv('/home/prichter/Documents/frugal/tests/data/dataset_subset.csv', index_col=0)
     dataset = Dataset.from_hdf('/home/prichter/Documents/frugal/tests/data/dataset_subset.h5', attrs=['cluster_id', 'label'])
+    clusterer = Clusterer.load('/home/prichter/Documents/frugal/tests/data/dataset_subset_cluster.pkl')
 
     def test_silhouette_index(self):
-        pass
+        silhouette_index, 
 
 
 class TestPackedDistanceMatrix(unittest.TestCase):

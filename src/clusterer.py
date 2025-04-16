@@ -333,7 +333,7 @@ class Clusterer():
         cluster_metadata_df = self._init_cluster_metadata([f'intra_cluster_distance_{method}'])
 
         for i in tqdm(np.arange(self.n_clusters), desc='Clusterer.get_intra_cluster_distance'):
-            cluster_metadata_df.loc[i, f'min_inter_cluster_distance_{method}'] = self._get_intra_cluster_distance(i, method=method, embeddings=embeddings)
+            cluster_metadata_df.loc[i, f'intra_cluster_distance_{method}'] = self._get_intra_cluster_distance(i, method=method, embeddings=embeddings)
 
         intra_cluster_distance = cluster_metadata_df[f'min_inter_cluster_distance_{method}'].mean() # Use the mean of the intra-cluster distances as a summary statistic.
         return intra_cluster_distance, cluster_metadata_df
