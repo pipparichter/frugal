@@ -337,14 +337,14 @@ def model_fit(args):
 # srun --mem 100GB --time 1:00:00 model predict --dataset-path ./data/datasets/dataset_test.h5 --model-path ./models/*
 def model_predict(args):
 
-    output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '_predict.csv'))   
+    output_path = os.path.join(args.output_dir, os.path.basename(args.dataset_path).replace('.h5', '_predict.csv'))   
 
     for model_path in args.model_path:
         model_name = os.path.basename(model_path).replace('.pkl', '')
         model = Classifier.load(model_path)
         model.load_best_weights()
 
-        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=[])
+        dataset = Dataset.from_hdf(args.dataset_path, feature_type=model.feature_type, attrs=[])
 
         model.scale(dataset, fit=False)
         model_labels, outputs = model.predict(dataset, include_outputs=True)
