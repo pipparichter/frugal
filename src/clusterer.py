@@ -43,7 +43,7 @@ class PackedDistanceMatrix():
 
     def _init_lookup(self):
         # There is new scipy behavior with the csr_array where indexing returns a COO (coordinate) array (not a CSR array).
-        # Need to useconvert explicitly output in CSR format.
+        # Need to convert explicitly.
         lookup_data = self.matrix[0].tocsr().data 
         lookup_idxs = self.matrix[0].tocsr().indices 
         self.lookup_map = dict(zip(lookup_idxs, lookup_data))
@@ -51,11 +51,14 @@ class PackedDistanceMatrix():
     def _get_index(self, i:int, j:int):
         '''Convert a two-dimensional index to a one-dimensional index.'''
         i, j = min(i, j), max(i, j)
-        offset = (i * (2 * self.n - i - 1)) // 2 - i # I think we need to subtract i so we are back into an index (otherwise gets shifted by one each time)
+        offset = (i * (2 * self.n - i - 1)) // 2 # I think we need to subtract i so we are back into an index (otherwise gets shifted by one each time)
         # offset = 0 if (i == 0) else sum([self.n - (i_ + 1) - 1 for i_ in range(i)]) # The number of elements before row i, shifted one to the left so that it's an index. 
-        return offset + (j - 1)
+        return offset + (j - i - 1)
     
     def _get_index_vectorized(self, i:np.ndarray, j:np.ndarray):
+        # Indexing breaks down when you try to put elements along the diagonal of the original matrix, as the internal array
+        # assumes the diagonal is not being stored
+        assert np.all(i != j), 'PackedDistanceMatrix.get_index_vectorized: Should not be trying to access points where i == j.'
         # I timed this function, it is extremely fast. Will not be the cause of any time bottlenecks. 
         i, j = np.minimum(i, j), np.maximum(i, j)
         offset = (i * (2 * self.n - i - 1)) // 2 - i
@@ -75,34 +78,44 @@ class PackedDistanceMatrix():
     def _put_vectorized(self, i:np.ndarray, j:np.ndarray, values:np.ndarray):
         self.matrix[0, self._get_index_vectorized(i, j)] = values
     
-    def _get_vectorized(self, i: np.ndarray, j: np.ndarray):
+    def _get_vectorized(self, i:np.ndarray, j:np.ndarray):
         # For some reason, everything freaks out when I try to access this with a vector. 
         idxs = self._get_index_vectorized(i, j)
         # values = np.array([self.matrix[0, idx] for idx in idxs])
         # values = self.matrix[0, idxs] # Returns a COO array because of fancy indexing.
         values = np.array([self.lookup_map.get(idx, 0.0) for idx in idxs], dtype=np.float32)
         return values
+    
+    def toarray(self):
+        array = np.zeros((self.n, self.n))
+        for i, j in itertools.combinations(range(self.n), 2):
+            value = self.get(i, j)
+            array[i, j] = value
+            array[j, i] = value
+        return array
         
     @classmethod
     def from_array(cls, embeddings:np.ndarray, sample_idxs:list=None, batch_size:int=1000):
         n = len(embeddings)
+        sample_idxs = np.arange(n) if (sample_idxs is None) else sample_idxs
         matrix = cls(n)
 
         # When computing the silhouette index, it is going to be necessary to subset the dataset. In this case, I only want to 
         # compute distances between the sampled elements versus all other entries in the dataset. However, I still want to take
         # advantage of symmetry to avoid computing a full (sample_size, n) distance matrix, so I decided to 
         # make the PackedDistanceMatrix sparse. 
-        if sample_idxs is not None: # Only compute distances relative to an index in the sample subset.
-            i_idxs, j_idxs = np.meshgrid(np.arange(n), sample_idxs, indexing='ij')
-            i_idxs, j_idxs = i_idxs.ravel(), j_idxs.ravel()
-            i_idxs, j_idxs = np.minimum(i_idxs, j_idxs), np.maximum(i_idxs, j_idxs)
-            idxs = np.unique(np.stack([i_idxs, j_idxs], axis=1), axis=0)
-        else:
-            idxs = list(itertools.combinations(np.arange(n), 2))
-            idxs = np.array(idxs)
+        i_idxs, j_idxs = np.meshgrid(np.arange(n), sample_idxs, indexing='ij')
+        i_idxs, j_idxs = i_idxs.ravel(), j_idxs.ravel()
+        i_idxs, j_idxs = np.minimum(i_idxs, j_idxs), np.maximum(i_idxs, j_idxs)
+        idxs = np.unique(np.stack([i_idxs, j_idxs], axis=1), axis=0)
+        idxs = idxs[idxs[:, 0] != idxs[:, 1]]
+
+        # Expected number of indices is the sample size choose 2 plus times the number of sample embeddings times the total number of embeddings subtracted by the sample size.
+        expected_n_idxs = ((n - len(sample_idxs)) * len(sample_idxs)) + comb(len(sample_idxs), 2)
+        assert len(idxs) == expected_n_idxs, f'PackedDistanceMatrix.from_array: Expected {expected_n_idxs}, but saw {len(idxs)}.'
 
         mem = np.dtype(matrix.dtype).itemsize * len(idxs) / (1024 ** 3)
-        print(f'PackedDistanceMatrix.__init__: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
+        print(f'PackedDistanceMatrix.from_array: Adding {len(idxs)} entries to the packed distance matrix, requiring {mem:.3f}GB of memory.', flush=True)
 
         n_batches = int(np.ceil(len(idxs) / batch_size))
         batched_idxs = np.array_split(idxs, n_batches, axis=0)
@@ -355,8 +368,11 @@ class Clusterer():
 
         def a(x, i:int):
             '''For a datapoint in cluster i, compute the mean distance from all elements in cluster i.'''
-            d = D._get_vectorized(np.repeat(x, cluster_sizes[i]), self.cluster_idxs[i])
-            assert len(d) == cluster_sizes[i], 'Clusterer.get_silhouette_index: The number of intra-cluster distances should be equal to the cluster size.'
+            cluster_idxs_i = self.cluster_idxs[i]
+            cluster_idxs_i = cluster_idxs_i[cluster_idxs_i != x]
+            d = D._get_vectorized(np.repeat(x, len(cluster_idxs_i)), cluster_idxs_i)
+            # Ran into an issue here where I am taking the mean of an empty slice.
+            assert (d > 0).sum() > 0, f'Clusterer.get_silhouette_index: All intra-cluster distances are zero in cluster {i} of size {cluster_sizes[i]}.'
             return d[d > 0].mean(axis=None) # Remove the one x_i to x_i distance, which will be zero. 
 
         def b(x, i:int):
@@ -367,28 +383,19 @@ class Clusterer():
         def s(x, i:int):
             if cluster_sizes[i] == 1:
                 return 0 # Silhouette index is not well-defined for singleton clusters. 
-            
-            t1 = time.perf_counter()
             a_x = a(x, i)
-            t2 = time.perf_counter()
-            print(f'Clusterer.get_silhouette_index: Time for computing a(x, i) on x={x} is {t2 - t1:.4f} seconds.', flush=True)
-            
-            t1 = time.perf_counter()
             b_x = b(x, i)
-            t2 = time.perf_counter()
-            print(f'Clusterer.get_silhouette_index: Time for computing b(x, i) on x={x} is {t2 - t1:.4f} seconds.', flush=True)
-
             return (b_x - a_x) / max(a_x, b_x)
         
-        # print('Clusterer.get_silhouette_index: Beginning silhouette index calculation.')
         silhouette_index = dict() # Store silhouette score computations by cluster. 
-        for i_, x in enumerate(sample_idxs): 
-        # for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
+        # for i_, x in enumerate(sample_idxs): 
+        for x in tqdm(sample_idxs, desc='Clusterer.get_silhouette_index', file=sys.stdout):
             i = self.cluster_ids[x]
             if i not in silhouette_index:
                 silhouette_index[i] = []
             s_x = s(x, i)
-            print(f'Clusterer.get_silhouette_index: Computed silhouette index of {s_x:.4f} for element {i_} of {len(sample_idxs)}.', flush=True)
+            assert s_x != np.nan, 'Clusterer.get_silhouette_index: Computed a NaN silhouette index.'
+            # print(f'Clusterer.get_silhouette_index: Computed silhouette index of {s_x:.4f} for element {i_} of {len(sample_idxs)}.', flush=True)
             silhouette_index[i].append(s_x)
         
         for i in silhouette_index.keys():
@@ -426,7 +433,7 @@ class Clusterer():
         self._check_dataset(dataset)
         embeddings = self._preprocess(dataset, fit=False)
         cluster_metadata_df = self._init_cluster_metadata([f'intra_cluster_distance_center', 'davies_bouldin_index'])
-        nearest_cluster_ids = self._get_nearest_cluster_ids(k=20)
+        nearest_cluster_ids = self._get_nearest_cluster_ids(k=10)
         k = nearest_cluster_ids.shape[-1] # Number of nearest clusters (will be 19)
 
         # Pre-compute pairwise distances between cluster centers, as well as intra-cluster distances. 
@@ -439,7 +446,7 @@ class Clusterer():
             sigma_i = np.repeat(sigma[i], k)
             sigma_j = sigma[nearest_cluster_ids[i]]
             distances = D._get_vectorized(np.repeat(i, k).astype(int), nearest_cluster_ids[i].astype(int))
-            cluster_metadata_df['davies_bouldin_index'] = ((sigma_i + sigma_j) / distances).max(axis=None)
+            cluster_metadata_df.loc[i, 'davies_bouldin_index'] = ((sigma_i + sigma_j) / distances).max(axis=None)
         cluster_metadata_df['intra_cluster_distance_center'] = sigma 
         davies_bouldin_index = cluster_metadata_df['davies_bouldin_index'].sum() / self.n_clusters
 
