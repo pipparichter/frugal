@@ -81,7 +81,7 @@ class NeighborsGraph():
         self.id_to_index_map = {id_:i for i, id_ in enumerate(dataset.index)}
         self.index_to_id_map = {i:id_ for i, id_ in enumerate(dataset.index)}
 
-        print(f'NeighborsGraph.fit: Fitting the NearestNeighbors object with radius {self.radius}.', flush=True)
+        print(f'NeighborsGraph.fit: Fitting the NearestNeighbors object with radius {self.radius} and {self.n_neighbors} neighbors.', flush=True)
         nearest_neighbors = NearestNeighbors(metric='euclidean', radius=self.radius, n_neighbors=self.n_neighbors)
         nearest_neighbors.fit(embeddings)
         
@@ -96,8 +96,8 @@ class NeighborsGraph():
         self.graph = self._merge_graphs(graphs)
 
         neighbor_idxs = list()
-        neighbor_idxs.append(nearest_neighbors.radius_neighbors(embeddings, radius=self.radius))
-        neighbor_idxs.append(nearest_neighbors.kneighbors(embeddings, n_neighbors=self.n_neighbors))
+        neighbor_idxs.append(nearest_neighbors.radius_neighbors(embeddings, radius=self.radius, return_distance=False))
+        neighbor_idxs.append(nearest_neighbors.kneighbors(embeddings, n_neighbors=self.n_neighbors, return_distance=False))
         self.neighbor_idxs = [np.unique(np.concatenate(idxs)) for idxs in zip(*neighbor_idxs)]
 
     def save(self, path:str):
