@@ -92,7 +92,7 @@ class NeighborsGraph():
         self.id_to_index_map = {id_:i for i, id_ in enumerate(dataset.index)}
         self.index_to_id_map = {i:id_ for i, id_ in enumerate(dataset.index)}
 
-        print(f'NeighborsGraph.fit: Fitting the NearestNeighbors object with radius {self.radius}.')
+        print(f'NeighborsGraph.fit: Fitting the NearestNeighbors object with radius {self.radius}.', flush=True)
         nearest_neighbors = NearestNeighbors(metric='euclidean', radius=self.radius, n_neighbors=self.n_neighbors)
         nearest_neighbors.fit(embeddings)
         
@@ -100,10 +100,10 @@ class NeighborsGraph():
         # Instead, opted to merge the results of two graph types, so that the space around the dense points is sufficiently well-characterized, but there 
         # are still points of comparison for the points which don't have any nearby neighbors. 
         graphs = list()
-        print(f'NeighborsGraph.fit: Building the radius neighbors graph with radius {self.radius}.')
+        print(f'NeighborsGraph.fit: Building the radius neighbors graph with radius {self.radius}.', flush=True)
         graphs += [nearest_neighbors.radius_neighbors_graph(X=embeddings, radius=self.radius, mode='distance', sort_results=True)] # Output is a CSR sparse matrix. 
-        print(f'NeighborsGraph.fit: Building the k-neighbors graph with k={self.n_neighbors}.')
-        graphs += [nearest_neighbors.kneighbors_graph(X=embeddings, k=self.n_neighbors, mode='distance', sort_results=True)] # Output is a CSR sparse matrix. 
+        print(f'NeighborsGraph.fit: Building the k-neighbors graph with k={self.n_neighbors}.', flush=True)
+        graphs += [nearest_neighbors.kneighbors_graph(X=embeddings, n_neighbors=self.n_neighbors, mode='distance', sort_results=True)] # Output is a CSR sparse matrix. 
         self.graph = self._merge_graphs(graphs)
 
         neighbor_idxs = list()
