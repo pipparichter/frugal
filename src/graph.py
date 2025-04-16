@@ -7,11 +7,11 @@ from tqdm import tqdm
 import pandas as pd
 
 # TODO: Add checks for setting metadata. 
+# TODO: Read about how radius neighbor graphs are constructed. Are all pairwise distances computed?
 
-# Decided to use a radius neighbor graph in leiu of cluster-based analysis, as I was finding that sometimes the nearest spurious cluster was not
-# the most informative (sometimes the rank 2 or 3 cluster had the results that made the most sense). I think this is related to the fact that
-# I was using distance to cluster centroids as a proxy for "closeness", but because the cluster radii can be somewhat large, I think it
-# is a better idea to just use the actual distances between embeddings. 
+# Decided to use a radius neighbor graph in leiu of cluster-based analysis.
+
+
 
 class RadiusNeighborsGraph():
 

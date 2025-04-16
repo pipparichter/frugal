@@ -202,8 +202,8 @@ def dataset():
 
 def dataset_graph(args):
 
-    output_path = args.input_path.replace('.h5', '_graph.pkl') if (args.output_path is None) else args.output_path
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
+    output_path = args.dataset_path.replace('.h5', '_graph.pkl') if (args.output_path is None) else args.output_path
+    dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
     graph = RadiusNeighborsGraph(radius=args.radius, dims=args.dims)
     graph.fit(dataset)
     print(f'dataset_graph: Writing radius neighbors graph with radius {args.radius} to {output_path}')
