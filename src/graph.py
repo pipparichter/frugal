@@ -103,7 +103,7 @@ class NeighborsGraph():
         print(f'NeighborsGraph.fit: Building the radius neighbors graph with radius {self.radius}.', flush=True)
         graphs += [nearest_neighbors.radius_neighbors_graph(X=embeddings, radius=self.radius, mode='distance', sort_results=True)] # Output is a CSR sparse matrix. 
         print(f'NeighborsGraph.fit: Building the k-neighbors graph with k={self.n_neighbors}.', flush=True)
-        graphs += [nearest_neighbors.kneighbors_graph(X=embeddings, n_neighbors=self.n_neighbors, mode='distance', sort_results=True)] # Output is a CSR sparse matrix. 
+        graphs += [nearest_neighbors.kneighbors_graph(X=embeddings, n_neighbors=self.n_neighbors, mode='distance')] # Output is a CSR sparse matrix. 
         self.graph = self._merge_graphs(graphs)
 
         neighbor_idxs = list()
