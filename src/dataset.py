@@ -50,7 +50,7 @@ Datasets = namedtuple('Datasets', ['train', 'test'])
 class Dataset(torch.utils.data.Dataset):
     label_map = {'spurious':0, 'real':1}
 
-    def __init__(self, embedding:np.ndarray=None, index:np.ndarray=None, scaled:bool=False, feature_type:str=None, path:str=None, **kwargs):
+    def __init__(self, embedding:np.ndarray=None, index:np.ndarray=None, scaled:bool=False, feature_type:str='esm_650m_gap', path:str=None, **kwargs):
 
         self.path = path # Store the path from which the Dataset was loaded. 
 
@@ -97,7 +97,7 @@ class Dataset(torch.utils.data.Dataset):
         return df
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, attrs:list=[]):
+    def from_hdf(cls, path:str, feature_type:str='esm_650m_gap', attrs:list=[]):
         embedding_df = Dataset._read_hdf(path, key=feature_type, chunk_size=100)
         metadata_df = Dataset._read_hdf(path, key='metadata')
 

@@ -32,6 +32,7 @@ def write_predict(df:pd.DataFrame, path:str):
     print(f'write_predict: Added new predictions to file at {path}.')
 
 
+
 def cluster():
     parser = argparse.ArgumentParser()
     subparser = parser.add_subparsers(title='cluster', dest='subcommand', required=True)
@@ -332,7 +333,8 @@ def model_fit(args):
     print(f'model_fit: Saved best model to {model_path}')
 
 
-
+# srun --mem 100GB --time 1:00:00 model predict --dataset-path ./data/datasets/dataset_train.h5 --model-path ./models/*
+# srun --mem 100GB --time 1:00:00 model predict --dataset-path ./data/datasets/dataset_test.h5 --model-path ./models/*
 def model_predict(args):
 
     output_path = os.path.join(args.output_dir, os.path.basename(args.input_path).replace('.h5', '_predict.csv'))   
@@ -342,8 +344,7 @@ def model_predict(args):
         model = Classifier.load(model_path)
         model.load_best_weights()
 
-        attrs = ['label'] if args.load_labels else []
-        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=attrs)
+        dataset = Dataset.from_hdf(args.input_path, feature_type=model.feature_type, attrs=[])
 
         model.scale(dataset, fit=False)
         model_labels, outputs = model.predict(dataset, include_outputs=True)
@@ -378,10 +379,9 @@ def model():
 
 
     model_parser = subparser.add_parser('predict')
-    model_parser.add_argument('--input-path', type=str)
+    model_parser.add_argument('--dataset-path', type=str)
     model_parser.add_argument('--model-path', nargs='+', type=str, default=None)
     model_parser.add_argument('--output-dir', default='./data/results/', type=str)
-    model_parser.add_argument('--load-labels', action='store_true')
 
     args = parser.parse_args()
     
@@ -389,8 +389,7 @@ def model():
         model_fit(args)
     if args.subcommand == 'predict':
         model_predict(args)
-    # if args.subcommand == 'tune':
-    #     model_tune(args)
+
 
 # sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 100GB --partition gpu --gres gpu:1 --time 24:00:00 --wrap "embed --input-path ./data/campylobacterota_dataset_boundary_errors.csv"
 def embed():
