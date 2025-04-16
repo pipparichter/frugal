@@ -187,7 +187,7 @@ def dataset():
     dataset_parser.add_argument('--dataset-path', type=str)
     dataset_parser.add_argument('--output-path', default=None)
     dataset_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    dataset_parser.add_argument('--radius', default=15, type=float)
+    dataset_parser.add_argument('--radius', default=25, type=float)
     dataset_parser.add_argument('--dims', default=100, type=int)
     
     args = parser.parse_args()
