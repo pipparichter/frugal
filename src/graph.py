@@ -45,17 +45,6 @@ class NeighborsGraph():
         neighbor_idxs = self.neighbor_idxs[idx]
         return idx, neighbor_idxs 
     
-    # def _get_neighbor_idxs_max_distance(self, id_:str, max_distance:float=None) -> tuple:
-    #     idx, neighbor_idxs = self._get_neighbor_idxs(id_)
-    #     neighbor_distances = self._get_neighbor_distances(id_)
-    #     return idx, neighbor_idxs[neighbor_distances < max_distance]
-
-    # def _get_neighbor_idxs_max_k(self, id_:str, k:int=None) -> tuple:
-    #     # Because I set sort_results=True, the neighbors should be in order of closest to furthest. 
-    #     idx, neighbor_idxs = self._get_neighbor_idxs(id_)
-    #     n = len(neighbor_idxs)
-    #     return idx, neighbor_idxs[:min(k, n)] # Just in case k is larger than the number of neighbors. 
-    
     def get_n_neighbors(self, id_) -> int:
         return len(self._get_neighbor_idxs(id_)[-1])
     
@@ -102,7 +91,7 @@ class NeighborsGraph():
         graphs = list()
         print(f'NeighborsGraph.fit: Building the radius neighbors graph with radius {self.radius}.', flush=True)
         graphs += [nearest_neighbors.radius_neighbors_graph(X=embeddings, radius=self.radius, mode='distance', sort_results=True)] # Output is a CSR sparse matrix. 
-        print(f'NeighborsGraph.fit: Building the k-neighbors graph with k={self.n_neighbors}.', flush=True)
+        print(f'NeighborsGraph.fit: Building the k-neighbors graph with {self.n_neighbors} neighbors.', flush=True)
         graphs += [nearest_neighbors.kneighbors_graph(X=embeddings, n_neighbors=self.n_neighbors, mode='distance')] # Output is a CSR sparse matrix. 
         self.graph = self._merge_graphs(graphs)
 
