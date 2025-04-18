@@ -174,7 +174,7 @@ class GBFFFile():
         return contig_id, seq, df 
 
 
-    def __init__(self, path:str, _add_evidence:bool=True):
+    def __init__(self, path:str):
         
         self.path, self.df, self.contigs = path, list(), dict() 
 

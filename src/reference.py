@@ -6,7 +6,11 @@ from src import get_genome_id, fillna
 import warnings
 import os 
 from Bio.Align import PairwiseAligner
+from Bio.Seq import Seq
+from Bio.Data.CodonTable import TranslationError
 import re
+from collections import namedtuple
+import itertools
 
 # TODO: Take a closer look at this file, GCF_000009085.1_genomic.gbff, which seems to have a lot of weirdness. It seems as though 
 #   pseudogenes are being entered as misc_features.  
@@ -14,24 +18,111 @@ import re
 #   there are overlapping genes, and the Prodigal-predicted sequence is in-frame with one of the genes, but because of mis-predicted gene boundaries,
 #   it shares the most overlap with the wrong gene. Update: This does seem to happen in some cases, e.g. NP_214608.1
 
+reverse_complement = lambda seq : str(Seq(seq).reverse_complement()).replace('T', 'U')
+
+OpenReadingFrame = namedtuple('OpenReadingFrame', ['start', 'stop', 'seq'])
+
 class Reference():
 
     query_fields = ['start', 'stop', 'partial', 'strand', 'seq', 'gc_content', 'rbs_motif', 'rbs_spacer', 'start_type']
     subject_fields = ['start', 'stop', 'partial', 'strand', 'seq']
 
+    start_codons = {11:['AUG', 'GUG', 'UUG'], 14:['AUG', 'GUG', 'UUG']}
+    stop_codons = {11:['UAA', 'UAG', 'UGA'], 14:['UAG', 'UGA']} # In code 14, UAA codes for tyrosine. 
 
-    def __init__(self, path:str):
+    def __init__(self, path:str, load_contigs:bool=False, translation_table:int=11):
 
         self.genome_id = get_genome_id(path)
-        df = GBFFFile(path).to_df()
-        df['genome_id'] = self.genome_id
-        self.df = df
+        file = GBFFFile(path)
+
+        self.df = file.to_df()
+        self.df['genome_id'] = self.genome_id
+
+        self.contigs = file.contigs if load_contigs else None # Maps contig IDs to nucleotides. 
+        self.translation_table = translation_table
+        self.start_codons = Reference.start_codons[translation_table]
+        self.stop_codons = Reference.stop_codons[translation_table]
 
     def __str__(self):
         return self.genome_id
     
     def __len__(self):
         return len(self.df)
+    
+    def _get_codon_idxs(self, seq:str, codons:list=None):
+        pattern = f"(?=({'|'.join(codons)}))" # Use lookahead assertion to allow for overlapping matches. 
+        # Use finditer instead of findall to return the start positions of each match. 
+        return [match.start(0) for match in re.finditer(pattern, seq)]
+    
+    def _get_potential_orfs(self, seq:str):
+        # This function does not filter out potential ORFs with in-frame stops. 
+        is_valid_orf = lambda start, stop : (start < stop) and (((stop - start) % 3) == 0)
+
+        orfs = list()
+
+        idxs = list()
+        idxs.append(self._get_codon_idxs(seq, self.start_codons))
+        idxs.append(self._get_codon_idxs(seq, self.stop_codons))
+
+        total = len(idxs[0]) * len(idxs[1]) # Total number of potential ORFs to scan.
+        # Do an exhaustive search of every start-stop codon pair. 
+        for start, stop in tqdm(itertools.product(*idxs), desc='Reference._get_potential_orfs', total=total):
+            if is_valid_orf(start, stop):
+                orfs.append(OpenReadingFrame(start, stop + 3, seq[start:stop + 3]))
+
+        print(f'Reference._get_potential_orfs: Found {len(orfs)} potential ORFs out of {total} start-stop codon pairs.')
+        return orfs 
+        
+    def _get_orf_translation(self, orf:OpenReadingFrame):
+        # With cds=True, will raise an exception if there is an in-frame stop, or the sequence is not a multiple of three. 
+        seq = str(Seq(orf.seq).translate(table=self.translation_table, stop_symbol='', cds=True))
+        return seq 
+    
+    @staticmethod
+    def _get_orf_coordinate(orf:OpenReadingFrame, seq_start:int=None, seq_stop:int=None, strand:int=None):
+        '''Convert the start and stop indices for an ORF, which are defined relative to the sub-sequence which was searched, back to absolute
+        coordinates (relative to the start and stop of the entire contig). Also shift the start position right by one, as the convention 
+        for gene coordinates is inclusive, one-indexed boundaries.'''
+        # If I remember correctly, both bounds are inclusive, and the start position is one-indexed. 
+        if strand == 1:
+            start = seq_start + orf.start # Both of these should be zero-indexed. 
+            stop = start + (orf.stop - orf.start)
+        elif strand == -1:
+            stop = seq_stop - orf.start
+            start = stop - (orf.stop - orf.start)
+        return (start + 1, stop) 
+    
+    def get_contig_ids(self):
+        return list(self.contigs.keys())
+    
+    def get_orfs(self, contig_id:str, start:int=None, stop:int=None, min_length:int=50):
+        
+        seq = self.contigs[contig_id][start:stop]
+        seq = seq.upper().replace('T', 'U')
+
+        orfs = dict()
+        orfs[1] = self._get_potential_orfs(seq)
+        orfs[-1] = self._get_potential_orfs(reverse_complement(seq))
+
+        orf_df = list()
+        for strand, orfs_ in orfs.items():
+            for orf in orfs_:
+                try: # This should throw an error if the ORF could not be correctly-translated as a CDS. 
+                    row = dict()
+                    row['seq'] = self._get_orf_translation(orf)
+                    row['start'], row['stop'] = self._get_orf_coordinate(orf, seq_start=start, seq_stop=stop, strand=strand)
+                    row['start_codon'] = orf.seq[:3]
+                    row['stop_codon'] = orf.seq[-3:]
+                    row['strand'] = strand
+                    row['length'] = len(row['seq'])
+                    orf_df.append(row)
+                except TranslationError as err:
+                    pass
+                    # print(f'Reference.get_orfs: Translation error, "{err}"')
+        orf_df = pd.DataFrame(orf_df, index=pd.Index([f'{contig_id}_ORF_{i}' for i in range(len(orf_df))], name='id'))
+        if min_length is not None:
+            orf_df = orf_df[orf_df.length >= min_length].copy()
+        return orf_df
 
     @staticmethod
     def is_in_frame(query, subject):

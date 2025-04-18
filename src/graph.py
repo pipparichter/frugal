@@ -60,6 +60,7 @@ class NeighborsGraph():
         neighbor_ids = self.get_neighbor_ids(id_)
         metadata_df = self.metadata.loc[neighbor_ids].copy()
         metadata_df[f'distance_to_{id_}'] = self.get_neighbor_distances(id_)
+        metadata_df = metadata_df.sort_values(f'distance_to_{id_}')
         return metadata_df
 
     def _merge_graphs(self, graphs):
