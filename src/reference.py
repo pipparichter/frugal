@@ -21,6 +21,7 @@ import itertools
 reverse_complement = lambda seq : str(Seq(seq).reverse_complement()).replace('T', 'U')
 
 OpenReadingFrame = namedtuple('OpenReadingFrame', ['start', 'stop', 'seq'])
+Query = namedtuple('Query', ['Index', 'contig_id', 'start', 'stop', 'strand'])
 
 class Reference():
 
@@ -32,7 +33,7 @@ class Reference():
 
     def __init__(self, path:str, load_contigs:bool=False, translation_table:int=11):
 
-        self.genome_id = get_genome_id(path)
+        self.genome_id = get_genome_id(path, errors='ignore', default=os.path.basename(path).replace('_genomic.gbff', ''))
         file = GBFFFile(path)
 
         self.df = file.to_df()
@@ -48,6 +49,10 @@ class Reference():
     
     def __len__(self):
         return len(self.df)
+    
+    def get_nt_seq(self, contig_id:str, start:int, stop:int):
+        contig = self.contigs[contig_id]
+        return contig[start:stop]
     
     def _get_codon_idxs(self, seq:str, codons:list=None):
         pattern = f"(?=({'|'.join(codons)}))" # Use lookahead assertion to allow for overlapping matches. 
@@ -158,11 +163,15 @@ class Reference():
         info['in_frame'] = (info['in_frame_c_terminus'] or info['in_frame_n_terminus'])
         
         return info
+    
+    def get_hits(self, contig_id:str, start:int=None, stop:int=None, strand:int=None):
+        query = Query(Index='none', start=start, contig_id=contig_id, stop=stop, strand=strand)
+        return self._get_hits(query)
 
     def _get_hits(self, query):
-        top_hits_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
+        hits_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
         # The and stop are both inclusive, so if starts or stops are equal, it counts as an overlap.  
-        hits_df = top_hits_df[~(top_hits_df.start > query.stop) & ~(top_hits_df.stop < query.start)].copy() # Everything which passes this filter overlaps with the query region. 
+        hits_df = hits_df[~(hits_df.start > query.stop) & ~(hits_df.stop < query.start)].copy() # Everything which passes this filter overlaps with the query region. 
         
         if len(hits_df) == 0:
             return None

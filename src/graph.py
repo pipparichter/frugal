@@ -6,6 +6,8 @@ from scipy.sparse import coo_matrix, csr_matrix
 import pickle
 from tqdm import tqdm
 import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
 
 # TODO: Add checks for setting metadata. 
 # TODO: Read about how radius neighbor graphs are constructed. Are all pairwise distances computed?
@@ -41,27 +43,31 @@ class NeighborsGraph():
             print(f'NeighborsGraph._preprocess: Used PCA to reduce dimensions from {dims} to {self.dims}. Total explained variance is {explained_variance:4f}.')
         return embeddings
 
-    def _get_neighbor_idxs(self, id_:str) -> np.ndarray:
+    def _get_neighbor_idxs(self, id_:str, include_query:bool=False) -> np.ndarray:
         idx = self.id_to_index_map[id_]
         neighbor_idxs = self.neighbor_idxs[idx]
-        return idx, neighbor_idxs 
+        if include_query:
+            return neighbor_idxs
+        else: # Don't include the query ID if specified. 
+            return idx, neighbor_idxs[neighbor_idxs != idx] 
     
     def get_n_neighbors(self, id_) -> int:
         return len(self._get_neighbor_idxs(id_)[-1])
     
     def get_neighbor_ids(self, id_) -> list:
         _, neighbor_idxs = self._get_neighbor_idxs(id_)
-        return [self.index_to_id_map[idx] for idx in neighbor_idxs]
+        ids = np.array([self.index_to_id_map[idx] for idx in neighbor_idxs])
+        return ids  
     
     def get_neighbor_distances(self, id_:str) -> np.ndarray:
         idx, neighbor_idxs = self._get_neighbor_idxs(id_)
-        return np.array([self.graph[idx, neighbor_idx] for neighbor_idx in neighbor_idxs]) 
+        return self.graph[idx, neighbor_idxs].toarray().ravel()
     
     def get_neighbor_metadata(self, id_:str):
         neighbor_ids = self.get_neighbor_ids(id_)
         metadata_df = self.metadata.loc[neighbor_ids].copy()
-        metadata_df[f'distance_to_{id_}'] = self.get_neighbor_distances(id_)
-        metadata_df = metadata_df.sort_values(f'distance_to_{id_}')
+        metadata_df[f'distance'] = self.get_neighbor_distances(id_)
+        metadata_df = metadata_df.sort_values(f'distance')
         return metadata_df
 
     def _merge_graphs(self, graphs):
@@ -74,7 +80,49 @@ class NeighborsGraph():
         rows, cols, data = zip(*merged_graph) # Unpack the tuples into three separate lists. 
         merged_graph = csr_matrix((data, (rows, cols)), shape=self.shape)
         return merged_graph
-        
+    
+    def _get_edges(self, subset_ids:list=None, weighted:bool=True):
+        self.graph.setdiag(0)
+        self.graph.eliminate_zeros()
+        subset_ids = list(self.id_to_index_map) if (subset_ids is None) else subset_ids
+
+        # Want to get all edges connecting the neighbors to one another as well, so get every node participating in the graph. 
+        idxs = np.unique(np.concatenate([self._get_neighbor_idxs(id_, include_query=True) for id_ in subset_ids]).ravel())
+        ids = np.array([self.index_to_id_map[idx] for idx in idxs])
+
+        # Accessing sparse arrays doesn't work the same as dense arrays; graph[idxs, idxs] gets the diagonal. 
+        graph = self.graph[np.ix_(idxs, idxs)].tocoo(copy=True) # Get as a COO matrix for easy index access. 
+
+        edges = list(zip(ids[graph.row], ids[graph.col]))
+        weights = 1 / graph.data if weighted else np.ones(len(edges))
+        weights = weights / weights.max() # Normalize the weights so the plot renders correctly. 
+        assert (weights == 0).sum() == 0, 'NeighborsGraph._get_edges: Some of the edges have zero weights.'
+
+        return edges, weights
+
+    def _get_graph(self, subset_ids:list=None, colors:dict=dict(), weighted:bool=True) -> nx.Graph:
+        graph = nx.Graph()
+
+        edges, weights = self._get_edges(subset_ids=subset_ids, weighted=weighted)
+
+        for (i, j), weight in tqdm(zip(edges, weights), desc='NeighborsGraph.get_graph'):
+            graph.add_node(i, color=colors.get(i, 'black'))
+            graph.add_node(j, color=colors.get(j, 'black'))
+            graph.add_edge(i, j, weight=weight, show=((i in subset_ids) or (j in subset_ids))) # Invert the weight for the spring layout. Weight corresponds to "attractive force."
+        return graph
+    
+    def draw(self, subset_ids:list=None, colors:dict=dict(), ax:plt.Axes=None, weighted:bool=False, **kwargs):
+
+        graph = self._get_graph(subset_ids=subset_ids, colors=colors, weighted=weighted)
+        pos = nx.spring_layout(graph, weight='weight')
+        colors = [node_data['color'] for _, node_data in graph.nodes(data=True)]
+        alphas = [int(edge_data['show']) for _, _, edge_data in graph.edges(data=True)]
+        nx.draw_networkx_nodes(graph, pos=pos, ax=ax, node_color=colors, node_size=kwargs.get('node_size', 20))
+        nx.draw_networkx_edges(graph, pos=pos, ax=ax, alpha=alphas)
+        ax.set_axis_off()
+        return graph
+
+
     def fit(self, dataset):
 
         self.shape = (len(dataset), len(dataset))

@@ -6,8 +6,7 @@ from collections import namedtuple
 import copy
 import tables 
 from tqdm import tqdm
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import StandardScaler
+import warnings 
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -68,8 +67,13 @@ class Dataset(torch.utils.data.Dataset):
         # I think that prepending an underscore to the attribute name makes the attribute inaccessible from outside the class. 
         if ('label' in self.attrs):
             self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
-            self._label = torch.from_numpy(self.label.copy()).type(torch.LongTensor).to(DEVICE)
-            self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
+            try:
+                self._label = torch.from_numpy(self.label.copy()).type(torch.LongTensor).to(DEVICE)
+                self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
+            except RuntimeError as err:
+                warnings.warn(f'Dataset.__init__: Unable to one-hot encode labels. {err}')
+                self._label = None
+                self._label_one_hot_encoded = None
 
     def has_embedding(self) -> bool:
         return (self.embedding is not None)
