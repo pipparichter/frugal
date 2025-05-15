@@ -8,11 +8,6 @@ from scipy.sparse import csr_matrix, save_npz, lil_matrix
 import subprocess
 from tqdm import tqdm
 
-# From the MMseqs user guide: The sequence identity is estimated from the local alignment bit score divided 
-# by the maximum length of the two aligned sequence segments. A linear regression function which correlates this normalized
-# score to sequence identity is then used to estimate the sequence identity. This is a better measure of degree of similarity
-# than the actual sequence identity, because it also takes the degree of similarity between aligned amino acids and the number and length
-# of gaps into account
 
 def alignment_to_csr_matrix(path:str, output_path:str=None, index=np.ndarray, chunk_size:int=100):
 
@@ -35,143 +30,176 @@ def alignment_to_csr_matrix(path:str, output_path:str=None, index=np.ndarray, ch
     return matrix
 
 
-class MMSeqs():
 
-    cleanup_files = ['{name}_rep_seq.fasta', '{name}_all_seqs.fasta']
+# TODO: Figure out what on Earth an LDDT score is. 
 
-    align_fields = ['query_id', 'subject_id', 'sequence_identity', 'alignment_length', 'n_mismatches', 'n_gaps']
-    align_fields += ['query_alignment_start', 'query_alignment_stop', 'subject_alignment_start', 'subject_alignment_stop']
-    align_fields += ['e_value', 'bit_score']
 
-    cluster_fields = ['cluster_rep', 'id']
+class Aligner():
 
-    modules = ['cluster', 'align']
-    prefix = 'mmseqs'
+    fields = dict()
+    fields['query'] = 'query_id'
+    fields['target'] = 'subject_id'
+    fields['evalue'] = 'e_value'
+    fields['fident'] = 'fraction_identical_matches'
+    fields['pident'] = 'percent_identical_matches'
+    fields['nident'] = 'n_identical_matches'
+    fields['gapopen'] = 'n_gap_open_events'
+    fields['alnlength'] = 'alignment_length'
+    fields['qseq'] = 'query_seq'
+    fields['tseq'] = 'subject_seq'
+    fields['qaln'] = 'query_aligned_seq'
+    fields['taln'] = 'subject_aligned_seq'
+    fields['mismatch'] = 'n_mismatches'
+    fields['raw'] = 'raw_alignment_score'
+    fields['bits'] = 'bit_score'
+    fields['qcov'] = 'query_coverage'
+    fields['tcov'] = 'subject_coverage'
 
-    def __init__(self, dir_:str='../data/mmseqs'):
+    minimal_field_codes = ['query', 'target', 'evalue', 'bits', 'fident', 'qseq', 'tseq', 'qcov', 'tcov', 'mismatch', 'alnlength']
 
-        # Need a directory to store temporary files. If one does not already exist, create it in the working directory.
-        self.tmp_dir = os.path.join(dir_, 'tmp') 
-        self.dir_ = dir_ 
+    program = None 
 
-        if not os.path.exists(self.dir_):
-            os.mkdir(self.dir_)
-        if not os.path.exists(self.tmp_dir):
-            os.mkdir(self.tmp_dir)
-        
-        self.cleanup_files = []
+    def __init__(self, tmp_dir:str='../data/tmp', database_dir:str='../data/databases/'):
+        self.tmp_dir = tmp_dir
+        self.database_dir = database_dir
 
-    def cleanup(self):
-        for path in self.cleanup_files:
-            if os.path.exists(path):
-                os.remove(path)
-
-    def _make_database_dir(self, database_name:str):
-        database_dir = os.path.join(self.dir_, database_name)
-        # Making a database produces a lot of output files, so want to organize them into directories. 
-        if not os.path.exists(database_dir):
-            os.mkdir(database_dir)
-        return database_dir
-
-    def _make_database(self, df:pd.DataFrame, name:str=None):
+    def _make_database(self, input_path:str, name:str=None):
         '''Create an mmseqs database from a FASTA file, using the sequences in the input DataFrame.'''
         database_name = f'{name}_database'
-        database_dir = self._make_database_dir(database_name)
-        database_path = os.path.join(database_dir, database_name)
-
-        input_path = os.path.join(self.dir_, name + '.faa')
-
-        print(f'MMSeqs._make_database: Creating database {database_name} in {database_dir}')
-        FASTAFile(df=df).write(input_path)
-        subprocess.run(f'mmseqs createdb {input_path} {database_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
-
+        database_path = os.path.join(self.database_dir, database_name)
+        if not os.path.exists(database_path):
+            print(f'Aligner._make_database: Creating database {database_name} in {self.database_dir}')
+            subprocess.run(f'{self.cmd} createdb {input_path} {database_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
         return database_path 
+    
+    def _prefilter(self, query_database_path:str, subject_database_path, query_name:str=None, subject_name:str=None, sensitivity:float=None):
 
-    def _prefilter(self, query_df:pd.DataFrame, subject_df:pd.DataFrame=None, query_name:str=None, subject_name:str=None, sensitivity:float=None):
+        prefilter_database_name = f'{query_name}_{subject_name}_prefilter_database_{self.program}'
+        prefilter_database_path = os.path.join(self.database_dir, prefilter_database_name)
 
-        subject_name = query_name if (subject_name is None) else subject_name
-
-        output_database_name = f'{query_name}_{subject_name}_prefilter_database'
-        output_database_dir = self._make_database_dir(output_database_name)
-        output_database_path = os.path.join(output_database_dir, output_database_name)
-
-        if subject_df is not None:
-            query_database_path = self._make_database(query_df, name=query_name)
-            subject_database_path = self._make_database(subject_df, name=subject_name)
-        else:
-            query_database_path = self._make_database(query_df, name=query_name)
-            subject_database_path = query_database_path
-
-        cmd = f'mmseqs prefilter {query_database_path} {subject_database_path} {output_database_path}'
+        cmd = f'{self.program} prefilter {query_database_path} {subject_database_path} {prefilter_database_path}'
         if sensitivity is not None:
             cmd += f' -s {sensitivity}'
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-        
-        return query_database_path, subject_database_path, output_database_path
-    
-    # @staticmethod
-    # def _add_cols(df:pd.DataFrame, align_df:pd.DataFrame, cols:list=[], prefix:str='query'):
-    #     assert df.index.is_unique
-    #     for col in cols:
-    #         if col not in df.columns:
-    #             continue 
-    #         align_df[f'{prefix}_{col}'] = align_df[f'{prefix}_id'].map(df[col])
-    #     return align_df
+        return prefilter_database_path
     
 
-    def align(self, query_df:pd.DataFrame, subject_df:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='../data/', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10, **kwargs):
+    def _align(self, query_database_path:str, subject_database_path, query_name:str=None, subject_name:str=None, sensitivity:float=None, max_e_value:float=None):
+        
+        prefilter_database_path = self._prefilter(query_database_path, subject_database_path, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity)
+        output_database_name = f'{query_name}_{subject_name}_align_database_{self.program}'
+        output_database_path = os.path.join(self.database_dir, output_database_name)
+
+        cmd = f'{self.program} {'structurealign' if (self.program == 'foldseek') else 'align'} {query_database_path} {subject_database_path} {prefilter_database_path} {output_database_path}'
+        if max_e_value is not None:
+            cmd += f' -e {max_e_value}'
+
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+        return output_database_path
+        
+
+    def _make_tsv_output(self, output_path:str, output_database_path:str=None, query_database_path:str=None, subject_database_path:str=None):
+        fmt = f'--format-output "{','.join(self.minimal_field_codes)}"' # Use a custom output format. 
+        cmd = f'{self.program} convertalis {query_database_path} {subject_database_path} {output_database_path} {output_path}'
+        cmd += f' {fmt}'
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+
+    @classmethod
+    def load(cls, path:str, chunk_size:int=None):
+        df = pd.read_csv(path, delimiter='\t', names=cls.minimal_field_codes, header=None, chunksize=chunk_size)
+        return df
+    
+
+
+class Foldseek(Aligner):
+
+    fields = Aligner.fields
+    fields['qca'] = 'query_calpha_coordinates'
+    fields['tca'] = 'subject_calpha_coordinates'
+    fields['alntmscore'] = 'tm_score' # This is the TM-score of the alignment. 
+    fields['qtmscore'] = 'query_normalized_tm_score'
+    fields['ttmscore'] = 'subject_normalized_tm_score'
+    fields['u'] = 'rotation_matrix'
+    fields['t'] = 'translation_vector'
+    fields['lddt'] = 'average_lddt'
+    fields['lddtfull'] = 'per_position_lddt'
+    fields['prob'] = 'probability_homologous'
+
+    minimal_field_codes = Aligner.minimal_field_codes + ['prob', 'lddt', 'alntmscore']
+
+    program = 'foldseek'
+
+    def __init__(self, tmp_dir:str='../data/tmp', database_dir:str='../data/databases/'):
+        super().__init__(tmp_dir=tmp_dir, database_dir=database_dir)
+
+
+    def align(self, query_path:pd.DataFrame, subject_path:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='.', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10, **kwargs):
         # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
         subject_name = query_name if (subject_name is None) else subject_name
-        output_path = os.path.join(output_dir, f'{query_name}_{subject_name}_align.tsv')
+        output_path = os.path.join(output_dir, f'{query_name}_{subject_name}_align_{self.program}.tsv')
 
-        if not os.path.exists(output_path) or (overwrite):
-            query_database_path, subject_database_path, prefilter_database_path = self._prefilter(query_df, subject_df=subject_df, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity)
+        query_database_path = self._make_database(query_path, name=query_name)
+        subject_database_path = self._make_database(subject_path, name=subject_name)
+
+        if not os.path.exists(output_path) or overwrite:
+            output_database_path = self._align(query_database_path, subject_database_path, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity, max_e_value=max_e_value)
+            self._make_tsv_output(output_path, output_database_path=output_database_path, query_database_path=query_database_path, subject_database_path=subject_database_path)
             
-            output_database_name = f'{query_name}_{subject_name}_align_database'
-            output_database_dir = self._make_database_dir(output_database_name)
-            output_database_path = os.path.join(output_database_dir, output_database_name)
+        align_df = Aligner.load_align(output_path)
+        return align_df
+
+
+class MMSeqs(Aligner):
+
+    cmd = 'mmseqs'
+
+    def _make_fasta(self, df:pd.DataFrame, name:str=None):
+        path = os.path.join(self.database_dir, f'{name}.faa')
+        FASTAFile(df=df).write(path)
+        return path
+
+    def align(self, query_df:pd.DataFrame, subject_df:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='.', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10, **kwargs):
+        # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
+        subject_name = query_name if (subject_name is None) else subject_name
+        subject_df = query_df if (subject_df is None) else subject_df
+
+        output_path = os.path.join(output_dir, f'{query_name}_{subject_name}_align_{self.program}.tsv')
+
+        query_path, subject_path= self._make_fasta(query_df, name=query_name), self._make_fasta(subject_df, name=subject_name)
+        query_database_path = self._make_database(query_path, name=query_name)
+        subject_database_path = self._make_database(subject_path, name=subject_name)
+
+        if not os.path.exists(output_path) or overwrite:
+            output_database_path = self._align(query_database_path, subject_database_path, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity, max_e_value=max_e_value)
+            self._make_tsv_output(output_path, output_database_path=output_database_path, query_database_path=query_database_path, subject_database_path=subject_database_path)
             
-            print(f'MMSeqs.align: Running alignment on query database {os.path.basename(query_database_path)}.')
-            cmd = f'mmseqs align {query_database_path} {subject_database_path} {prefilter_database_path} {output_database_path}'
-            cmd += f' -e {max_e_value}'
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-            subprocess.run(f'mmseqs convertalis {query_database_path} {subject_database_path} {output_database_path} {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL)
-    
-        align_df = MMSeqs.load_align(output_path, **kwargs)
-        # align_df = MMSeqs._add_cols(query_df, align_df, cols=add_cols, prefix='query')
-        # align_df = MMSeqs._add_cols(subject_df, align_df, cols=add_cols, prefix='subject')
+        align_df = Aligner.load_align(output_path, **kwargs)
         return align_df
         
 
-    def cluster(self, df:pd.DataFrame, name:str=None, output_dir:str='../data', sequence_identity:float=0.2, overwrite:bool=False):
 
-        input_path = os.path.join(output_dir, name + '.faa')
-        self.cleanup_files += [input_path]
-        output_path = os.path.join(output_dir, name)
 
-        if (not os.path.exists(output_path + '_cluster.tsv')) or overwrite:
-            FASTAFile(df=df).write(input_path)
-            subprocess.run(f'mmseqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}', shell=True, check=True, stdout=subprocess.DEVNULL)
+    # def cluster(self, df:pd.DataFrame, name:str=None, output_dir:str='../data', sequence_identity:float=0.2, overwrite:bool=False):
 
-        output_path = output_path + '_cluster.tsv'
-        self.cleanup_files += [os.path.join(output_dir, file_name.format(name=name)) for file_name in MMSeqs.cleanup_files]
+    #     input_path = os.path.join(output_dir, name + '.faa')
+    #     self.cleanup_files += [input_path]
+    #     output_path = os.path.join(output_dir, name)
 
-        return MMSeqs.load_cluster(output_path)
+    #     if (not os.path.exists(output_path + '_cluster.tsv')) or overwrite:
+    #         FASTAFile(df=df).write(input_path)
+    #         subprocess.run(f'mmseqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}', shell=True, check=True, stdout=subprocess.DEVNULL)
 
-    @staticmethod
-    def load_cluster(path:str, add_prefix:bool=False):
-        df = pd.read_csv(path, delimiter='\t', names=MMSeqs.cluster_fields)
-        cluster_ids = {rep:i for i, rep in enumerate(df.cluster_rep.unique())} # Add integer IDs for each cluster. 
-        df['cluster_id'] = [cluster_ids[rep] for rep in df.cluster_rep]
-        df = df.set_index('id')
-        if add_prefix:
-            df.columns = [f'{MMSeqs.prefix}_{col}' for col in df.columns]
-        return df
+    #     output_path = output_path + '_cluster.tsv'
+    #     self.cleanup_files += [os.path.join(output_dir, file_name.format(name=name)) for file_name in MMSeqs.cleanup_files]
 
-    @staticmethod
-    def load_align(path:str, add_prefix:bool=False, chunk_size:int=None):
-        df = pd.read_csv(path, delimiter='\t', names=MMSeqs.align_fields, header=None, chunksize=chunk_size)
-        if add_prefix:
-            df.columns = [f'{MMSeqs.prefix}_{col}' for col in df.columns]
-        return df
-    
+    #     return MMSeqs.load_cluster(output_path)
+
+    # @staticmethod
+    # def load_cluster(path:str, add_prefix:bool=False):
+    #     df = pd.read_csv(path, delimiter='\t', names=MMSeqs.cluster_fields)
+    #     cluster_ids = {rep:i for i, rep in enumerate(df.cluster_rep.unique())} # Add integer IDs for each cluster. 
+    #     df['cluster_id'] = [cluster_ids[rep] for rep in df.cluster_rep]
+    #     df = df.set_index('id')
+    #     if add_prefix:
+    #         df.columns = [f'{MMSeqs.prefix}_{col}' for col in df.columns]
+    #     return df

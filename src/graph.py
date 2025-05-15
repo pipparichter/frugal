@@ -81,45 +81,52 @@ class NeighborsGraph():
         merged_graph = csr_matrix((data, (rows, cols)), shape=self.shape)
         return merged_graph
     
-    def _get_edges(self, subset_ids:list=None, weighted:bool=True):
+    def _get_edges(self, subset_ids:list=None):
         self.graph.setdiag(0)
         self.graph.eliminate_zeros()
-        subset_ids = list(self.id_to_index_map) if (subset_ids is None) else subset_ids
 
         # Want to get all edges connecting the neighbors to one another as well, so get every node participating in the graph. 
         idxs = np.unique(np.concatenate([self._get_neighbor_idxs(id_, include_query=True) for id_ in subset_ids]).ravel())
         ids = np.array([self.index_to_id_map[idx] for idx in idxs])
 
-        # Accessing sparse arrays doesn't work the same as dense arrays; graph[idxs, idxs] gets the diagonal. 
+        # The line below gets the portion of the graph consisting of the subset IDs and all of their neighbors. 
+        # Accessing sparse arrays doesn't work the same as dense arrays; graph[idxs, idxs] gets the diagonal, so need to use the np.ix_ function. 
         graph = self.graph[np.ix_(idxs, idxs)].tocoo(copy=True) # Get as a COO matrix for easy index access. 
 
         edges = list(zip(ids[graph.row], ids[graph.col]))
-        weights = 1 / graph.data if weighted else np.ones(len(edges))
+        weights = 1 / graph.data # Use the inverse distance as the weight, as the "weight" corresponds to the attractive force between points. 
         weights = weights / weights.max() # Normalize the weights so the plot renders correctly. 
         assert (weights == 0).sum() == 0, 'NeighborsGraph._get_edges: Some of the edges have zero weights.'
 
         return edges, weights
 
-    def _get_graph(self, subset_ids:list=None, colors:dict=dict(), weighted:bool=True) -> nx.Graph:
+    def _get_graph(self, subset_ids:list=None) -> nx.Graph:
         graph = nx.Graph()
 
-        edges, weights = self._get_edges(subset_ids=subset_ids, weighted=weighted)
+        subset_ids = list(self.id_to_index_map.keys()) if (subset_ids is None) else subset_ids
+        edges, weights = self._get_edges(subset_ids=subset_ids)
 
         for (i, j), weight in tqdm(zip(edges, weights), desc='NeighborsGraph.get_graph'):
-            graph.add_node(i, color=colors.get(i, 'black'))
-            graph.add_node(j, color=colors.get(j, 'black'))
-            graph.add_edge(i, j, weight=weight, show=((i in subset_ids) or (j in subset_ids))) # Invert the weight for the spring layout. Weight corresponds to "attractive force."
+            graph.add_node(i, id_=i)
+            graph.add_node(j, id_=j)
+            # Only show the edges between things in the subset. Still want to add the edge so the topography of the graph is meaningful. 
+            graph.add_edge(i, j, weight=weight) # Invert the weight for the spring layout. Weight corresponds to "attractive force."
         return graph
     
-    def draw(self, subset_ids:list=None, colors:dict=dict(), ax:plt.Axes=None, weighted:bool=False, **kwargs):
+    def draw(self, subset_ids:list=None, colors:dict=dict(), ax:plt.Axes=None, labels=list(), **kwargs):
+        
+        if ax is None:
+            fig, ax = plt.subplots()
 
-        graph = self._get_graph(subset_ids=subset_ids, colors=colors, weighted=weighted)
-        pos = nx.spring_layout(graph, weight='weight')
-        colors = [node_data['color'] for _, node_data in graph.nodes(data=True)]
-        alphas = [int(edge_data['show']) for _, _, edge_data in graph.edges(data=True)]
-        nx.draw_networkx_nodes(graph, pos=pos, ax=ax, node_color=colors, node_size=kwargs.get('node_size', 20))
-        nx.draw_networkx_edges(graph, pos=pos, ax=ax, alpha=alphas)
+        graph = self._get_graph(subset_ids=subset_ids)
+        pos = nx.spring_layout(graph, weight='weight', seed=42)
+        colors = [colors.get(node_data['id_'], 'black') for _, node_data in graph.nodes(data=True)]
+        # alphas = [int(edge_data['show']) for _, _, edge_data in graph.edges(data=True)]
+        nx.draw_networkx_nodes(graph, pos=pos, ax=ax, node_color=colors, node_size=kwargs.get('node_size', 40))
+        nx.draw_networkx_edges(graph, pos=pos, ax=ax, alpha=0, width=0.7)
+        nx.draw_networkx_labels(graph, pos, labels={id_:id_ for id_ in labels})
         ax.set_axis_off()
+
         return graph
 
 
