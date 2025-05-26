@@ -34,7 +34,7 @@ class FASTAFile():
                 self.descriptions.append(record.description.replace(record.id, '').strip())
                 self.seqs.append(str(record.seq))
             f.close()
-        
+            
         if (df is not None):
             self.seqs = df.seq.values
             self.ids = df.index.values 

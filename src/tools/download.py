@@ -102,25 +102,17 @@ class NCBI():
             except Exception as err:
                 print(f'NCBI.get_genomes: Failed to download data for {genome_id}. Returned error message "{err}"')
 
-    def get_proteins(self, protein_ids:list, include=['protein'], path:str=None, chunk_size:int=20):
-        # Need to break into chunks because the API doesn't support more than a handful of sequences. 
-        n_chunks = np.ceil(len(protein_ids) / chunk_size).astype(int)
-        protein_ids = [','.join(protein_ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
-        
-        df = list()
-        src_path = os.path.join(NCBI.src_dir, 'protein.faa')
-        for protein_ids_ in tqdm(protein_ids, 'NCBI.get_proteins'):
-            cmd = f"datasets download gene accession {protein_ids_} --include protein --filename ncbi.zip"
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
-            subprocess.run(f'unzip -o ncbi.zip -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            df.append(FASTAFile(path=src_path).to_df(prodigal_output=False))
-        df = pd.concat(df)
-        
-        if path is not None:
-            print(f'NCBI.get_proteins: Proteins saved to {path}')
-            FASTAFile(df=df).write(path)
-        return df 
+    def get_nuccore_entries(self, nuccore_ids:list, chunk_size:int=50, dir_:str='../data/results/rpoz/gbffs'):
+        pbar = tqdm(total=len(nuccore_ids), desc='get_nuccore')
+        nuccore_ids = np.array_split(nuccore_ids, len(nuccore_ids) // chunk_size + 1)
+
+        for ids in nuccore_ids:
+            url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id={ids}&rettype=gbwithparts&retmode=text'.format(ids=','.join(ids))
+            content = requests.get(url).text
+            for id_, content_ in zip(ids, re.split('(?=LOCUS)', content)[1:]): # Split by LOCUS so that each is written individually to a file. 
+                with open(os.path.join(dir_, f'{id_}_genomic.gbff'), 'w') as f:
+                    f.write(content_)
+            pbar.update(len(ids))
 
     def cleanup(self):
         for file in NCBI.cleanup_files:
@@ -129,6 +121,20 @@ class NCBI():
         for dir_ in NCBI.cleanup_dirs:
             if os.path.isdir(dir_):
                 shutil.rmtree(dir_)
+
+
+class AlphaFold():
+
+    def __init__(self):
+        pass 
+
+    def get_structures(self, ids, dir_='../data/results/rpoz/pdbs'):
+        version = 4 # Not sure if this version will always work. 
+        for id_ in tqdm(ids, desc='get_structures'):
+            url = f'https://alphafold.ebi.ac.uk/files/AF-{id_}-F1-model_v{version}.pdb'
+            output_path = os.path.join(dir_, f'{id_}.pdb')
+            if not os.path.exists(output_path):
+                subprocess.run(f'wget {url} -O {output_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 class AntiFam():

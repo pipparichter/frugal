@@ -83,8 +83,8 @@ class ClusterStratifiedShuffleSplit():
         train_idxs = np.concat([train_idxs, self.singleton_idxs], axis=None)
 
         self.i += 1 # Increment the counter.
-        train_dataset = self.dataset.subset(train_idxs)
-        test_dataset = self.dataset.subset(test_idxs) 
+        train_dataset = self.dataset.iloc(train_idxs)
+        test_dataset = self.dataset.iloc(test_idxs) 
 
         return train_dataset, test_dataset
     

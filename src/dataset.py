@@ -6,8 +6,7 @@ from collections import namedtuple
 import copy
 import tables 
 from tqdm import tqdm
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import StandardScaler
+import warnings 
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -68,8 +67,13 @@ class Dataset(torch.utils.data.Dataset):
         # I think that prepending an underscore to the attribute name makes the attribute inaccessible from outside the class. 
         if ('label' in self.attrs):
             self.n_classes = len(np.unique(self.label)) # Infer the number of classes based on the label. 
-            self._label = torch.from_numpy(self.label.copy()).type(torch.LongTensor).to(DEVICE)
-            self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
+            try:
+                self._label = torch.from_numpy(self.label.copy()).type(torch.LongTensor).to(DEVICE)
+                self._label_one_hot_encoded = one_hot(self._label, num_classes=self.n_classes).to(torch.float32).to(DEVICE)
+            except RuntimeError as err:
+                warnings.warn(f'Dataset.__init__: Unable to one-hot encode labels. {err}')
+                self._label = None
+                self._label_one_hot_encoded = None
 
     def has_embedding(self) -> bool:
         return (self.embedding is not None)
@@ -99,16 +103,19 @@ class Dataset(torch.utils.data.Dataset):
     @classmethod
     def from_hdf(cls, path:str, feature_type:str='esm_650m_gap', attrs:list=[]):
         embedding_df = Dataset._read_hdf(path, key=feature_type, chunk_size=100)
-        metadata_df = Dataset._read_hdf(path, key='metadata')
-
-        assert len(embedding_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
-        assert np.all(embedding_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
-
         index = embedding_df.index.values.copy() # Make sure this is a numpy array. 
         embedding = embedding_df.values.copy() # Why do I need to copy this?
 
-        attrs = list(metadata_df.columns) if (attrs is None) else attrs
-        kwargs = {attr:metadata_df[attr].values.copy() for attr in attrs}
+        try:
+            metadata_df = Dataset._read_hdf(path, key='metadata')
+            assert len(embedding_df) == len(metadata_df), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
+            assert np.all(embedding_df.index == metadata_df.index), 'Dataset.from_hdf: The indices of the embedding and the metadata do not match.'
+            attrs = list(metadata_df.columns) if (attrs is None) else attrs
+            kwargs = {attr:metadata_df[attr].values.copy() for attr in attrs}
+        except Exception: # TODO: I should make this more specific. 
+            print(f'Dataset.from_hdf: No metadata stored in the Dataset at {path}')
+            kwargs = dict()
+
         return cls(embedding, feature_type=feature_type, index=index, scaled=False, path=path, **kwargs)
     
     # @classmethod
@@ -151,11 +158,24 @@ class Dataset(torch.utils.data.Dataset):
         self.attrs.append(attr)
         setattr(self, attr, values.values)
 
-    def subset(self, idxs):
+    def iloc(self, idxs):
+        '''Get a subset of the Dataset using numerical indices.'''
         embedding = self.numpy()[idxs, :].copy() if self.has_embedding() else None
         index = self.index.copy()[idxs].copy()
         kwargs = {attr:getattr(self, attr)[idxs].copy() for attr in self.attrs}
         return Dataset(embedding, index=index, scaled=self.scaled, feature_type=self.feature_type, **kwargs)
+    
+    def loc(self, ids):
+        '''Get a subset of the Dataset using sequence IDs.'''
+        idxs = np.where(np.isin(self.index, ids))[0]
+        return self.iloc(idxs)
+    
+    def concat(self, dataset):
+        assert not self.scaled, 'Dataset.concat: Cannot concatenate a scaled dataset.'
+        assert not dataset.scaled, 'Dataset.concat: Cannot concatenate a scaled dataset.'
+        embedding = np.concatenate([self.numpy(), dataset.numpy()], axis=0)
+        index = np.concatenate([self.index, dataset.index]).ravel()
+        return Dataset(embedding, index=index, scaled=False, feature_type=self.feature_type)
     
     def to_hdf(self, path:str):
         store = pd.HDFStore(path, mode='a', table=True)
@@ -170,5 +190,4 @@ class Dataset(torch.utils.data.Dataset):
             store.put(self.feature_type, embedding_df, format='table')
 
         store.close()
-
 
