@@ -16,6 +16,7 @@ import warnings
 import random
 from random import choices 
 
+
 # TODO: Read more about model weight initializations. Maybe I want to use something other than random? 
 # TODO: Why bother scaling the loss function weights by the number of classes? I think it's just a minor thing, so that regardless of the number of
 #   classes, if the dataset is balanced, the inverse frequencies are 1 regardless of the number of classes .

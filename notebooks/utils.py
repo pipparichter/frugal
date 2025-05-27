@@ -14,17 +14,7 @@ from Bio.Align import PairwiseAligner
 
 plt.rcParams['font.family'] = 'Arial'
 
-def recall(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
-    model_labels = np.where(df[f'model_output_{class_}'] > threshold, class_, int(not class_))
-    n = ((model_labels == class_) & (df.label == class_)).sum()
-    N = (df.label == class_).sum() # Total number of relevant instances (i.e. members of the class)
-    return n / N
 
-def precision(df:pd.DataFrame, class_:int=0, threshold:float=0.5) -> float:
-    model_labels = np.where(df[f'model_output_{class_}'] > threshold, class_, int(not class_))
-    n = ((model_labels == class_) & (df.label == class_)).sum()
-    N = (model_labels == class_).sum() # Total number of retrieved instances (i.e. predicted members of the class)
-    return n / N
 
 
 def get_lengths(df:pd.DataFrame, top_hit:bool=True, units='aa'):

@@ -201,14 +201,14 @@ def dataset():
         dataset_graph(args)
 
 
-# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 1TB --time 10:00:00 --wrap "dataset graph --dataset-path ./data/dataset/dataset.h5 --n-neighbors 5"
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 1TB --time 10:00:00 --wrap "dataset graph --dataset-path ./data/datasets/dataset.h5 --n-neighbors 5"
 def dataset_graph(args):
 
     output_path = args.dataset_path.replace('.h5', '_graph.pkl') if (args.output_path is None) else args.output_path
     dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=None) # Make sure to load all metadata. 
     graph = NeighborsGraph(radius=args.radius, dims=args.dims, n_neighbors=args.n_neighbors)
     graph.fit(dataset)
-    print(f'dataset_graph: Writing radius neighbors graph with radius {args.radius} to {output_path}')
+    print(f'dataset_graph: Writing graph to {output_path}')
     graph.save(output_path)
 
 
@@ -321,6 +321,9 @@ def model_fit(args):
     splits = ClusterStratifiedShuffleSplit(dataset, n_splits=args.n_splits)
     best_model = None
     for i, (train_dataset, test_dataset) in enumerate(splits):
+        # We choose to scale the dataset before training because the features which the PLM decides to "pay attention" to, i.e. the ones which help the most with the masked token
+        # prediction objective, may not be the features which inform on whether or not a protein is real or spurious. Scaling puts all features on an "even playing field" at the onset
+        # of model training. 
         model = Classifier(dims=dims, feature_type=args.feature_type)
         model.scale(train_dataset, fit=True)
         model.scale(test_dataset, fit=False)

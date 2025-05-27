@@ -12,12 +12,6 @@ import re
 from collections import namedtuple
 import itertools
 
-# TODO: Take a closer look at this file, GCF_000009085.1_genomic.gbff, which seems to have a lot of weirdness. It seems as though 
-#   pseudogenes are being entered as misc_features.  
-# TODO: Check to make sure that the sequences I have predicted as conflicts are actually conflicts. I am worried that there are some cases where
-#   there are overlapping genes, and the Prodigal-predicted sequence is in-frame with one of the genes, but because of mis-predicted gene boundaries,
-#   it shares the most overlap with the wrong gene. Update: This does seem to happen in some cases, e.g. NP_214608.1
-
 reverse_complement = lambda seq : str(Seq(seq).reverse_complement()).replace('T', 'U')
 
 OpenReadingFrame = namedtuple('OpenReadingFrame', ['start', 'stop', 'seq'])

@@ -41,8 +41,8 @@ class NeighborsGraph():
     def _preprocess(self, dataset):
         embeddings = dataset.numpy()
         dims = embeddings.shape[-1]
+        embeddings = self.scaler.fit_transform(embeddings) # Make sure to scale the data either way. 
         if dims > self.dims: # Only PCA reduce if the number of dimensions specified at initialization is less than that of the embeddings. 
-            embeddings = self.scaler.fit_transform(embeddings)
             embeddings = self.pca.fit_transform(embeddings)
             explained_variance = self.pca.explained_variance_ratio_.sum()
             print(f'NeighborsGraph._preprocess: Used PCA to reduce dimensions from {dims} to {self.dims}. Total explained variance is {explained_variance:4f}.')
