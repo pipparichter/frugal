@@ -187,7 +187,7 @@ class MMSeqs(Aligner):
         return MMSeqs.load_cluster(output_path)
 
     @staticmethod
-    def load_cluster(path:str, add_prefix:bool=False):
+    def load_cluster(path:str):
         df = pd.read_csv(path, delimiter='\t', names=['cluster_rep_id', 'id'])
         cluster_ids = {id_:i for i, id_ in enumerate(df.cluster_rep_id.unique())} # Add integer IDs for each cluster. 
         df['cluster_id'] = [cluster_ids[id_] for id_ in df.cluster_rep_id]

@@ -187,8 +187,8 @@ def dataset():
     dataset_parser.add_argument('--dataset-path', type=str)
     dataset_parser.add_argument('--output-path', default=None)
     dataset_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    dataset_parser.add_argument('--radius', default=15, type=float)
-    dataset_parser.add_argument('--dims', default=100, type=int)
+    dataset_parser.add_argument('--radius', default=None, type=float)
+    dataset_parser.add_argument('--dims', default=1280, type=int)
     dataset_parser.add_argument('--n-neighbors', default=5, type=int)
     
     args = parser.parse_args()
@@ -201,6 +201,7 @@ def dataset():
         dataset_graph(args)
 
 
+# sbatch --mail-user prichter@caltech.edu --mail-type ALL --mem 1TB --time 10:00:00 --wrap "dataset graph --dataset-path ./data/dataset/dataset.h5 --n-neighbors 5"
 def dataset_graph(args):
 
     output_path = args.dataset_path.replace('.h5', '_graph.pkl') if (args.output_path is None) else args.output_path
