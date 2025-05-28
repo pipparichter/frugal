@@ -61,7 +61,7 @@ def partial_correlation(x, y, z):
     return r2, linreg_xy, (x_residuals, y_residuals)
 
 
-def load_ncbi_genome_metadata(genome_metadata_path='../data/ncbi_genome_metadata.tsv', taxonomy_metadata_path:str='../data/ncbi_taxonomy_metadata.tsv'):
+def load_ncbi_genome_metadata(genome_metadata_path='../data/dataset/ncbi_genome_metadata.tsv', taxonomy_metadata_path:str='../data/dataset/ncbi_taxonomy_metadata.tsv'):
     taxonomy_metadata_df = pd.read_csv(taxonomy_metadata_path, delimiter='\t', low_memory=False)
     genome_metadata_df = pd.read_csv(genome_metadata_path, delimiter='\t', low_memory=False)
 

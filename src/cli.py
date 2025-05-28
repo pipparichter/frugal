@@ -5,7 +5,7 @@ from src.split import ClusterStratifiedShuffleSplit
 from src.classifier import Classifier
 from src.graph import NeighborsGraph
 import argparse
-from src.clusterer import Clusterer
+from src.cluster import Clusterer
 from src.reference import Reference, ReferenceAnnotator
 from src.files import FASTAFile, GBFFFile
 from src.embed import get_embedder, EmbeddingLibrary

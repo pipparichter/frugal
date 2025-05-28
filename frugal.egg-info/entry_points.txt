@@ -1,9 +1,7 @@
 [console_scripts]
 cluster = src.cli:cluster
+dataset = src.cli:dataset
 embed = src.cli:embed
-label = src.cli:label
 library = src.cli:library
-predict = src.cli:predict
-ref = src.cli:ref
-stats = src.cli:stats
-train = src.cli:train
+model = src.cli:model
+prune = src.cli:prune
