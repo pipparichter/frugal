@@ -243,98 +243,30 @@ class Reference():
 
 
 
-class ReferenceAnnotator():
-    '''Assigns one of the following categories to a sequence based on the results of comparing its coordinates to the 
-    reference genome annotation. 
+def get_sequence_identity(query_seq:str, subject_seq:str) -> float: 
+    if (subject_seq == 'none'):
+        return 0 
     
-    (1) match: Sequences where the boundaries exactly match the reference, or have 100 percent sequence identity with the reference. 
-    (2) conflict: Sequences which exceed max_overlap with any 
-    (3) intergenic
-    (4) pseudogene: A separate category is needed for pseudogenes, because it is hard to determine if it is a match or spurious
-        translation in these cases. This is the category for any predictions with same-strand overlap with a pseudogene.  
-    '''
+    aligner = PairwiseAligner(match_score=1, mismatch_score=0, gap_score=0)
+    alignment = aligner.align(query_seq, subject_seq)[0] # I think this will get the best alignment?
+    score = alignment.score
+    score = max(score / len(query_seq), score / len(subject_seq)) # Normalize the score by sequence length. 
+    return score
 
-    categories = np.array(['match', 'intergenic', 'conflict', 'pseudogene'])
 
-    # is_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
-    # is_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
-    # is_suspect = lambda df : ReferenceAnnotator.is_hypothetical(df) & ReferenceAnnotator.is_ab_initio(df) # This will be False for intergenic sequences. 
 
-    def __init__(self, max_overlap:int=50, min_sequence_identity:float=1):
+def compare(query_path:str, reference_path:str):
 
-        self.max_overlap = max_overlap
-        self.min_sequence_identity = min_sequence_identity
-
-        self.is_pseudogene = lambda df : (df.same_strand & df.top_hit_pseudo)
-        self.is_match = lambda df : ~self.is_pseudogene(df) & df.in_frame & (df.top_hit_feature == 'CDS')
-        self.is_intergenic = lambda df :  ~self.is_match(df) & ~self.is_pseudogene(df) & (df.overlap_length < max_overlap) # Does not overlap with anything. 
-        self.is_conflict = lambda df : ~self.is_intergenic(df) & ~self.is_match(df) & ~self.is_pseudogene(df)  
-
-    @staticmethod
-    def _get_sequence_identity(seq:str, top_hitseq:str) -> float: 
-        aligner = PairwiseAligner(match_score=1, mismatch_score=0, gap_score=0)
-        alignment = aligner.align(seq, top_hitseq)[0] # I think this will get the best alignment?
-        score = alignment.score
-        score = max(score / len(seq), score / len(top_hitseq)) # Normalize the score by sequence length. 
-        return score
+    reference = Reference(reference_path)
+    query_df = FASTAFile(path=query_path).to_df(prodigal_output=True)
+    _, top_hits_df = reference.compare(query_df, verbose=False)
     
-    def _check(self, top_hits_df:pd.DataFrame):
+    top_hits_df['sequence_identity'] = [get_sequence_identity(row.query_seq, row.top_hit_seq) for row in top_hits_df.itertuples()]
+    top_hits_df['exact_match'] = (top_hits_df.sequence_identity == 1) & (top_hits_df.query_length == top_hits_df.top_hit_length)
+    top_hits_df['match'] = (top_hits_df.sequence_identity > 0.9)
+    top_hits_df['genome_id'] = get_genome_id(query_path) 
 
-        top_hits_df['sequence_identity'] = np.where(top_hits_df.exact_match, 1, 0).astype(np.float64)
-        
-        mask, n_downgraded = ((top_hits_df.category == 'match') & ~top_hits_df.exact_match), 0
-        for row in tqdm(top_hits_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
-            sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
-            top_hits_df.loc[row.Index, 'sequence_identity'] = sequence_identity
-            if (sequence_identity < self.min_sequence_identity):
-                top_hits_df.loc[row.Index, 'category'] = 'conflict' if (row.overlap_length >= self.max_overlap) else 'intergenic'
-                n_downgraded += 1
-
-
-        # I think there are some cases which are matches, but because one sequence is partial, they are not registering
-        # as in-frame. These are being categorized as conflicts or intergenic depending on the overlap. 
-
-        mask, n_upgraded = ((top_hits_df.category.isin(['intergenic', 'conflict'])) & top_hits_df.same_strand & (top_hits_df.top_hit_feature == 'CDS')), 0
-        for row in tqdm(top_hits_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
-            sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
-            top_hits_df.loc[row.Index, 'sequence_identity'] = sequence_identity
-            if (sequence_identity >= self.min_sequence_identity):
-                top_hits_df.loc[row.Index, 'category'] = 'match'
-                n_upgraded += 1
-            
-        print(f'ReferenceAnnotator._check: Downgraded {n_downgraded} "match" sequences to "intergenic" or "conflict".')
-        print(f'ReferenceAnnotator._check: Upgraded {n_upgraded} "intergenic" or "conflict" sequences to "match.')
-
-        return top_hits_df 
-
-    def run(self, path:str):
-        top_hits_df = Reference.load(path)
-        conditions = [self.is_match(top_hits_df), self.is_intergenic(top_hits_df), self.is_conflict(top_hits_df), self.is_pseudogene(top_hits_df)]
-        top_hits_df['category'] = np.select(conditions, ReferenceAnnotator.categories, default='none')
-        assert (top_hits_df.category == 'none').sum() == 0, 'ReferenceAnnotator.run: Some sequences were not assigned annotations.'
-
-        top_hits_df['sequence_identity'] = 0.0
-        top_hits_df = self._check(top_hits_df)
-        top_hits_df.to_csv(path) # Write the DataFrame back to the original path. 
-
-
-def compare(query_path:str, reference_path:str, results_dir:str='../data/compare', annotate:bool=True, overwrite:bool=False, min_sequence_identity:float=0.9, max_overlap:int=50):
-
-    genome_id = get_genome_id(query_path)
-
-    all_hits_output_path = os.path.join(results_dir, f'{genome_id}_all_hits.csv')
-    top_hits_output_path = os.path.join(results_dir, f'{genome_id}_top_hits.csv')
-
-    if (not os.path.exists(top_hits_output_path)) or overwrite:
-        reference = Reference(reference_path)
-        query_df = FASTAFile(path=query_path).to_df(prodigal_output=True)
-        all_hits_df, top_hits_df = reference.compare(query_df, verbose=False)
-        all_hits_df.to_csv(all_hits_output_path)
-        top_hits_df.to_csv(top_hits_output_path)
-    if annotate:
-        annotator = ReferenceAnnotator(max_overlap=max_overlap, min_sequence_identity=min_sequence_identity)
-        annotator.run(top_hits_output_path)
-    print(f'compare: Reference comparison complete. Results written to {results_dir}')
+    return top_hits_df
 
 
 
@@ -383,3 +315,77 @@ def compare(query_path:str, reference_path:str, results_dir:str='../data/compare
 
     #     return df
 
+# I don't trust this approach to categorizing... there are too many exceptions. 
+
+# class ReferenceAnnotator():
+#     '''Assigns one of the following categories to a sequence based on the results of comparing its coordinates to the 
+#     reference genome annotation. 
+    
+#     (1) match: Sequences where the boundaries exactly match the reference, or have 100 percent sequence identity with the reference. 
+#     (2) conflict: Sequences which exceed max_overlap with any 
+#     (3) intergenic
+#     (4) pseudogene: A separate category is needed for pseudogenes, because it is hard to determine if it is a match or spurious
+#         translation in these cases. This is the category for any predictions with same-strand overlap with a pseudogene.  
+#     '''
+
+#     categories = np.array(['match', 'intergenic', 'conflict', 'pseudogene'])
+
+#     is_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
+#     is_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
+#     is_suspect = lambda df : ReferenceAnnotator.is_hypothetical(df) & ReferenceAnnotator.is_ab_initio(df) # This will be False for intergenic sequences. 
+
+#     def __init__(self, max_overlap:int=50, min_sequence_identity:float=1):
+
+#         self.max_overlap = max_overlap
+#         self.min_sequence_identity = min_sequence_identity
+
+#         self.is_pseudogene = lambda df : (df.same_strand & df.top_hit_pseudo)
+#         self.is_match = lambda df : ~self.is_pseudogene(df) & df.in_frame & (df.top_hit_feature == 'CDS')
+#         self.is_intergenic = lambda df :  ~self.is_match(df) & ~self.is_pseudogene(df) & (df.overlap_length < max_overlap) # Does not overlap with anything. 
+#         self.is_conflict = lambda df : ~self.is_intergenic(df) & ~self.is_match(df) & ~self.is_pseudogene(df)  
+
+#     @staticmethod
+#     def _get_sequence_identity(seq:str, top_hitseq:str) -> float: 
+#         aligner = PairwiseAligner(match_score=1, mismatch_score=0, gap_score=0)
+#         alignment = aligner.align(seq, top_hitseq)[0] # I think this will get the best alignment?
+#         score = alignment.score
+#         score = max(score / len(seq), score / len(top_hitseq)) # Normalize the score by sequence length. 
+#         return score
+    
+#     def _check(self, top_hits_df:pd.DataFrame):
+
+#         top_hits_df['sequence_identity'] = np.where(top_hits_df.exact_match, 1, 0).astype(np.float64)
+        
+#         mask, n_downgraded = ((top_hits_df.category == 'match') & ~top_hits_df.exact_match), 0
+#         for row in tqdm(top_hits_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
+#             sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
+#             top_hits_df.loc[row.Index, 'sequence_identity'] = sequence_identity
+#             if (sequence_identity < self.min_sequence_identity):
+#                 top_hits_df.loc[row.Index, 'category'] = 'conflict' if (row.overlap_length >= self.max_overlap) else 'intergenic'
+#                 n_downgraded += 1
+
+#         # I think there are some cases which are matches, but because one sequence is partial, they are not registering
+#         # as in-frame. These are being categorized as conflicts or intergenic depending on the overlap. 
+
+#         mask, n_upgraded = ((top_hits_df.category.isin(['intergenic', 'conflict'])) & top_hits_df.same_strand & (top_hits_df.top_hit_feature == 'CDS')), 0
+#         for row in tqdm(top_hits_df[mask].itertuples(), total=mask.sum(), desc='ReferenceAnnotator._check'):
+#             sequence_identity = ReferenceAnnotator._get_sequence_identity(row.query_seq, row.top_hit_seq)
+#             top_hits_df.loc[row.Index, 'sequence_identity'] = sequence_identity
+#             if (sequence_identity >= self.min_sequence_identity):
+#                 top_hits_df.loc[row.Index, 'category'] = 'match'
+#                 n_upgraded += 1
+            
+#         print(f'ReferenceAnnotator._check: Downgraded {n_downgraded} "match" sequences to "intergenic" or "conflict".')
+#         print(f'ReferenceAnnotator._check: Upgraded {n_upgraded} "intergenic" or "conflict" sequences to "match.')
+
+#         return top_hits_df 
+
+#     def run(self, path:str):
+#         top_hits_df = Reference.load(path)
+#         conditions = [self.is_match(top_hits_df), self.is_intergenic(top_hits_df), self.is_conflict(top_hits_df), self.is_pseudogene(top_hits_df)]
+#         top_hits_df['category'] = np.select(conditions, ReferenceAnnotator.categories, default='none')
+#         assert (top_hits_df.category == 'none').sum() == 0, 'ReferenceAnnotator.run: Some sequences were not assigned annotations.'
+
+#         top_hits_df['sequence_identity'] = 0.0
+#         top_hits_df = self._check(top_hits_df)
+#         top_hits_df.to_csv(path) # Write the DataFrame back to the original path. 
