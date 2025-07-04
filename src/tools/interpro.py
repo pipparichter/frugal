@@ -4,10 +4,21 @@ import os
 from src.files import InterProScanFile, FASTAFile
 import subprocess
 
+def remove_asterisks(*paths):
+    '''Prodigal adds an asterisk marking the terminal end of each amino acid sequence by default. These are not compatible 
+    with tools like InterProScan, so should be removed.'''
+    for path in paths:
+        with open(path, 'r') as f:
+            content = f.read()
+        content = content.replace('*', '')
+        with open(path, 'w') as f:
+            f.write(content)
+
 
 class InterProScan():
     
-    cmd = '/home/prichter/interproscan/interproscan-5.73-104.0/interproscan.sh'
+    # cmd = '/home/prichter/interproscan/interproscan-5.73-104.0/interproscan.sh'
+    cmd = '/home/prichter/interproscan/interproscan-5.74-105.0/interproscan.sh'
 
     tmp_input_path = 'tmp_protein.faa'
     tmp_output_path = 'tmp_annotation.tsv'
@@ -21,36 +32,31 @@ class InterProScan():
 
         self.print_cmd_only = print_cmd_only
 
-    def _run_append(self, input_path:str, output_path:str):
+    # def _run_append(self, input_path:str, output_path:str):
 
-        df = FASTAFile(path=input_path).to_df()
-        existing_ids = InterProScan._get_existing_ids(output_path)
-        df = df[~df.index.isin(existing_ids)].copy() # Don't re-compute annotations. 
-        print(f'InterProScan._run_append: {len(existing_ids)} already present in {output_path}. Computing annotations for {len(df)} new sequences.')
+    #     df = FASTAFile(path=input_path).to_df()
+    #     existing_ids = InterProScan._get_existing_ids(output_path)
+    #     df = df[~df.index.isin(existing_ids)].copy() # Don't re-compute annotations. 
+    #     print(f'InterProScan._run_append: {len(existing_ids)} already present in {output_path}. Computing annotations for {len(df)} new sequences.')
 
-        # Write the remaining sequences to a FASTA file for the InterPro input.
-        FASTAFile(df=df).write(InterProScan.tmp_input_path)
+    #     # Write the remaining sequences to a FASTA file for the InterPro input.
+    #     FASTAFile(df=df).write(InterProScan.tmp_input_path)
         
-        cmd = self.cmd.format(input_path=input_path, output_path=InterProScan.tmp_output_path)
+    #     cmd = self.cmd.format(input_path=input_path, output_path=InterProScan.tmp_output_path)
+    #     if self.print_cmd_only:
+    #         print(cmd)
+    #         return
+    #     subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+    #     InterProScan._append(InterProScan.tmp_output_path, output_path)
+    
+    def run(self, input_path:str, output_path:str):
+        remove_asterisks(input_path) # Make sure there are no leftover asterisks from Prodigal. 
+
+        cmd = self.cmd.format(input_path=input_path, output_path=output_path)
         if self.print_cmd_only:
             print(cmd)
             return
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-        InterProScan._append(InterProScan.tmp_output_path, output_path)
-    
-    def run(self, input_path:str, name:str=None, output_dir:str='../data/interpro', overwrite:bool=False):
-
-        output_file_name = f'{name}_annotation.tsv'
-        output_path = os.path.join(output_dir, output_file_name)
-        
-        if os.path.exists(output_path) and (not overwrite):
-            self._run_append(input_path, output_path)
-        else:
-            cmd = self.cmd.format(input_path=input_path, output_path=output_path)
-            if self.print_cmd_only:
-                print(cmd)
-                return
-            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
 
     @staticmethod
     def _append(tmp_output_path:str, output_path:str):

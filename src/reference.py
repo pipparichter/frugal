@@ -5,7 +5,7 @@ from tqdm import tqdm
 from src import get_genome_id, fillna
 import warnings
 import os 
-from Bio.Align import PairwiseAligner
+from Bio.Align import PairwiseAligner, substitution_matrices
 from Bio.Seq import Seq
 from Bio.Data.CodonTable import TranslationError
 import re
@@ -17,13 +17,46 @@ reverse_complement = lambda seq : str(Seq(seq).reverse_complement()).replace('T'
 OpenReadingFrame = namedtuple('OpenReadingFrame', ['start', 'stop', 'seq'])
 Query = namedtuple('Query', ['Index', 'contig_id', 'start', 'stop', 'strand'])
 
+start_codons = {11:['AUG', 'GUG', 'UUG'], 14:['AUG', 'GUG', 'UUG']}
+stop_codons = {11:['UAA', 'UAG', 'UGA'], 14:['UAG', 'UGA']} # In code 14, UAA codes for tyrosine. 
+
+# This function does not filter out potential ORFs with in-frame stops. 
+is_valid_orf = lambda start, stop : (start < stop) and (((stop - start) % 3) == 0)
+is_valid_cds = lambda nt_seq : (len(nt_seq) % 3 == 0) and (nt_seq[:3] in start_codons[11]) and (nt_seq[-3:] in stop_codons[11])
+
+get_contig_id = lambda id_ : id_.split('.')[0]
+
+has_overlap = lambda query_start, query_stop, subject_start, subject_stop : not ((query_stop < subject_start) or (query_start > subject_stop))
+
+def get_overlap_type(query_start:int=None, query_stop:int=None, subject_start:int=None, subject_stop:int=None, query_strand:int=None, subject_strand:int=None, **kwargs):
+    if not has_overlap(query_start, query_stop, subject_start, subject_stop):
+        overlap_type = 'none'
+        
+    elif (query_start >= subject_start) and (query_stop <= subject_stop):
+        overlap_type = 'nested'
+    elif (query_start <= subject_start) and (query_stop >= subject_stop):
+        overlap_type = 'nested'
+    elif (subject_strand == query_strand):
+        overlap_type = 'tandem'
+
+    elif (query_strand == 1) and ((query_stop >= subject_start) & (query_stop <= subject_stop)):
+        overlap_type = 'convergent' 
+    elif (query_strand == -1) and ((query_start >= subject_start) & (query_start <= subject_stop)):
+        overlap_type = 'convergent' 
+    elif (query_strand == 1) and ((query_start >= subject_start) & (query_start <= subject_stop)):
+        overlap_type = 'divergent' 
+    elif (query_strand == -1) and ((query_stop >= subject_start) & (query_stop <= subject_stop)):
+        overlap_type = 'divergent' 
+
+    return overlap_type
+
+
 class Reference():
 
     query_fields = ['start', 'stop', 'partial', 'strand', 'seq', 'gc_content', 'rbs_motif', 'rbs_spacer', 'start_type']
     subject_fields = ['start', 'stop', 'partial', 'strand', 'seq']
 
-    start_codons = {11:['AUG', 'GUG', 'UUG'], 14:['AUG', 'GUG', 'UUG']}
-    stop_codons = {11:['UAA', 'UAG', 'UGA'], 14:['UAG', 'UGA']} # In code 14, UAA codes for tyrosine. 
+
 
     def __init__(self, path:str, load_contigs:bool=False, translation_table:int=11):
 
@@ -35,8 +68,8 @@ class Reference():
 
         self.contigs = file.contigs if load_contigs else None # Maps contig IDs to nucleotides. 
         self.translation_table = translation_table
-        self.start_codons = Reference.start_codons[translation_table]
-        self.stop_codons = Reference.stop_codons[translation_table]
+        self.start_codons = start_codons[translation_table]
+        self.stop_codons = stop_codons[translation_table]
 
     def __str__(self):
         return self.genome_id
@@ -54,8 +87,6 @@ class Reference():
         return [match.start(0) for match in re.finditer(pattern, seq)]
     
     def _get_potential_orfs(self, seq:str):
-        # This function does not filter out potential ORFs with in-frame stops. 
-        is_valid_orf = lambda start, stop : (start < stop) and (((stop - start) % 3) == 0)
 
         orfs = list()
 
@@ -122,45 +153,94 @@ class Reference():
         if min_length is not None:
             orf_df = orf_df[orf_df.length >= min_length].copy()
         return orf_df
+    
+    @staticmethod
+    def _get_translation_start_stop(start:int=None, stop:int=None, strand:int=None, codon_start:int=1, adjust_start:bool=True, check:bool=False, **kwargs):
+        # The codon_start qualifier is relative to the translational start position, not the gene start position; adjusting based
+        # on the specified offset therefore depends on the strand. codon_start can be either 1 (indicating no offset), 2, or 3.
+
+        # When determinining phase difference, both stop and stop coordinates must be inclusive (adjust_start=False). 
+        # Otherwise, in the case of antisense overlaps, would be comparing a non-inclusive boundary to an inclusive boundary. 
+        start = start - 1 if adjust_start else start 
+
+        if strand == -1:
+            start, stop = stop - (int(codon_start) - 1), start
+        elif strand == 1:
+            start, stop = start + (int(codon_start) - 1), stop
+        
+        if check: # This fails if a top hit sequence is partial at the C-terminus, or in the case of a programmed frameshift.. 
+            length = abs(stop - start) if adjust_start else abs(stop - start) + 1
+            assert length % 3 == 0, f'Reference._get_translational_start_stop: Sequence length should be divisible by three, but got {length}.'
+
+        return start, stop 
 
     @staticmethod
-    def is_in_frame(query, subject):
-        info = {'in_frame':False, 'in_frame_c_terminus':False, 'in_frame_n_terminus':False}
+    def _get_frame_info(query, subject):
+        info = {'in_frame':False, 'phase_start':-1, 'phase_stop':-1}
+        
+        is_in = lambda coordinate, start, stop : (coordinate >= start) and (coordinate <= stop)
+        
+        subject_overlap, query_overlap = ['0', '0'], ['0', '0']
+        subject_overlap[0] = str(int(is_in(subject.start, query.start, query.stop)))
+        subject_overlap[1] = str(int(is_in(subject.stop, query.start, query.stop)))
+        query_overlap[0] = str(int(is_in(query.start, subject.start, subject.stop)))
+        query_overlap[1] = str(int(is_in(query.stop, subject.start, subject.stop)))
+        info['query_overlap'] = ''.join(query_overlap)
+        info['subject_overlap'] = ''.join(subject_overlap)
 
         # This only makes sense to check if the subject sequence is coding.
-        if subject.feature != 'CDS':
+        if (subject.feature != 'CDS') or (subject.pseudo):
             return info
-        if not (query.strand == subject.strand):
-            return info 
 
-        # The codon_start qualifier is relative to the translational start position, not the gene start position; adjusting based
-        # on the specified offset therefore depends on the strand. 
+        query_start, _ = Reference._get_translation_start_stop(adjust_start=False, check=True, **query._asdict())
+        subject_start, _ = Reference._get_translation_start_stop(adjust_start=False, check=False, **subject._asdict())
+        # subject_start, _ = Reference._get_translation_start_stop(adjust_start=False, check=(subject.partial == '00'), **subject._asdict())
 
-        # codon_start can be either 1 (indicating no offset), 2, or 3. 
+        # Prodigal start and stop indices always correspond to the translational bounds, so always correspond to a nucleotide sequence with a length divisible by three. 
+        # The same is not true for the top hit sequences, but these will always specify a codon_start, which is the offset to the start of translation. 
+        # Therefore, the safe thing to do is to just compare translational starts (accounting for codon_start). This supports match cases where a programmed frameshift
+        # causes the C terminus to be out-of-phase.
+        # phase_map = {0:0, 1:2, 2:1}
+        # info['phase'] = phase_map[abs(query_start - subject_start) % 3]
+        info['phase'] = abs(query_start - subject_start) % 3
 
-        # Must account for edge cases where the sequence is partial. Prodigal all edge sequences as partial, even if there is a valid start, 
-        # so only use the subject sequence to check if partial. 
-        if query.strand == 1:
-            subject_start = subject.start + (int(subject.codon_start) - 1)
-            query_start = query.start
-            query_stop, subject_stop = query.stop, subject.stop
-        elif query.strand == -1:
-            subject_start = subject.stop - (int(subject.codon_start) - 1)
-            query_start = query.stop
-            query_stop, subject_stop = query.start, subject.start
 
         # There are cases where programmed frameshift means that the C-terminal part of the sequence is aligned, but the N-terminal
-        # side is not. I still don't want to include these cases as spurious, as they are biologically-interesting. So I think
-        # I should consider anything that is in-frame at either terminus as "in frame"
-        info['in_frame_c_terminus'] = ((query_stop - subject_stop) % 3) == 0 
-        info['in_frame_n_terminus'] = ((query_start - subject_start) % 3) == 0 
-        info['in_frame'] = (info['in_frame_c_terminus'] or info['in_frame_n_terminus'])
-        
+        # info['in_frame'] = ((info['phase_start'] == 0) or (info['phase_stop'] == 0)) and (query.strand == subject.strand)
+        info['in_frame'] = (info['phase'] == 0) and (query.strand == subject.strand)
         return info
     
     def get_hits(self, contig_id:str, start:int=None, stop:int=None, strand:int=None):
         query = Query(Index='none', start=start, contig_id=contig_id, stop=stop, strand=strand)
         return self._get_hits(query)
+    
+    def _get_nt_seqs(self, top_hits_df:pd.DataFrame, prefix:str='query'):
+        assert self.contigs is not None, 'Reference._get_nt_seqs: Contigs have not been loaded into the Reference object.'
+
+        nt_seqs = list()
+        for row in top_hits_df.itertuples():
+            
+            contig_id = get_contig_id(row.Index) # Prodigal gene IDs contain the contig ID, e.g. NZ_CP130454.1_3215. 
+            assert contig_id in self.get_contig_ids(), f'Reference._get_nt_seqs: {contig_id} is not in the list of available contig IDs: ' + ', '.join(self.get_contig_ids())
+            
+            feature = 'CDS' if (prefix == 'query') else getattr(row, 'top_hit_feature')
+            if feature != 'CDS':
+                nt_seqs.append('none')
+                continue 
+
+            start, stop, strand = getattr(row, f'{prefix}_start'), getattr(row, f'{prefix}_stop'), getattr(row, f'{prefix}_strand')
+            partial = getattr(row, f'{prefix}_start')
+
+            nt_seq = self.get_nt_seq(contig_id, start - 1, stop)
+            nt_seq = nt_seq.replace('T', 'U')
+            nt_seq = reverse_complement(nt_seq) if (strand == -1) else nt_seq
+            if partial == '00': # Only check if the CDS is not partial.
+                assert is_valid_cds(nt_seq), f'Reference._get_nt_seqs: {nt_seq} is not valid.'
+            nt_seqs.append(nt_seq)
+
+        top_hits_df[f'{prefix}_nt_seq'] = nt_seqs
+        return top_hits_df            
+
 
     def _get_hits(self, query):
         hits_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
@@ -181,11 +261,12 @@ class Reference():
             hit['same_strand'] = (subject.strand == query.strand) 
             hit['overlap_start'] = max(subject.start, query.start)   
             hit['overlap_stop'] = min(subject.stop, query.stop)
+            hit['overlap_type'] = get_overlap_type(**hit)
             hit['overlap_length'] = (hit['overlap_stop'] - hit['overlap_start']) + 1 # Add a one to account for the fact that bounds are inclusive.
             hit['subject_overlap_fraction'] = hit['overlap_length'] / hit['subject_length'] # Add a one to account for the fact that bounds are inclusive.
             hit['query_overlap_fraction'] = hit['overlap_length'] / hit['query_length']# Add a one to account for the fact that bounds are inclusive.
             hit['exact_match'] = (query.start == subject.start) and (query.stop == subject.stop)
-            hit.update(Reference.is_in_frame(query, subject))
+            hit.update(Reference._get_frame_info(query, subject))
             hits_info_df.append(hit)
         hits_info_df = pd.DataFrame(hits_info_df)
         
@@ -203,22 +284,36 @@ class Reference():
 
         all_hits_df = pd.concat(all_hits_df).reset_index(drop=True)
         top_hits_df = Reference._get_top_hits(query_df, all_hits_df) 
+
+        if self.contigs is not None:
+            top_hits_df = self._get_nt_seqs(top_hits_df, prefix='top_hit')
+            top_hits_df = self._get_nt_seqs(top_hits_df, prefix='query')
+
         return all_hits_df, top_hits_df
+    
+    @staticmethod
+    def _select_top_hit(df:pd.DataFrame):
+        # Want to prioritize hits that are (1) in-frame and (2) are supported (i.e. not ab initio predictions). 
+        df = df.sort_values(['in_frame', 'subject_supported', 'overlap_length'], ascending=False)
+        top_hit = df.iloc[0]
+        top_hit = {field.replace('subject_', 'top_hit_'):value for field, value in top_hit.to_dict().items()}
+        return top_hit
 
     @staticmethod
     def _get_top_hits(query_df:pd.DataFrame, all_hits_df:pd.DataFrame):
         top_hits_df = []
         for query_id, df in all_hits_df.groupby('query_id'):
+            df['subject_unsupported'] = (df.subject_product == 'hypothetical protein') & (df.subject_evidence_type == 'ab initio prediction')
+            df['subject_supported'] = ~df.subject_unsupported 
+
             row = dict()
             row['query_id'] = query_id
             row['n_hits'] = len(df)
+            row['n_hits_supported'] = df.subject_supported.sum()
             row['n_hits_same_strand'] = df.same_strand.sum()
             row['n_hits_opposite_strand'] = len(df) - row['n_hits_same_strand']
             row['n_hits_in_frame'] = df.in_frame.sum()
-            # Sort values on a boolean will put False (0) first, and True (1) last if ascending is True. 
-            # Want to prioritize hits that are in-frame. 
-            top_hit = df.sort_values(by=['in_frame', 'overlap_length'], ascending=False).iloc[0]
-            top_hit = {field.replace('subject_', 'top_hit_'):value for field, value in top_hit.to_dict().items()}
+            top_hit = Reference._select_top_hit(df)
             row.update(top_hit)
             top_hits_df.append(row)
         top_hits_df = pd.DataFrame(top_hits_df).set_index('query_id')
@@ -242,32 +337,171 @@ class Reference():
         return df 
 
 
+class Aligner():
 
-def get_sequence_identity(query_seq:str, subject_seq:str) -> float: 
-    if (subject_seq == 'none'):
-        return 0 
-    
-    aligner = PairwiseAligner(match_score=1, mismatch_score=0, gap_score=0)
-    alignment = aligner.align(query_seq, subject_seq)[0] # I think this will get the best alignment?
-    score = alignment.score
-    score = max(score / len(query_seq), score / len(subject_seq)) # Normalize the score by sequence length. 
-    return score
+    def __init__(self, extend_gap_score:int=-1, open_gap_score:int=-11):
 
+        self.extend_gap_score = extend_gap_score
+        self.open_gap_score = open_gap_score
+        self.aligner = PairwiseAligner(match_score=1, extend_gap_score=extend_gap_score, open_gap_score=open_gap_score)
+        self.aligner.mode = 'local'
+
+    # if permissive:
+    #     matrix = substitution_matrices.load("PAM250")
+    #     alphabet = set(matrix.alphabet)
+    #     aligner.substitution_matrix = substitution_matrices.load("PAM250")
+    #     query_seq = ''.join([aa if (aa in alphabet) else 'X' for aa in query_seq])
+    #     subject_seq = ''.join([aa if (aa in alphabet) else 'X' for aa in subject_seq])
+
+    @staticmethod
+    def _get_alignment_strings(alignment, query_seq:str, subject_seq:str):
+        '''Get string representations of the alignments from the returned alignment object.'''
+        query_idxs, subject_idxs = alignment.aligned
+        query_alignment, subject_alignment = '', ''
+
+        # alignment.aligned returns a list of the form [[[idx, idx], [idx, idx], ...], [[idx, idx], [idx, idx], ...]]
+        query_idx, subject_idx = 0, 0
+        for (query_start, query_end), (subject_start, subject_end) in zip(query_idxs, subject_idxs):
+            assert (query_end - query_start) == (subject_end - subject_start)
+            if (query_idx > 0) and (subject_idx > 0): # Add gaps if it's not the start of the alignment.
+                subject_gap_length = subject_start - subject_idx
+                query_gap_length = query_start - query_idx
+                max_gap_length = max(query_gap_length, subject_gap_length)
+
+                query_alignment += '-' * (query_gap_length + (max_gap_length - query_gap_length))
+                subject_alignment += '-' * (subject_gap_length + (max_gap_length - subject_gap_length))
+
+            query_alignment += query_seq[query_start:query_end]
+            subject_alignment += subject_seq[subject_start:subject_end]
+
+            query_idx, subject_idx = query_end, subject_end
+
+        return query_alignment, subject_alignment
+
+    def _get_alignment_info(self, query_seq:str, subject_seq:str):
+
+        info = {'n_matches':0, 'n_gap_opens':np.nan, 'raw_score':0, 'alignment_length':0, 'query_length':0, 'subject_length':0, 'query_alignment':'none', 'subject_alignment':'none',}
+        
+        if (subject_seq == 'none'):
+            return info 
+
+        alignment = self.aligner.align(query_seq, subject_seq)[0] # This is the best alignment. 
+        
+        info['alignment_length'] = alignment.length
+        info['n_gap_opens'] = len(alignment.aligned[0])
+        info['query_length'] = len(query_seq)
+        info['subject_length'] = len(subject_seq)
+        info['raw_score'] = alignment.score
+
+        query_alignment, subject_alignment = Aligner._get_alignment_strings(alignment, query_seq, subject_seq)
+        info['subject_alignment'] = subject_alignment
+        info['query_alignment'] = query_alignment
+        info['n_matches'] = sum(s == q for q, s in zip(query_alignment, subject_alignment) if (s != '-'))
+
+        return info
+
+    def align(self, df:pd.DataFrame, prefix:str='top_hit'):
+
+        # pbar = tqdm(df.itertuples(), total=len(df), desc='Aligner.align')
+        align_df = pd.DataFrame([self._get_alignment_info(row.query_seq, getattr(row, f'{prefix}_seq')) for row in df.itertuples()], index=df.index)
+        align_df = align_df.rename(columns={col:col.replace('query_', '').replace('subject_', f'{prefix}_') for col in align_df.columns})
+        align_df = align_df[[col for col in align_df.columns if (col not in df.columns)]] # Otherwise end up with two top_hit_length columns. 
+        df = pd.concat([df, align_df], axis=1)
+        df['sequence_identity'] = df.n_matches / df.alignment_length
+        return df
 
 
 def compare(query_path:str, reference_path:str):
 
-    reference = Reference(reference_path)
+    reference = Reference(reference_path, load_contigs=True)
     query_df = FASTAFile(path=query_path).to_df(prodigal_output=True)
-    _, top_hits_df = reference.compare(query_df, verbose=False)
-    
-    top_hits_df['sequence_identity'] = [get_sequence_identity(row.query_seq, row.top_hit_seq) for row in top_hits_df.itertuples()]
-    top_hits_df['exact_match'] = (top_hits_df.sequence_identity == 1) & (top_hits_df.query_length == top_hits_df.top_hit_length)
-    top_hits_df['match'] = (top_hits_df.sequence_identity > 0.9)
+    all_hits_df, top_hits_df = reference.compare(query_df, verbose=False)
+
+    aligner = Aligner()
+    all_hits_df = aligner.align(all_hits_df, prefix='subject')
+    top_hits_df = aligner.align(top_hits_df)
+
     top_hits_df['genome_id'] = get_genome_id(query_path) 
+    all_hits_df['genome_id'] = get_genome_id(query_path)
 
-    return top_hits_df
+    assert len(top_hits_df) == len(query_df), 'compare: Length mismatch between the query DataFrame and output DataFrame.'
 
+    return top_hits_df, all_hits_df
+
+
+def is_pseudogene(df:pd.DataFrame, max_overlap_length:int=0, prefix:str='top_hit'):
+    mask = df[f'{prefix}_pseudo'] & df.same_strand
+    mask = mask & (df.overlap_length >= max_overlap_length)
+    return mask 
+
+# Based on inspection of the top hit reference sequences, some are clearly the same sequence but have less than 100% sequence identity. There seems to be
+# a few different reasons for this:
+# (1) The reference is recognized as partial, so the start codon is not M. 
+# (2) The Prodigal sequence has more X's than the reference, perhaps because homology is used to compensate for an unknown nucleotide. 
+# (3) There is a programmed frameshift that is missed by Prodigal. 
+
+# There are two cases where the GeneMark prediction is apparently out-of-frame with the Prodigal predction, but sequence identity is still high
+# (>80 %): NZ_JAALLS010000037.1_4 and NZ_AP035449.1_1439. In the case of NZ_JAALLS010000037.1_4, the alignment length is much longer than the overlap, suggesting possible translation
+# of a repeat sequence (?). The other one is a mystery. 
+
+def is_match(df:pd.DataFrame, min_sequence_identity:float=0.8, max_overlap_length:int=0, prefix:str='top_hit'):
+    mask = (df[f'{prefix}_feature'] == 'CDS') & (~df[f'{prefix}_pseudo']) & df.in_frame
+    mask = mask & (df.sequence_identity > min_sequence_identity)
+    mask = mask & (df.overlap_length >= max_overlap_length)
+    return mask
+    
+def is_intergenic(df:pd.DataFrame, max_overlap_length:int=0, prefix:str='top_hit'):
+    mask = (df[f'{prefix}_feature'] == 'none') | ((df[f'{prefix}_feature'] == 'CDS') & (df.overlap_length < max_overlap_length))
+    mask = mask & ~is_match(df, prefix=prefix) & ~is_pseudogene(df, prefix=prefix)
+    return mask 
+    
+def is_conflict(df:pd.DataFrame, max_overlap_length:int=0, prefix:str='top_hit'):
+    mask = ~is_match(df, max_overlap_length=max_overlap_length, prefix=prefix)
+    mask = mask & ~is_pseudogene(df, max_overlap_length=max_overlap_length, prefix=prefix)
+    mask = mask & ~is_intergenic(df, max_overlap_length=max_overlap_length, prefix=prefix)
+    return mask 
+
+def is_unsupported(df:pd.DataFrame, prefix:str='top_hit'):
+    mask = (df[f'{prefix}_product'] == 'hypothetical protein')
+    mask = mask & (df[f'{prefix}_evidence_type'] == 'ab initio prediction')
+    return mask
+
+def annotate(df:pd.DataFrame, prefix:str='top_hit'):
+    df['pseudogene'] = is_pseudogene(df, prefix=prefix) 
+    df['match'] = is_match(df, prefix=prefix)
+    df['conflict'] = is_conflict(df, prefix=prefix)
+    df['intergenic'] = is_intergenic(df, prefix=prefix)
+    df['category'] = np.select([df.match, df.pseudogene, df.intergenic, df.conflict], ['match', 'pseudogene', 'intergenic', 'conflict'], default='none')
+    assert (df.category == 'none').sum() == 0, 'Some of the sequences were not assigned a category.'
+    
+    if prefix == 'subject':
+        df['length'] = df.query_seq.apply(len) # Make sure the lengths are in amino acids and not base pairs.
+    else:
+        df['length'] = df.seq.apply(len) # Make sure the lengths are in amino acids and not base pairs.
+
+    df[f'{prefix}_length'] = np.where(df[f'{prefix}_seq'] == 'none', 0, df[f'{prefix}_seq'].apply(len)) # Make sure the lengths are in amino acids and not base pairs.
+    df[f'{prefix}_unsupported'] = is_unsupported(df, prefix=prefix) 
+    df['exact_match'] = df.match & (df[f'{prefix}_length'] == df.length) & (~df[f'{prefix}_ribosomal_slippage'])
+    df['truncated'] = df.match & (df[f'{prefix}_length'] > df.length) & (~df[f'{prefix}_ribosomal_slippage'])
+    df['extended'] = df.match & (df[f'{prefix}_length'] < df.length) & (~df[f'{prefix}_ribosomal_slippage'])
+
+    return df.copy()
+
+
+
+
+
+
+
+
+
+
+# def get_overlap_type(row):
+#     kwargs = row.to_dict()
+#     kwargs['subject_strand'] = row.top_hit_strand 
+#     kwargs['subject_start'] = row.top_hit_start
+#     kwargs['subject_stop'] = row.top_hit_stop
+#     return Reference.get_overlap_type(**kwargs)
 
 
     # def _add_start_stop_codons(self):

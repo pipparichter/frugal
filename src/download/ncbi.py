@@ -109,6 +109,27 @@ class NCBI():
                     f.write(content_)
             pbar.update(len(ids))
 
+    def get_proteins(self, protein_ids:list, path:str=None, chunk_size:int=20):
+        # Need to break into chunks because the API doesn't support more than a handful of sequences. 
+        n_chunks = np.ceil(len(protein_ids) / chunk_size).astype(int)
+        protein_ids = [','.join(protein_ids[i:i + chunk_size]) for i in range(0, n_chunks * chunk_size, chunk_size)]
+        
+        df = list()
+        src_path = os.path.join(NCBI.src_dir, 'protein.faa')
+        for protein_ids_ in tqdm(protein_ids, 'NCBI.get_proteins'):
+            cmd = f"datasets download gene accession {protein_ids_} --include protein --filename ncbi.zip"
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # The -o option means that the ncbi.zip directory from the previous pass will be overwritten without prompting. 
+            subprocess.run(f'unzip -o ncbi.zip -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            df.append(FASTAFile(path=src_path).to_df(prodigal_output=False))
+        df = pd.concat(df)
+        
+        if path is not None:
+            print(f'NCBI.get_proteins: Proteins saved to {path}')
+            FASTAFile(df=df).write(path)
+
+        return df 
+    
     def cleanup(self):
         for file in NCBI.cleanup_files:
             if os.path.exists(file):

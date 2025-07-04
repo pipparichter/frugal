@@ -33,15 +33,6 @@ class BLASTJsonFile():
 
     prefix = 'blast'
 
-    @staticmethod
-    def is_hypothetical(df:pd.DataFrame):
-        assert df.subject_description.isnull().sum() == 0, 'BLASTJsonFile.is_hypothetical: There are NaN values in the subject_description column.'
-        # Sorting a boolean array in ascending order will put the True values at the end. 
-        mask = df.subject_description.str.lower().str.contains('hypothetical')
-        mask = mask | df.subject_description.str.lower().str.contains('uncharacterised')
-        mask = mask | df.subject_description.str.lower().str.contains('uncharacterized')
-        return mask 
-
     def __init__(self, path:str):
         with open(path, 'r') as f:
             content = json.load(f)
@@ -54,7 +45,8 @@ class BLASTJsonFile():
             query_info = {field:value for field, value in results.items() if (field != 'hits')}
 
             if (len(results['hits']) == 0):
-                df.append(query_info) # Add an empty row if there's no hits. 
+                # df.append(query_info) # Add an empty row if there's no hits. 
+                continue
 
             for hit in results['hits']:
                 hit_info = {'len':hit['len']}
@@ -79,26 +71,13 @@ class BLASTJsonFile():
         self.df = df
 
     
-    def to_df(self, drop_duplicates:bool=False, max_e_value:float=None, add_prefix:bool=False, use_minimal_fields:bool=True):
+    def to_df(self):
         
         df = self.df.copy()
         df = fillna(df, rules={str:'none'}, errors='ignore') # Fill in the empty sequences and subject IDs. 
-        df['hypothetical'] = BLASTJsonFile.is_hypothetical(df)
         df['subject_description'] = [re.sub(r'\[(.+)\]', '', description) for description in df.subject_description] # Remove the taxon name from the sequence description. 
         # First sort by whether or not the hit is hypothetical, and then by E-value. This means selecting the first of hits for the same query sequence
         # will first prioritize all non-hypothetical hits over hypothetical hits. If there are multiple HSPs for a single hit, the best HSP will be first. 
-        df = df.sort_values(['hypothetical', 'e_value'])
-
-        if max_e_value is not None:
-            df = df[df.e_value < max_e_value].copy()
-        if drop_duplicates:
-            df = df[~df.index.duplicated(keep='first')]
-            # assert len(df) == self.n_queries, f'BLASTJsonFile.to_df: The length of the de-duplicated BLAST results should be {n_queries}.'
-        if use_minimal_fields:
-            df = df[BLASTJsonFile.minimal_fields + ['hypothetical']].copy()
-        if add_prefix:
-            df = df.rename(columns={col:f'{BLASTJsonFile.prefix}_{col}' for col in df.columns})
-
         return df
 
 

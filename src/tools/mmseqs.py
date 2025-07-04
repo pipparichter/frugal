@@ -177,7 +177,7 @@ class Foldseek(MMSeqsBase):
         super().__init__(tmp_dir=tmp_dir, database_dir=database_dir)
 
 
-    def align(self, query_path:pd.DataFrame, subject_path:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='.', overwrite:bool=False, sensitivity:float=8, max_e_value:float=10, **kwargs):
+    def align(self, query_path:pd.DataFrame, subject_path:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='.', overwrite:bool=False, sensitivity:float=5.7, max_e_value:float=10, **kwargs):
         # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
         subject_name = query_name if (subject_name is None) else subject_name
         output_path = os.path.join(output_dir, f'{query_name}_{subject_name}_align_{self.program}.tsv')
