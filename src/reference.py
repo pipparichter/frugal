@@ -176,7 +176,7 @@ class Reference():
 
     @staticmethod
     def _get_frame_info(query, subject):
-        info = {'in_frame':False, 'phase_start':-1, 'phase_stop':-1}
+        info = {'in_frame':False}
         
         is_in = lambda coordinate, start, stop : (coordinate >= start) and (coordinate <= stop)
         
@@ -200,8 +200,6 @@ class Reference():
         # The same is not true for the top hit sequences, but these will always specify a codon_start, which is the offset to the start of translation. 
         # Therefore, the safe thing to do is to just compare translational starts (accounting for codon_start). This supports match cases where a programmed frameshift
         # causes the C terminus to be out-of-phase.
-        # phase_map = {0:0, 1:2, 2:1}
-        # info['phase'] = phase_map[abs(query_start - subject_start) % 3]
         info['phase'] = abs(query_start - subject_start) % 3
 
 
@@ -221,26 +219,60 @@ class Reference():
         for row in top_hits_df.itertuples():
             
             contig_id = get_contig_id(row.Index) # Prodigal gene IDs contain the contig ID, e.g. NZ_CP130454.1_3215. 
-            assert contig_id in self.get_contig_ids(), f'Reference._get_nt_seqs: {contig_id} is not in the list of available contig IDs: ' + ', '.join(self.get_contig_ids())
-            
+
             feature = 'CDS' if (prefix == 'query') else getattr(row, 'top_hit_feature')
             if feature != 'CDS':
                 nt_seqs.append('none')
                 continue 
 
-            start, stop, strand = getattr(row, f'{prefix}_start'), getattr(row, f'{prefix}_stop'), getattr(row, f'{prefix}_strand')
-            partial = getattr(row, f'{prefix}_start')
+            start, stop, strand, partial = getattr(row, f'{prefix}_start'), getattr(row, f'{prefix}_stop'), getattr(row, f'{prefix}_strand'), getattr(row, f'{prefix}_partial')
 
-            nt_seq = self.get_nt_seq(contig_id, start - 1, stop)
-            nt_seq = nt_seq.replace('T', 'U')
+            nt_seq = self.get_nt_seq(contig_id, start - 1, stop).replace('T', 'U')
             nt_seq = reverse_complement(nt_seq) if (strand == -1) else nt_seq
-            if partial == '00': # Only check if the CDS is not partial.
-                assert is_valid_cds(nt_seq), f'Reference._get_nt_seqs: {nt_seq} is not valid.'
+
+            # if partial == '00': # Only check if the CDS is not partial.
+            #     assert is_valid_cds(nt_seq), f'Reference._get_nt_seqs: {row} {strand} {prefix} {nt_seq} is not valid.'
             nt_seqs.append(nt_seq)
 
         top_hits_df[f'{prefix}_nt_seq'] = nt_seqs
         return top_hits_df            
 
+    
+    def _get_nt_seqs_upstream(self, top_hits_df:pd.DataFrame, prefix:str='query', n_upstream_bases:int=27):
+        '''Default length of upstream region is based on the fact that the largest RBS spacer is 15 bp. We also want to include the start codon and the 5-bp SD sequence, 
+        as well as a few base pairs upstream of SD. Also, the ribosome footprint is about 30 bp total (https://pubs.acs.org/doi/pdf/10.1021/acssynbio.2c00139?ref=article_openPDF#mk%3Aref14)'''
+
+        assert self.contigs is not None, 'Reference._get_nt_seqs: Contigs have not been loaded into the Reference object.'
+
+        is_partial_at_n_terminus = lambda row : ((getattr(row, f'{prefix}_partial') == '10') and (getattr(row, f'{prefix}_strand') == 1)) or ((getattr(row, f'{prefix}_partial') == '01') and (getattr(row, f'{prefix}_strand') == -1))
+        # check_nt_seq_upstream = lambda nt_seq : (nt_seq[-3:] in start_codons[11] + start_codons[14]) and (len(nt_seq) == (n_upstream_bases + 3))
+
+        nt_seqs = list()
+        for row in top_hits_df.itertuples():
+            
+            contig_id = get_contig_id(row.Index) # Prodigal gene IDs contain the contig ID, e.g. NZ_CP130454.1_3215. 
+            feature = 'CDS' if (prefix == 'query') else getattr(row, 'top_hit_feature')
+
+            if feature != 'CDS':
+                nt_seqs.append('none')
+                continue 
+            if is_partial_at_n_terminus(row):
+                nt_seqs.append('partial')
+                continue
+
+            start, stop, strand = getattr(row, f'{prefix}_start'), getattr(row, f'{prefix}_stop'), getattr(row, f'{prefix}_strand')
+            if strand == 1:
+                start, stop = (start - 1) - (n_upstream_bases), (start - 1) + 3
+            elif strand == -1:
+                start, stop = stop - 3, stop  + n_upstream_bases 
+
+            nt_seq = self.get_nt_seq(contig_id, start, stop).replace('T', 'U')
+            nt_seq = reverse_complement(nt_seq) if (strand == -1) else nt_seq
+            # assert check_nt_seq_upstream(nt_seq), f'Reference._get_upstream_nt_seqs: Something went wrong while grabbing the upstream region, {nt_seq}.'
+            nt_seqs.append(nt_seq)
+
+        top_hits_df[f'{prefix}_nt_seq_upstream'] = nt_seqs
+        return top_hits_df      
 
     def _get_hits(self, query):
         hits_df = self.df[self.df.contig_id == query.contig_id] # Get the contig corresponding of the query region. 
@@ -288,6 +320,8 @@ class Reference():
         if self.contigs is not None:
             top_hits_df = self._get_nt_seqs(top_hits_df, prefix='top_hit')
             top_hits_df = self._get_nt_seqs(top_hits_df, prefix='query')
+            top_hits_df = self._get_nt_seqs_upstream(top_hits_df, prefix='top_hit')
+            top_hits_df = self._get_nt_seqs_upstream(top_hits_df, prefix='query')
 
         return all_hits_df, top_hits_df
     
@@ -321,9 +355,10 @@ class Reference():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', FutureWarning)
             # Add the query IDs which had no compare hits to the DataFrame. Make sure to include the sequences.  
-            index = pd.Index(name='query_id', data=[id_ for id_ in query_df.index if (id_ not in top_hits_df.index)])
-            no_hits_df = pd.DataFrame(index=index, columns=top_hits_df.columns)
-            no_hits_df['query_seq'] = query_df['seq'].loc[no_hits_df.index].copy()
+            no_hits_df = pd.DataFrame(index=pd.Index(name='query_id', data=[id_ for id_ in query_df.index if (id_ not in top_hits_df.index)]), columns=top_hits_df.columns)
+            for field in Reference.query_fields: # Make sure all the query data is included. 
+                no_hits_df[f'query_{field}'] = query_df.loc[no_hits_df.index][field]
+
             top_hits_df = pd.concat([top_hits_df, no_hits_df])
             top_hits_df = top_hits_df.loc[query_df.index] # Make sure the DataFrames are in the same order for convenience.
 
@@ -486,14 +521,6 @@ def annotate(df:pd.DataFrame, prefix:str='top_hit'):
     df['extended'] = df.match & (df[f'{prefix}_length'] < df.length) & (~df[f'{prefix}_ribosomal_slippage'])
 
     return df.copy()
-
-
-
-
-
-
-
-
 
 
 # def get_overlap_type(row):

@@ -342,7 +342,8 @@ def model_fit(args):
 # srun --mem 100GB --time 1:00:00 model predict --dataset-path ./data/datasets/dataset_test.h5 --model-path ./models/*
 def model_predict(args):
 
-    output_path = os.path.join(args.output_dir, os.path.basename(args.dataset_path).replace('.h5', '_predict.csv'))   
+    output_dir = os.path.dirname(args.dataset_path) if (args.output_dir is None) else args.output_dir
+    output_path = os.path.join(output_dir, os.path.basename(args.dataset_path).replace('.h5', '_predict.csv'))   
 
     for model_path in args.model_path:
         model_name = os.path.basename(model_path).replace('.pkl', '')
@@ -386,7 +387,7 @@ def model():
     model_parser = subparser.add_parser('predict')
     model_parser.add_argument('--dataset-path', type=str)
     model_parser.add_argument('--model-path', nargs='+', type=str, default=None)
-    model_parser.add_argument('--output-dir', default='./data/results/', type=str)
+    model_parser.add_argument('--output-dir', default=None, type=str)
 
     args = parser.parse_args()
     

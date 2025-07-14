@@ -13,6 +13,7 @@ def parser_prodigal(description:str):
     columns = ['start', 'stop', 'strand', 'ID', 'partial', 'start_type', 'rbs_motif', 'rbs_spacer', 'gc_content']
     match = re.search(pattern, description)
     parsed_header = {col:match.group(i + 1) for i, col in enumerate(columns)}
+    parsed_header['rbs_motif'] = 'none' if (parsed_header['rbs_motif'] == 'None') else parsed_header['rbs_motif']
     return parsed_header
 
 

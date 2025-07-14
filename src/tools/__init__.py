@@ -1,6 +1,7 @@
 from src.tools.prodigal import Prodigal, Pyrodigal
 from src.tools.mmseqs import MMSeqs, Foldseek
 from src.tools.interpro import InterProScan
+from src.tools.rnacofold import RNACoFold
 
 # def download_homologs(path:str, pseudo_only:bool=True, output_dir='../data/proteins/homologs', overwrite:bool=False):
 #     '''Download homologous sequences used to infer protein existence, function, or coordinates in a GBFF file.'''
