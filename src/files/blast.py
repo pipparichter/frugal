@@ -75,6 +75,7 @@ class BLASTJsonFile():
         
         df = self.df.copy()
         df = fillna(df, rules={str:'none'}, errors='ignore') # Fill in the empty sequences and subject IDs. 
+        df['percent_identity'] = df['identity'] / df['alignment_length']
         df['subject_description'] = [re.sub(r'\[(.+)\]', '', description) for description in df.subject_description] # Remove the taxon name from the sequence description. 
         # First sort by whether or not the hit is hypothetical, and then by E-value. This means selecting the first of hits for the same query sequence
         # will first prioritize all non-hypothetical hits over hypothetical hits. If there are multiple HSPs for a single hit, the best HSP will be first. 
