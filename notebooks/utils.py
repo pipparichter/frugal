@@ -14,31 +14,56 @@ from Bio.Align import PairwiseAligner
 
 plt.rcParams['font.family'] = 'Arial'
 
+get_percent = lambda n, total : f'{100 * n / total:.2f}%' if (total > 0) else '0%'
+get_text = lambda subscript, n, total : '$n_{' + subscript + '}$' + f' = {n} ({get_percent(n, total)})\n'
+
+is_top_hit_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
+is_cds_conflict = lambda df : (df.conflict) & (df.top_hit_feature == 'CDS') & (~df.top_hit_pseudo)
+is_antiparallel_cds_conflict = lambda df : is_cds_conflict(df) & (df.overlap_type.isin(['convergent', 'divergent']))
+is_tandem_cds_conflict = lambda df : is_cds_conflict(df) & (df.overlap_type == 'tandem')
+is_hypothetical_cds_conflict = lambda df : df.conflict & is_top_hit_hypothetical(df)
+is_non_coding_conflict = lambda df : df.conflict & (df.top_hit_pseudo | (df.top_hit_feature != 'CDS'))
 
 
+def write_fasta(df:pd.DataFrame, path:str=None, add_top_hit:bool=True):
+    '''Export the Prodigal-predicted and reference sequences to a FASTA file.'''
+    content = ''
+    for row in df.itertuples():
+        seq = re.sub('X{2,}', '', row.seq)
+        content += f'>{row.Index}\n{seq}\n'
+        if add_top_hit:
+            content += f'>{row.top_hit_protein_id}\n{row.top_hit_seq}\n'
+    with open(path, 'w') as f:
+        f.write(content)
+    print(f'write_fasta: Wrote {len(content.split('\n')) // 2} sequences to {path}')
 
-def get_lengths(df:pd.DataFrame, top_hit:bool=True, units='aa'):
-    start_col, stop_col = ('top_hit_' if top_hit else 'query_') +'start', ('top_hit_' if top_hit else 'query_') + 'stop'
-    lengths = (df[stop_col] - (df[start_col] + 1)) # The start and stop are both inclusive, so add one to the length. 
 
-    if np.any((lengths % 3) != 0):
-        warnings.warn('get_lengths: Not all gene lengths are divisible by three.')
-    if pd.isnull(lengths).sum() > 0:
-        warnings.warn('get_lengths: Some of the returned lengths are NaNs, which probably means there are sequences that do not have NCBI reference hits.')
+def get_split_axes(bottom_range:tuple, top_range:tuple, figsize:tuple=(5, 5)):
 
-    return lengths // 3 if (units == 'aa') else lengths
+    ratio = (top_range[-1] - top_range[0]) / (bottom_range[-1] - bottom_range[0])
+    fig, (ax_top, ax_bottom) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize, height_ratios=[ratio, 1])
 
+    ax_top.set_ylim(*top_range)
+    ax_bottom.set_ylim(*bottom_range)
 
-def denoise(df:pd.DataFrame, x_col:str=None, y_cols:list=None, bins:int=50):
-    bin_labels, bin_edges = pd.cut(df[x_col], bins=bins, retbins=True, labels=False)
-    df['bin_label'] = bin_labels 
-    df_ = dict()
-    df_[x_col] = df.groupby('bin_label', sort=True)[x_col].mean()
-    for y_col in y_cols:
-        df_[y_col] = df.groupby('bin_label', sort=True)[y_col].mean()
-        df_[f'{y_col}_err'] = df.groupby('bin_label').apply(lambda df : df[y_col].std() / np.sqrt(len(df)), include_groups=False)
-    df_ = pd.DataFrame(df_, index=df.bin_label.sort_values().unique())
-    return df_
+    # Hide the spines between the two plots. 
+    ax_top.spines['bottom'].set_visible(False)
+    ax_bottom.spines['top'].set_visible(False)
+    ax_top.tick_params(labelbottom=False, bottom=False)  # Don't show tick labels on the top
+    # ax_bottom.xaxis.tick_bottom()
+
+    # Add diagonal lines to indicate the break. 
+    d = 0.015 
+    kwargs = dict(transform=ax_top.transAxes, color='k', clip_on=False)
+    ax_top.plot((-d, +d), (-d, +d), **kwargs)
+    ax_top.plot((1 - d, 1 + d), (-d, +d), **kwargs)
+
+    kwargs.update(transform=ax_bottom.transAxes)
+    ax_bottom.plot((-d, +d), (1 - d, 1 + d), **kwargs)
+    ax_bottom.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)
+
+    return fig, (ax_top, ax_bottom)
+
 
 
 def correlation(x, y):

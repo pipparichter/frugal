@@ -31,8 +31,8 @@ class RNACoFold():
 
     def run(self, df:pd.DataFrame, seq_col:str='seq', output_path:str=None):
 
-        self.output_paths = [f'{id_}_dp.ps' for id_ in df.index]
-        self.output_paths = [f'{id_}_ss.ps' for id_ in df.index]
+        self.output_paths += [f'{id_}_dp.ps' for id_ in df.index]
+        self.output_paths += [f'{id_}_ss.ps' for id_ in df.index]
         
         self.input_path = self._make_input_file(df, seq_col=seq_col)
         csv = subprocess.run(f'{RNACoFold.cmd} --output-format D {self.input_path}', shell=True, check=True, capture_output=True, text=True).stdout
