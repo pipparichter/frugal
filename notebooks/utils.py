@@ -11,8 +11,11 @@ import matplotlib.pyplot as plt
 import warnings
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from Bio.Align import PairwiseAligner
+from scipy.stats import chisquare
 
 plt.rcParams['font.family'] = 'Arial'
+
+get_gc_content = lambda nt_seq : (nt_seq.count('G') + nt_seq.count('C')) / len(nt_seq)
 
 get_percent = lambda n, total : f'{100 * n / total:.2f}%' if (total > 0) else '0%'
 get_text = lambda subscript, n, total : '$n_{' + subscript + '}$' + f' = {n} ({get_percent(n, total)})\n'
@@ -23,6 +26,16 @@ is_antiparallel_cds_conflict = lambda df : is_cds_conflict(df) & (df.overlap_typ
 is_tandem_cds_conflict = lambda df : is_cds_conflict(df) & (df.overlap_type == 'tandem')
 is_hypothetical_cds_conflict = lambda df : df.conflict & is_top_hit_hypothetical(df)
 is_non_coding_conflict = lambda df : df.conflict & (df.top_hit_pseudo | (df.top_hit_feature != 'CDS'))
+is_nested_cds_conflict = lambda df : df.conflict & ((df.top_hit_overlap == '11') | (df.query_overlap == '11')) & is_cds_conflict(df)
+
+def get_chi_square_p_value(observed_counts_df:pd.DataFrame):
+    # totals = observed_counts_df.sum(axis=1)
+    # Not sure if I should be testing for independence, or using the null that they are equally-distributed. 
+    # expected_counts_df = pd.DataFrame(0.5, index=observed_counts_df.index, columns=observed_counts_df.columns)
+    # expected_counts_df = expected_counts_df.mul(totals, axis=0)
+    expected_counts_df = pd.DataFrame(expected_freq(observed_counts_df), index=observed_counts_df.index, columns=observed_counts_df.columns) # This uses frequencies based on the marginal frequencies.
+    p = chisquare(observed_counts_df.values.ravel(), expected_counts_df.values.ravel()).pvalue
+    return p
 
 
 def write_fasta(df:pd.DataFrame, path:str=None, add_top_hit:bool=True):
