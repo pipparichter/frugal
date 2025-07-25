@@ -1,8 +1,8 @@
 Metadata-Version: 2.4
-Name: frugal
+Name: sprout
 Version: 0.1
 Summary: N/A
-Home-page: https://github.com/pipparichter/tripy
+Home-page: https://github.com/pipparichter/sprout
 Author: Philippa Richter
 Author-email: prichter@caltech.edu
 Requires-Dist: aiohappyeyeballs==2.4.6

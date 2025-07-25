@@ -15,10 +15,10 @@ commands += ['cluster=src.cli:cluster']
 commands += ['dataset=src.cli:dataset']
 
 setuptools.setup(
-    name='frugal',
+    name='sprout',
     version='0.1',    
     description='N/A',
-    url='https://github.com/pipparichter/tripy',
+    url='https://github.com/pipparichter/sprout',
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
     packages=['src', 'src.files', 'src.tools', 'src.embed', 'src.embed.embedders', 'src.download'], 

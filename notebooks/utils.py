@@ -1,17 +1,13 @@
 import pandas as pd 
 import numpy as np 
-import re
-from src import GTDB_DTYPES
-import os 
-import glob
-from src import *  
+import re 
 from src.files import GBFFFile, FASTAFile, InterProScanFile, BLASTJsonFile
-from tqdm import tqdm 
 import matplotlib.pyplot as plt 
 import warnings
 from sklearn.linear_model import LogisticRegression, LinearRegression
-from Bio.Align import PairwiseAligner
 from scipy.stats import chisquare
+from scipy.stats.contingency import expected_freq
+import dataframe_image as dfi
 
 plt.rcParams['font.family'] = 'Arial'
 
@@ -27,6 +23,14 @@ is_tandem_cds_conflict = lambda df : is_cds_conflict(df) & (df.overlap_type == '
 is_hypothetical_cds_conflict = lambda df : df.conflict & is_top_hit_hypothetical(df)
 is_non_coding_conflict = lambda df : df.conflict & (df.top_hit_pseudo | (df.top_hit_feature != 'CDS'))
 is_nested_cds_conflict = lambda df : df.conflict & ((df.top_hit_overlap == '11') | (df.query_overlap == '11')) & is_cds_conflict(df)
+
+def apply_thresholds(results_df:pd.DataFrame, real_threshold:float=0.8, spurious_threshold:float=0.95):
+    results_df['spurious'] = np.where(results_df.model_output_0 > spurious_threshold, True, False)
+    results_df['real'] = np.where(results_df.model_output_1 > real_threshold, True, False)
+    results_df['uncertain'] = ~results_df.real & ~results_df.spurious
+    results_df['model_label'] = np.select([results_df.real, results_df.spurious.values, results_df.uncertain.values], ['real', 'spurious', 'uncertain'], default='none')
+    return results_df
+
 
 def get_chi_square_p_value(observed_counts_df:pd.DataFrame):
     # totals = observed_counts_df.sum(axis=1)
@@ -77,6 +81,15 @@ def get_split_axes(bottom_range:tuple, top_range:tuple, figsize:tuple=(5, 5)):
 
     return fig, (ax_top, ax_bottom)
 
+
+def write_table(df:pd.DataFrame, path:str=None):
+    if path is None:
+        return 
+    elif path.split('.')[-1] == 'csv':
+        df.to_csv(path)
+    elif path.split('.')[-1] == 'png':
+        dfi.export(df, path)
+    return
 
 
 def correlation(x, y):
