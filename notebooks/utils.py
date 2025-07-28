@@ -5,9 +5,11 @@ from src.files import GBFFFile, FASTAFile, InterProScanFile, BLASTJsonFile
 import matplotlib.pyplot as plt 
 import warnings
 from sklearn.linear_model import LogisticRegression, LinearRegression
-from scipy.stats import chisquare
+from scipy.stats import chisquare, mannwhitneyu
 from scipy.stats.contingency import expected_freq
 import dataframe_image as dfi
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 plt.rcParams['font.family'] = 'Arial'
 
@@ -24,12 +26,49 @@ is_hypothetical_cds_conflict = lambda df : df.conflict & is_top_hit_hypothetical
 is_non_coding_conflict = lambda df : df.conflict & (df.top_hit_pseudo | (df.top_hit_feature != 'CDS'))
 is_nested_cds_conflict = lambda df : df.conflict & ((df.top_hit_overlap == '11') | (df.query_overlap == '11')) & is_cds_conflict(df)
 
-def apply_thresholds(results_df:pd.DataFrame, real_threshold:float=0.8, spurious_threshold:float=0.95):
+def apply_thresholds(results_df:pd.DataFrame, real_threshold:float=0.8, spurious_threshold:float=0.95, model_name:str='model_v2'):
+    results_df = results_df.rename(columns={f'{model_name}_output_0':'model_output_0', f'{model_name}_output_1':'model_output_1', f'{model_name}_label':'model_label'})
     results_df['spurious'] = np.where(results_df.model_output_0 > spurious_threshold, True, False)
     results_df['real'] = np.where(results_df.model_output_1 > real_threshold, True, False)
     results_df['uncertain'] = ~results_df.real & ~results_df.spurious
-    results_df['model_label'] = np.select([results_df.real, results_df.spurious.values, results_df.uncertain.values], ['real', 'spurious', 'uncertain'], default='none')
+    results_df['model_label'] = np.select([results_df.real, results_df.spurious, results_df.uncertain], ['real', 'spurious', 'uncertain'], default='none')
     return results_df
+
+def has_mixed_dtypes(df:pd.DataFrame):
+    n_dtypes = np.array([df[col].apply(type).nunique() for col in df.columns])
+    return (n_dtypes > 1).sum() > 0
+
+
+def get_dtypes(df:pd.DataFrame):
+    dtypes = dict()
+    for col in df.columns:
+        dtype = df[col].dropna().apply(type).values
+        if (len(dtype) == 0):
+            warnings.warn(f'get_dtypes: Column "{col}" only contains NaNs. Inferring datatype as strings.')
+            dtype = [str]
+        dtypes[col] = dtype[0]
+    return dtypes
+
+
+def fillna(df:pd.DataFrame, rules:dict={bool:False, str:'none', int:0}, errors='raise'):
+    with pd.option_context('future.no_silent_downcasting', True): # Opt-in to future pandas behavior, which will raise a warning if it tries to downcast.
+        for col, dtype in get_dtypes(df).items():
+            value = rules.get(dtype, None)
+            if value is not None:
+                df[col] = df[col].fillna(rules[dtype]).astype(dtype)
+                # print(f'fillna: Replaced NaNs in column {col} with "{rules[dtype]}."')
+            if errors == 'raise':
+                assert df[col].isnull().sum() == 0, f'fillna: There are still NaNs in column {col}.'
+    return df 
+
+def get_pca(df:pd.DataFrame, ax:plt.Axes=None, color_by:pd.Series=None, palette=None, labels:list=list()):
+    scaler = StandardScaler()
+    values = scaler.fit_transform(df.values)
+
+    pca = PCA(n_components=2)
+    components = pca.fit_transform(values)
+    return pd.DataFrame(components, index=df.index), pca.explained_variance_ratio_ 
+
 
 
 def get_chi_square_p_value(observed_counts_df:pd.DataFrame):
@@ -39,6 +78,19 @@ def get_chi_square_p_value(observed_counts_df:pd.DataFrame):
     # expected_counts_df = expected_counts_df.mul(totals, axis=0)
     expected_counts_df = pd.DataFrame(expected_freq(observed_counts_df), index=observed_counts_df.index, columns=observed_counts_df.columns) # This uses frequencies based on the marginal frequencies.
     p = chisquare(observed_counts_df.values.ravel(), expected_counts_df.values.ravel()).pvalue
+    return p
+
+
+def get_mann_whitney_p_value(*groups, n_permutations:int=100):
+    '''Use a permutation test to determine the significance of the Mann-Whitney test statistic.'''
+    n = len(groups[0])
+    combined = np.concatenate(list(groups)).ravel()
+    stat = mannwhitneyu(*groups, alternative='two-sided').statistic
+    stats = list()
+    for _ in range(n_permutations):
+        np.random.shuffle(combined)
+        stats.append(mannwhitneyu(combined[:n], combined[n:], alternative='two-sided').statistic)
+    p = np.mean(np.array(stats) > stat)
     return p
 
 

@@ -124,30 +124,61 @@ class DistanceMatrix():
         self.matrix = np.zeros((n, n), dtype=dtype)
         self.index = index 
 
-        # 
-        # self.scaler = scaler if (scaler is not None) else StandardScaler()
-
-
     @classmethod
-    def from_dataset(cls, dataset:Dataset, scaler:StandardScaler=None):
+    def from_dataset(cls, dataset:Dataset, scaler:StandardScaler=None, scale:bool=True, metric:str='euclidean'):
 
         matrix = cls(len(dataset), index=dataset.index)
 
         assert not dataset.scaled, 'DistanceMatrix.from_dataset: Dataset has already been scaled.'
         embeddings = dataset.numpy()
-        assert ((scaler is None) or scaler_is_fitted(scaler)), 'DistanceMatrix.__init__: Input StandardScaler has not been fitted.'
-        scaler = StandardScaler() if (scaler is None) else scaler 
-        embeddings = scaler.fit_transform(embeddings) if (not scaler_is_fitted(scaler)) else scaler.transform(embeddings)
 
-        matrix.matrix = cdist(embeddings, embeddings, metric='euclidean')
+        if scale:
+            assert ((scaler is None) or scaler_is_fitted(scaler)), 'DistanceMatrix.__init__: Input StandardScaler has not been fitted.'
+            scaler = StandardScaler() if (scaler is None) else scaler 
+            embeddings = scaler.fit_transform(embeddings) if (not scaler_is_fitted(scaler)) else scaler.transform(embeddings)
+
+        matrix.matrix = cdist(embeddings, embeddings, metric=metric)
+
         return matrix
     
-    
-    def to_df(self):
+    def invert(self, method:str='linear', epsilon:float=1e-5):
+        '''Convert a distance metric (higher value indicates lower similarity) to a similarity metric (higher value indicates higher similarity).'''
+        if method == 'linear':
+            self.matrix = self.matrix.max() - self.matrix
+        elif method == 'reciprocal':
+            self.matrix = 1 / (self.matrix + epsilon)
+        else:
+            raise Exception(f'DistanceMatrix.invert: Invalid inversion method {method}.')
+        return self
 
-        df = pd.DataFrame(self.matrix, columns=self.index)
-        df['query_id'] = self.index 
-        df = df.melt(value_name='distance', var_name='subject_id', id_vars='query_id')
+        
+    @classmethod
+    def from_alignment(cls, align_df:pd.DataFrame, metric:str='bit_score'):
+
+        # align_df['bit_score'] = align_df['bit_score'] / align_df['alignment_length']
+
+        index = np.unique(np.concatenate([align_df.subject_id.values, align_df.query_id.values]).ravel())
+        matrix = cls(len(index), index=index)
+        
+        mask = align_df.duplicated(['query_id', 'subject_id'])
+        print(f'DistanceMatrix.from_alignment: Removing {mask.sum()} duplicate query-subject pairs.')
+        align_df = align_df.sort_values(metric, ascending=False).drop_duplicates(['query_id', 'subject_id'])
+        # align_df = align_df[align_df.query_id != align_df.subject_id].copy() # Remove the self-alignments. 
+
+        for id_i, id_j, value in zip(align_df.subject_id.values, align_df.query_id.values, align_df[metric].values):
+            i, j = np.where(index == id_i)[0], np.where(index == id_j)
+            matrix.matrix[i, j] = value
+            matrix.matrix[j, i] = value
+        return matrix 
+
+
+    def to_df(self, melt:bool=True):
+
+        df = pd.DataFrame(self.matrix, columns=self.index, index=self.index)
+
+        if melt:
+            df['query_id'] = self.index 
+            df = df.melt(value_name='distance', var_name='subject_id', id_vars='query_id')
         return df 
     
     def numpy(self):

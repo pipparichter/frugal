@@ -101,7 +101,7 @@ class MMSeqsBase():
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
 
     @classmethod
-    def load(cls, path:str, chunk_size:int=None):
+    def load_align(cls, path:str, chunk_size:int=None):
         names = [cls.fields[field_code] for field_code in cls.minimal_field_codes]
         df = pd.read_csv(path, delimiter='\t', names=names, header=None, chunksize=chunk_size)
         return df
@@ -131,7 +131,7 @@ class MMSeqs(MMSeqsBase):
             output_database_path = self._align(query_database_path, subject_database_path, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity, max_e_value=max_e_value)
             self._make_tsv_output(output_path, output_database_path=output_database_path, query_database_path=query_database_path, subject_database_path=subject_database_path)
             
-        align_df = MMSeqsBase.load(output_path, **kwargs)
+        align_df = MMSeqsBase.load_align(output_path, **kwargs)
         return align_df
         
     def cluster(self, df:pd.DataFrame, name:str=None, sequence_identity:float=0.5, overwrite:bool=False, output_dir:str='.'):
@@ -189,5 +189,5 @@ class Foldseek(MMSeqsBase):
             output_database_path = self._align(query_database_path, subject_database_path, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity, max_e_value=max_e_value)
             self._make_tsv_output(output_path, output_database_path=output_database_path, query_database_path=query_database_path, subject_database_path=subject_database_path)
             
-        align_df = Foldseek.load(output_path)
+        align_df = Foldseek.load_align(output_path)
         return align_df
