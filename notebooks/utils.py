@@ -10,6 +10,8 @@ from scipy.stats.contingency import expected_freq
 import dataframe_image as dfi
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from src.tools import MMSeqs
+import src.reference
 
 plt.rcParams['font.family'] = 'Arial'
 
@@ -19,6 +21,8 @@ get_percent = lambda n, total : f'{100 * n / total:.2f}%' if (total > 0) else '0
 get_text = lambda subscript, n, total : '$n_{' + subscript + '}$' + f' = {n} ({get_percent(n, total)})\n'
 
 is_top_hit_hypothetical = lambda df : df.top_hit_product == 'hypothetical protein'
+is_top_hit_ab_initio = lambda df : df.top_hit_evidence_type == 'ab initio prediction'
+
 is_cds_conflict = lambda df : (df.conflict) & (df.top_hit_feature == 'CDS') & (~df.top_hit_pseudo)
 is_antiparallel_cds_conflict = lambda df : is_cds_conflict(df) & (df.overlap_type.isin(['convergent', 'divergent']))
 is_tandem_cds_conflict = lambda df : is_cds_conflict(df) & (df.overlap_type == 'tandem')
@@ -26,13 +30,71 @@ is_hypothetical_cds_conflict = lambda df : df.conflict & is_top_hit_hypothetical
 is_non_coding_conflict = lambda df : df.conflict & (df.top_hit_pseudo | (df.top_hit_feature != 'CDS'))
 is_nested_cds_conflict = lambda df : df.conflict & ((df.top_hit_overlap == '11') | (df.query_overlap == '11')) & is_cds_conflict(df)
 
+
 def apply_thresholds(results_df:pd.DataFrame, real_threshold:float=0.8, spurious_threshold:float=0.95, model_name:str='model_v2'):
+    '''Apply a double-sided threshold to prediction results and assign labels to each sequence (real, uncertain, or spurious)'''
     results_df = results_df.rename(columns={f'{model_name}_output_0':'model_output_0', f'{model_name}_output_1':'model_output_1', f'{model_name}_label':'model_label'})
     results_df['spurious'] = np.where(results_df.model_output_0 > spurious_threshold, True, False)
     results_df['real'] = np.where(results_df.model_output_1 > real_threshold, True, False)
     results_df['uncertain'] = ~results_df.real & ~results_df.spurious
     results_df['model_label'] = np.select([results_df.real, results_df.spurious, results_df.uncertain], ['real', 'spurious', 'uncertain'], default='none')
     return results_df
+
+
+def load_dataset(dataset_path:str=None, exclude_genome_ids:list=None, annotate:bool=True):
+    dataset_df = pd.read_csv(dataset_path, index_col=0)
+    if annotate:
+        dataset_df = src.reference.annotate(dataset_df)
+    
+    if np.any(dataset_df.columns.str.contains('top_hit')):
+        dataset_df['query_length'] = dataset_df.seq.apply(len) # Make sure these are in units of amino acids. 
+        dataset_df['top_hit_length'] = dataset_df.top_hit_seq.apply(len) # Make sure these are in units of amino acids. 
+        # Add some columns for more straighforward analysis of conflicts. 
+        dataset_df['query_codon_start'] = 1 # None of the Prodigal predictions have any offset to the translational start site.
+        dataset_df['query_id'] = dataset_df.index
+        dataset_df['query_product'] = 'hypothetical protein'
+        dataset_df['query_seq'] = dataset_df.seq
+        dataset_df['top_hit_id'] = dataset_df.top_hit_protein_id
+        dataset_df['top_hit_gc_content'] = dataset_df.top_hit_nt_seq.apply(get_gc_content)
+
+    dataset_df = dataset_df[~dataset_df.genome_id.isin(exclude_genome_ids)].copy()
+
+    return dataset_df
+
+
+def load_results(dataset_path:str=None, predictions_path:str=None, top_hit_predictions_path:str=None, exclude_genome_ids:list=['GCF_029854295.1', 'GCF_021057185.1', 'GCF_016097415.1'], annotate:bool=True):
+    
+    dataset_df = load_dataset(dataset_path=dataset_path, exclude_genome_ids=exclude_genome_ids, annotate=annotate)
+
+    fields = ['real', 'spurious', 'model_output_1', 'model_output_0', 'uncertain', 'model_label']
+
+    results_df = pd.read_csv(predictions_path, index_col=0)
+    results_df = results_df.merge(dataset_df, left_index=True, right_index=True, how='inner')
+    results_df = apply_thresholds(results_df, real_threshold=0.8, spurious_threshold=0.9)
+
+    if top_hit_predictions_path is not None:
+        top_hit_results_df = pd.read_csv(top_hit_predictions_path, index_col=0)
+        top_hit_results_df = apply_thresholds(top_hit_results_df, real_threshold=0.8, spurious_threshold=0.9)
+        top_hit_results_df = top_hit_results_df[~top_hit_results_df.index.duplicated(keep='first')].copy()
+        # Add the top hit predictions to the results DataFrame. 
+        with pd.option_context('future.no_silent_downcasting', True):
+            for field in fields:
+                results_df[f'top_hit_{field}'] = results_df.top_hit_protein_id.map(top_hit_results_df[field])
+    
+    # Add some columns for more straighforward analysis of conflicts. 
+    for field in fields:
+        results_df[f'query_{field}'] = results_df[field]
+    
+    return results_df
+
+
+def has_alignment(df, path:str='../data/results/results-2/dataset_swissprot_align_mmseqs.tsv', min_bit_score:float=50):
+
+    align_df = MMSeqs.load_align(path)
+    alignment_ids = align_df[align_df.bit_score > min_bit_score].query_id.unique()
+    df['aligned'] = df.index.isin(alignment_ids)
+    return df
+
 
 def has_mixed_dtypes(df:pd.DataFrame):
     n_dtypes = np.array([df[col].apply(type).nunique() for col in df.columns])
@@ -60,6 +122,8 @@ def fillna(df:pd.DataFrame, rules:dict={bool:False, str:'none', int:0}, errors='
             if errors == 'raise':
                 assert df[col].isnull().sum() == 0, f'fillna: There are still NaNs in column {col}.'
     return df 
+
+
 
 def get_pca(df:pd.DataFrame, ax:plt.Axes=None, color_by:pd.Series=None, palette=None, labels:list=list()):
     scaler = StandardScaler()
