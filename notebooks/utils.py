@@ -147,14 +147,20 @@ def get_chi_square_p_value(observed_counts_df:pd.DataFrame):
 
 def get_mann_whitney_p_value(*groups, n_permutations:int=100):
     '''Use a permutation test to determine the significance of the Mann-Whitney test statistic.'''
-    n = len(groups[0])
+    n1, n2 = len(groups[0]), len(groups[1])
     combined = np.concatenate(list(groups)).ravel()
-    stat = mannwhitneyu(*groups, alternative='two-sided').statistic
+    mwu = mannwhitneyu(*groups, alternative='two-sided')
+    stat = mwu.statistic
+    
+    if n_permutations is None:
+        return mwu.pvalue
+    
     stats = list()
     for _ in range(n_permutations):
-        np.random.shuffle(combined)
-        stats.append(mannwhitneyu(combined[:n], combined[n:], alternative='two-sided').statistic)
-    p = np.mean(np.array(stats) > stat)
+        shuffled = np.random.permutation(combined)
+        stats.append(mannwhitneyu(shuffled[:n1], shuffled[n1:n1 + n2], alternative='two-sided').statistic)
+    # p = np.mean(np.array(stats) > stat)
+    p = np.mean(np.abs(stats - np.median(stats)) >= np.abs(stat - np.median(stats)))
     return p
 
 
