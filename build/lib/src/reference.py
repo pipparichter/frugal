@@ -56,8 +56,6 @@ class Reference():
     query_fields = ['start', 'stop', 'partial', 'strand', 'seq', 'gc_content', 'rbs_motif', 'rbs_spacer', 'start_type']
     subject_fields = ['start', 'stop', 'partial', 'strand', 'seq']
 
-
-
     def __init__(self, path:str, load_contigs:bool=False, translation_table:int=11):
 
         self.genome_id = get_genome_id(path, errors='ignore', default=os.path.basename(path).replace('_genomic.gbff', ''))
@@ -201,7 +199,6 @@ class Reference():
         # Therefore, the safe thing to do is to just compare translational starts (accounting for codon_start). This supports match cases where a programmed frameshift
         # causes the C terminus to be out-of-phase.
         info['phase'] = abs(query_start - subject_start) % 3
-
 
         # There are cases where programmed frameshift means that the C-terminal part of the sequence is aligned, but the N-terminal
         # info['in_frame'] = ((info['phase_start'] == 0) or (info['phase_stop'] == 0)) and (query.strand == subject.strand)
