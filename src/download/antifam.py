@@ -16,6 +16,7 @@ class AntiFam():
         pass 
 
     def get_antifam_ids(self, path:str='../data/antifam_ids.json'):
+        '''Get metadata for all AntiFam families from the InterPro website.'''
         antifam_ids = []
         result = json.loads(requests.get('https://www.ebi.ac.uk/interpro/api/entry/antifam/').text)
         pbar = tqdm(total=result['count'], desc='AntiFam.get_antifams')

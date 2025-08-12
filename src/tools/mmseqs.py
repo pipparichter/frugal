@@ -133,61 +133,43 @@ class MMSeqs(MMSeqsBase):
             
         align_df = MMSeqsBase.load_align(output_path, **kwargs)
         return align_df
-        
-    def cluster(self, df:pd.DataFrame, name:str=None, sequence_identity:float=0.5, overwrite:bool=False, output_dir:str='.'):
 
-        input_path = self._make_fasta(df, name=name)
-        output_path = os.path.join(output_dir, name)
-
-        if (not os.path.exists(output_path + '_cluster.tsv')) or overwrite:
-            subprocess.run(f'mmseqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}', shell=True, check=True, stdout=subprocess.DEVNULL)
-
-        output_path = output_path + '_cluster.tsv'
-        return MMSeqs.load_cluster(output_path)
-
-    @staticmethod
-    def load_cluster(path:str):
-        df = pd.read_csv(path, delimiter='\t', names=['cluster_rep_id', 'id'])
-        cluster_ids = {id_:i for i, id_ in enumerate(df.cluster_rep_id.unique())} # Add integer IDs for each cluster. 
-        df['cluster_id'] = [cluster_ids[id_] for id_ in df.cluster_rep_id]
-        df = df.set_index('id')
-        return df
     
 
 
-class Foldseek(MMSeqsBase):
+# class Foldseek(MMSeqsBase):
 
-    fields = MMSeqsBase.fields
-    fields['qca'] = 'query_calpha_coordinates'
-    fields['tca'] = 'subject_calpha_coordinates'
-    fields['alntmscore'] = 'tm_score' # This is the TM-score of the alignment. 
-    fields['qtmscore'] = 'query_normalized_tm_score'
-    fields['ttmscore'] = 'subject_normalized_tm_score'
-    fields['u'] = 'rotation_matrix'
-    fields['t'] = 'translation_vector'
-    fields['lddt'] = 'average_lddt'
-    fields['lddtfull'] = 'per_position_lddt'
-    fields['prob'] = 'probability_homologous'
+#     fields = MMSeqsBase.fields
+#     fields['qca'] = 'query_calpha_coordinates'
+#     fields['tca'] = 'subject_calpha_coordinates'
+#     fields['alntmscore'] = 'tm_score' # This is the TM-score of the alignment. 
+#     fields['qtmscore'] = 'query_normalized_tm_score'
+#     fields['ttmscore'] = 'subject_normalized_tm_score'
+#     fields['u'] = 'rotation_matrix'
+#     fields['t'] = 'translation_vector'
+#     fields['lddt'] = 'average_lddt'
+#     fields['lddtfull'] = 'per_position_lddt'
+#     fields['prob'] = 'probability_homologous'
 
-    minimal_field_codes = MMSeqsBase.minimal_field_codes + ['prob', 'lddt', 'alntmscore']
+#     minimal_field_codes = MMSeqsBase.minimal_field_codes + ['prob', 'lddt', 'alntmscore']
 
-    program = 'foldseek'
+#     program = 'foldseek'
 
-    def __init__(self, tmp_dir:str='../data/tmp', database_dir:str='../data/databases/'):
-        super().__init__(tmp_dir=tmp_dir, database_dir=database_dir)
+#     def __init__(self, tmp_dir:str='../data/tmp', database_dir:str='../data/databases/'):
+#         super().__init__(tmp_dir=tmp_dir, database_dir=database_dir)
 
 
-    def align(self, query_path:pd.DataFrame, subject_path:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='.', overwrite:bool=False, sensitivity:float=5.7, max_e_value:float=10, **kwargs):
-        # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
-        subject_name = query_name if (subject_name is None) else subject_name
-        output_path = os.path.join(output_dir, f'{query_name}_{subject_name}_align_{self.program}.tsv')
+#     def align(self, query_path:pd.DataFrame, subject_path:pd.DataFrame=None, query_name:str=None, subject_name:str=None, output_dir:str='.', overwrite:bool=False, sensitivity:float=5.7, max_e_value:float=10, **kwargs):
+#         # MMSeqs align queryDB targetDB resultDB_pref resultDB_aln
+#         subject_name = query_name if (subject_name is None) else subject_name
+#         output_path = os.path.join(output_dir, f'{query_name}_{subject_name}_align_{self.program}.tsv')
 
-        query_database_path = self._make_database(query_path, name=query_name)
-        subject_database_path = self._make_database(subject_path, name=subject_name)
+#         query_database_path = self._make_database(query_path, name=query_name)
+#         subject_database_path = self._make_database(subject_path, name=subject_name)
 
-        if not os.path.exists(output_path) or overwrite:
-            output_database_path = self._align(query_database_path, subject_database_path, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity, max_e_value=max_e_value)
-            self._make_tsv_output(output_path, output_database_path=output_database_path, query_database_path=query_database_path, subject_database_path=subject_database_path)
+#         if not os.path.exists(output_path) or overwrite:
+#             output_database_path = self._align(query_database_path, subject_database_path, query_name=query_name, subject_name=subject_name, sensitivity=sensitivity, max_e_value=max_e_value)
+#             self._make_tsv_output(output_path, output_database_path=output_database_path, query_database_path=query_database_path, subject_database_path=subject_database_path)
             
-        align_df = Foldseek.load_align(output_path)
-        return align_df
+#         align_df = Foldseek.load_align(output_path)
+#         return align_df

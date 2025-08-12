@@ -50,21 +50,6 @@ def cluster():
     cluster_parser.add_argument('--cluster-path', default=None, type=str)
     cluster_parser.add_argument('--n', default=10, type=int)
 
-    cluster_parser = subparser.add_parser('metric')
-    cluster_parser.add_argument('--dataset-path', type=str, default=None)
-    cluster_parser.add_argument('--output-path', type=str, default=None)
-    cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
-    cluster_parser.add_argument('--cluster-path', default=None, type=str)
-    cluster_parser.add_argument('--silhouette', action='store_true')
-    cluster_parser.add_argument('--silhouette-sample-size', default=5000, type=int)
-    cluster_parser.add_argument('--dunn', action='store_true')
-    cluster_parser.add_argument('--dunn-inter-dist-method', default='pairwise', type=str)
-    cluster_parser.add_argument('--dunn-intra-dist-method', default='center', type=str)
-    cluster_parser.add_argument('--davies-bouldin', action='store_true')
-    cluster_parser.add_argument('--min-inter-dist', action='store_true')
-    cluster_parser.add_argument('--min-inter-dist-method', default='center', type=str)
-    cluster_parser.add_argument('--intra-dist', action='store_true')
-    cluster_parser.add_argument('--intra-dist-method', default='pairwise', type=str)
 
     args = parser.parse_args()
     
@@ -72,53 +57,6 @@ def cluster():
         cluster_fit(args)
     if args.subcommand == 'predict':
         cluster_predict(args)
-    if args.subcommand == 'metric':
-        cluster_metric(args)
-
-
-def cluster_metric(args):
-    output_path = args.dataset_path.replace('.h5', '_cluster_metadata.csv') if (args.output_path is None) else args.output_path
-
-    dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
-    clusterer = Clusterer.load(args.cluster_path)
-    n_clusters = clusterer.n_clusters
-
-    cluster_metadata_df = pd.DataFrame(index=pd.Index(np.arange(n_clusters), name='cluster_id'))
-    if os.path.exists(output_path):
-        cluster_metadata_df = pd.read_csv(output_path, index_col=0)
-        assert len(cluster_metadata_df) == n_clusters, 'cluster_metric: The length of the cluster metadata DataFrame should be equal to the number of clusters.'
-
-    if args.silhouette:
-        sample_size = min(len(dataset) - 1, args.silhouette_sample_size)
-        silhouette_index, cluster_metadata_df_ = clusterer.get_silhouette_index(dataset, sample_size=sample_size) 
-        print('cluster_metric: Silhouette index is', silhouette_index)
-
-    elif args.dunn:
-        dunn_index, cluster_metadata_df_ = clusterer.get_dunn_index(dataset, inter_dist_method=args.inter_dist_method, intra_dist_method=args.intra_dist_method) 
-        print('cluster_metric: Dunn index is', dunn_index)
-
-    elif args.davies_bouldin:
-        davies_bouldin_index, cluster_metadata_df_ = clusterer.get_davies_bouldin_index(dataset) 
-        print('cluster_metric: Davies-Bouldin index is', davies_bouldin_index)
-
-    # For inter-cluster distances, always returns the smallest non-self value computed acoss all clusters. 
-    elif args.min_inter_dist:
-        method = args.min_inter_dist_method
-        assert method in clusterer.inter_dist_methods, f'cluster_metric: {method} is not a valid method for computing inter-cluster distances.'
-        min_inter_cluster_distance, cluster_metadata_df_ = clusterer.get_min_inter_cluster_distance(dataset, method=method) 
-        print(f'cluster_metric: Mean minimum inter-cluster distance using method {method} is', min_inter_cluster_distance)
-
-    elif args.intra_dist:
-        method = args.intra_dist_method
-        assert method in clusterer.intra_dist_methods, f'cluster_metric: {method} is not a valid method for computing intra-cluster distances.'
-        intra_cluster_distance, cluster_metadata_df_ = clusterer.get_intra_cluster_distance(dataset, method=method) 
-        print(f'cluster_metric: Mean intra-cluster distance using method {method} is', intra_cluster_distance)
-
-
-    print(f'cluster_metric: Writing cluster metadata to {output_path}')
-    for col in cluster_metadata_df_.columns: # Add the new cluster metadata. 
-        cluster_metadata_df[col] = cluster_metadata_df_[col]
-    cluster_metadata_df.to_csv(output_path)
 
 
 # sbatch --mem 300GB --time 10:00:00 --mail-user prichter@caltech.edu --mail-type ALL --output dataset_cluster.out --wrap "cluster fit --dataset-path ./data/datasets/dataset.h5"
@@ -430,7 +368,6 @@ def embed():
     print(f'embed: Embeddings saved to {output_path}.')
 
 
-
 # def stats():
 #     parser = argparse.ArgumentParser()
 #     parser.add_argument('--dataset-path', type=str, default=None)
@@ -456,3 +393,62 @@ def embed():
 #             print(f'stats:\t{metric} = {model.metrics[metric][model.best_epoch]:.3f}')
 
 
+    # cluster_parser = subparser.add_parser('metric')
+    # cluster_parser.add_argument('--dataset-path', type=str, default=None)
+    # cluster_parser.add_argument('--output-path', type=str, default=None)
+    # cluster_parser.add_argument('--feature-type', default='esm_650m_gap', type=str)
+    # cluster_parser.add_argument('--cluster-path', default=None, type=str)
+    # cluster_parser.add_argument('--silhouette', action='store_true')
+    # cluster_parser.add_argument('--silhouette-sample-size', default=5000, type=int)
+    # cluster_parser.add_argument('--dunn', action='store_true')
+    # cluster_parser.add_argument('--dunn-inter-dist-method', default='pairwise', type=str)
+    # cluster_parser.add_argument('--dunn-intra-dist-method', default='center', type=str)
+    # cluster_parser.add_argument('--davies-bouldin', action='store_true')
+    # cluster_parser.add_argument('--min-inter-dist', action='store_true')
+    # cluster_parser.add_argument('--min-inter-dist-method', default='center', type=str)
+    # cluster_parser.add_argument('--intra-dist', action='store_true')
+    # cluster_parser.add_argument('--intra-dist-method', default='pairwise', type=str)
+
+# def cluster_metric(args):
+#     output_path = args.dataset_path.replace('.h5', '_cluster_metadata.csv') if (args.output_path is None) else args.output_path
+
+#     dataset = Dataset.from_hdf(args.dataset_path, feature_type=args.feature_type, attrs=['label', 'cluster_id'])
+#     clusterer = Clusterer.load(args.cluster_path)
+#     n_clusters = clusterer.n_clusters
+
+#     cluster_metadata_df = pd.DataFrame(index=pd.Index(np.arange(n_clusters), name='cluster_id'))
+#     if os.path.exists(output_path):
+#         cluster_metadata_df = pd.read_csv(output_path, index_col=0)
+#         assert len(cluster_metadata_df) == n_clusters, 'cluster_metric: The length of the cluster metadata DataFrame should be equal to the number of clusters.'
+
+#     if args.silhouette:
+#         sample_size = min(len(dataset) - 1, args.silhouette_sample_size)
+#         silhouette_index, cluster_metadata_df_ = clusterer.get_silhouette_index(dataset, sample_size=sample_size) 
+#         print('cluster_metric: Silhouette index is', silhouette_index)
+
+#     elif args.dunn:
+#         dunn_index, cluster_metadata_df_ = clusterer.get_dunn_index(dataset, inter_dist_method=args.inter_dist_method, intra_dist_method=args.intra_dist_method) 
+#         print('cluster_metric: Dunn index is', dunn_index)
+
+#     elif args.davies_bouldin:
+#         davies_bouldin_index, cluster_metadata_df_ = clusterer.get_davies_bouldin_index(dataset) 
+#         print('cluster_metric: Davies-Bouldin index is', davies_bouldin_index)
+
+#     # For inter-cluster distances, always returns the smallest non-self value computed acoss all clusters. 
+#     elif args.min_inter_dist:
+#         method = args.min_inter_dist_method
+#         assert method in clusterer.inter_dist_methods, f'cluster_metric: {method} is not a valid method for computing inter-cluster distances.'
+#         min_inter_cluster_distance, cluster_metadata_df_ = clusterer.get_min_inter_cluster_distance(dataset, method=method) 
+#         print(f'cluster_metric: Mean minimum inter-cluster distance using method {method} is', min_inter_cluster_distance)
+
+#     elif args.intra_dist:
+#         method = args.intra_dist_method
+#         assert method in clusterer.intra_dist_methods, f'cluster_metric: {method} is not a valid method for computing intra-cluster distances.'
+#         intra_cluster_distance, cluster_metadata_df_ = clusterer.get_intra_cluster_distance(dataset, method=method) 
+#         print(f'cluster_metric: Mean intra-cluster distance using method {method} is', intra_cluster_distance)
+
+
+#     print(f'cluster_metric: Writing cluster metadata to {output_path}')
+#     for col in cluster_metadata_df_.columns: # Add the new cluster metadata. 
+#         cluster_metadata_df[col] = cluster_metadata_df_[col]
+#     cluster_metadata_df.to_csv(output_path)

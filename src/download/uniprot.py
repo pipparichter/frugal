@@ -11,6 +11,20 @@ import requests
 import json
 import re 
 
+def merge_xml(path:str):
+    '''When the XML entries are downloaded in chunks, the XMLTree parser freaks out ("Extra content at the end of document" error).
+    Need to make sure there is only one XML declaration line (e.g., "<?xml version="1.0" encoding="UTF-8"  standalone="no" ?>") at 
+    the top of the file, and only one root node (with the "uniprot" tag).'''
+    with open(path, 'r') as f:
+        lines = f.readlines()
+    n_lines = len(lines)
+    remove_line = lambda i, line : ((i > 0) and ('<?xml' in line)) or ((i < (n_lines - 1)) and ('</uniprot>' in line) or ((i > 1)) and ('<uniprot' in line))
+    lines = [line for i, line in enumerate(lines) if (not remove_line(i, line))]
+    with open(path, 'w') as f:
+        f.write(''.join(lines))
+    print(f'merge_xml: Cleaned-up XML file written to {path}')
+
+
 class UniProt():
 
     xml_id_pattern = re.compile('<accession>([^<]+)</accession>')
@@ -49,6 +63,9 @@ class UniProt():
             pbar.update(len(chunk))
         pbar.close()
         f.close()
+
+        if (format_ == 'xml'):
+            merge_xml(path)
     
     def _get_existing_ids(path:str, format_:str='xml'):
         ids = []

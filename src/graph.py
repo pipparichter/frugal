@@ -115,7 +115,7 @@ class NeighborsGraph():
             graph.add_node(i, id_=i)
             graph.add_node(j, id_=j)
             # Only show the edges between things in the subset. Still want to add the edge so the topography of the graph is meaningful. 
-            graph.add_edge(i, j, weight=weight) # Invert the weight for the spring layout. Weight corresponds to "attractive force."
+            graph.add_edge(i, j, weight=weight) # Weight corresponds to "attractive force."
         return graph
     
     def draw(self, subset_ids:list=None, colors:dict=dict(), ax:plt.Axes=None, labels=list(), **kwargs):

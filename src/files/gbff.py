@@ -5,9 +5,7 @@ from tqdm import tqdm
 import pandas as pd 
 import numpy as np 
 from src import fillna
-from Bio.Seq import Seq
-# from Bio.Data import CodonTable
-import Bio.Seq
+
 
 # TODO: I should automatically detect the feature labels instead of specifying beforehand.
 # TODO: Organize the fields a little better. 
@@ -285,33 +283,5 @@ class GBFFFile():
         df[evidence_df.columns] = fillna(df[evidence_df.columns].copy(), rules={str:'none'}, errors='raise') # Fill the things which became NaN in the merge.
         self.df = df
 
-    # I don't actually know if this will work, as we can't know where the frameshift is... but at least get the first part?
-    # I checked, and the translate method at least works. I don't know why the homologs don't look similar. 
-    # OK yeah, trying to translate the pseudogenes results in a lot of weirdness. 
-    # def _translate_pseudo(self):
-    #     for i in range(len(self.df)):
-    #         if self.df.loc[i, 'pseudo'] and (self.df.loc[i, 'feature'] == 'CDS'):
-    #             assert self.df.loc[i, 'seq'] == 'none', f'GBFFFile.add_pseudo_seqs: Expected there to be no existing sequence for the pseudogene at locus {self.df.loc[i, 'locus_tag']}'
-    #             seq = self._translate(**self.df.loc[i, :].to_dict())
-    #             self.df.loc[i, 'seq'] = seq if (len(seq) > 0) else 'none' # Not sure why, but I think sometimes these get translated as empty. 
 
-    def translate(self, idx:int):
-        seq = self._translate(**self.df.loc[idx, :].to_dict()) 
-        return seq
-
-    def _translate(self, start:int=None, stop:int=None, strand:int=None, contig_id:int=None, codon_start:int=None, translation_table:int=None, **kwargs):
-
-        offset = (int(codon_start) - 1)
-        if strand == 1:
-            start = start + offset 
-            nt_seq = Seq(self.contigs[contig_id][start - 1:stop])
-        elif strand == -1:
-            stop = stop - offset 
-            nt_seq = Seq(self.contigs[contig_id][start - 1:stop]).reverse_complement()
-
-        nt_seq = nt_seq[:len(nt_seq) - (len(nt_seq) % 3)] # Truncate the sequence so it's in multiples of 3. 
-        seq = str(Bio.Seq.translate(nt_seq, table=translation_table, stop_symbol='', to_stop=True, cds=False))
-        
-        expected_length = len(nt_seq) // 3 # Expected sequence length in amino acids. 
-        print(expected_length, len(seq))
 

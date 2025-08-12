@@ -1,5 +1,5 @@
 from src.tools.prodigal import Prodigal, Pyrodigal
-from src.tools.mmseqs import MMSeqs, Foldseek
+from src.tools.mmseqs import MMSeqs
 from src.tools.interpro import InterProScan
 from src.tools.rnacofold import RNACoFold
 
