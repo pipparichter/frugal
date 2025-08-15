@@ -14,6 +14,7 @@ from src.tools import MMSeqs
 import src.reference
 import os 
 from IPython.display import display, HTML
+from tqdm import tqdm
 
 # Functions and variables for generating figures and tables. 
 
@@ -121,6 +122,60 @@ def save_figure(fig, path:str=None):
 
     plt.show() # Also show the figure. 
 
+
+def get_neighbor_info(results_df:pd.DataFrame, graph):
+    results_df['length'] = results_df.seq.apply(len)
+
+    df = list()
+    for row in tqdm(results_df.itertuples(), 'get_neighbor_info', total=len(results_df)):
+
+        neighbor_ids = np.array([id_ for id_ in graph.get_neighbor_ids(row.Index) if (id_ != row.Index)])
+        neighbor_distances = graph.get_neighbor_distances(row.Index)
+
+        # Handle cases where IDs are missing in the results DataFrame.
+        missing_ids = ['D5AG70', 'E1PZ54', 'I9RXR8', 'Q8Y916']
+        if np.any(np.isin(neighbor_ids, missing_ids)):
+            idxs = np.where(~np.isin(neighbor_ids, missing_ids))
+            neighbor_ids = neighbor_ids[idxs]
+            neighbor_distances = neighbor_distances[idxs]
+
+        info = dict()
+        info['neighbor_ids'] = ','.join(neighbor_ids)
+
+        neighbor_df = results_df.loc[neighbor_ids]
+        neighbor_lengths = neighbor_df.length.values
+        neighbor_length_diffs = np.abs(neighbor_lengths - row.length)
+        neighbor_labels = neighbor_df.label.values
+        neighbor_products = neighbor_df['product'].values
+        neighbor_model_labels = neighbor_df['model_label'].values
+
+        info['neighbors_length_mean'] = neighbor_lengths.mean()
+        info['neighbors_length_min'] = neighbor_lengths.max()
+        info['neighbors_length_max'] = neighbor_lengths.min()
+        info['neighbors_length_diff_mean'] = neighbor_length_diffs.mean()
+        info['neighbors_length_diff_min'] = neighbor_length_diffs.max()
+        info['neighbors_length_diff_max'] = neighbor_length_diffs.min()
+        info['neighbors_length_std'] = neighbor_lengths.std()
+        info['neighbors_distance_mean'] = neighbor_distances.mean()
+        info['neighbors_distance_min'] = neighbor_distances.min()
+        info['neighbors_distance_max'] = neighbor_distances.max()
+        info['neighbors_distance_std'] = neighbor_distances.std()
+        info['neighbors_model_labels'] = ','.join(neighbor_model_labels)
+        info['neighbors_n_same_label'] = (neighbor_labels == row.label).sum() # How many of the neighbors have a matching label?
+
+        nearest_neighbor_idx = np.argmin(neighbor_distances)
+        info['nearest_neighbor_distance'] = min(neighbor_distances)
+        info['nearest_neighbor_same_label'] = neighbor_labels[nearest_neighbor_idx] == row.label # What is the label of the nearest neighbor?
+        info['nearest_neighbor_length_diff'] = neighbor_length_diffs[nearest_neighbor_idx] # What is the label of the nearest neighbor?
+        info['nearest_neighbor_length'] = neighbor_lengths[nearest_neighbor_idx] # What is the label of the nearest neighbor?
+        info['nearest_neighbor_id'] = neighbor_ids[nearest_neighbor_idx] # What is the ID of the nearest neighbor?
+        info['nearest_neighbor_product'] = neighbor_products[nearest_neighbor_idx]
+        info['nearest_neighbor_model_label'] = neighbor_model_labels[nearest_neighbor_idx]
+        
+        df.append(info)
+    df = pd.DataFrame(df, index=results_df.index)
+    results_df = results_df.merge(df, right_index=True, left_index=True)
+    return results_df
 
 
 get_gc_content = lambda nt_seq : (nt_seq.count('G') + nt_seq.count('C')) / len(nt_seq)
